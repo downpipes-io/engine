@@ -1,0 +1,68 @@
+# Static analysis (SAST) with Semgrep, advisory. Runs on push and pull request to main and
+# weekly on a schedule, and publishes SARIF. Does not block merge.
+name: Semgrep
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["LICENSE*", ".gitignore"]
+  pull_request:
+    branches: [main]
+    paths-ignore: ["LICENSE*", ".gitignore"]
+  schedule:
+    - cron: "30 6 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+jobs:
+  semgrep:
+    name: Semgrep SAST (advisory)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with: { egress-policy: audit }
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with: { persist-credentials: false }
+      - name: Semgrep scan (rules p/default + p/secrets), write SARIF
+        run: |
+          pipx install semgrep==1.167.0
+          set +e
+          semgrep scan --config p/default --config p/secrets --metrics off --sarif --output semgrep.sarif
+          rc=$?
+          set -e
+          if [ "$rc" -ge 2 ]; then
+            echo "::error::semgrep exited $rc, which means the scan failed rather than found something."
+            exit "$rc"
+          fi
+          if [ ! -s semgrep.sarif ]; then
+            echo "::error::semgrep exited $rc but wrote no SARIF."
+            exit 1
+          fi
+          echo "semgrep exited $rc (0 = clean, 1 = findings, both advisory here)"
+      - name: Upload SARIF to code scanning
+        uses: github/codeql-action/upload-sarif@dd903d2e4f5405488e5ef1422510ee31c8b32357 # v3
+        if: always()
+        continue-on-error: true
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep
+      - name: Upload SARIF as an artefact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: semgrep-sarif
+          path: semgrep.sarif
+          if-no-files-found: warn
+          retention-days: 14

@@ -1,0 +1,10 @@
+{
+  "mode": "positive",
+  "records": [
+    {
+      "name": "vanished-object",
+      "valueB64": "eyJfdmFuaXNoZWQiOnRydWUsInJlYXNvbiI6InRoZSBvYmplY3Qgd2FzIGRlbGV0ZWQgYmV0d2VlbiBsaXN0IGFuZCByZWFkIn0",
+      "incompleteMarker": "_vanished"
+    }
+  ]
+}

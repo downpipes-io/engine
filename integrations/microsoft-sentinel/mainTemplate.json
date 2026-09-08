@@ -1,0 +1,231 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "workspaceName": {
+      "type": "string",
+      "metadata": { "description": "Name of the existing Sentinel-enabled Log Analytics workspace (Sentinel must already be onboarded to it)." }
+    },
+    "apiHost": {
+      "type": "string",
+      "metadata": { "description": "Hostname only (no scheme, no path) of the Downpipes engine to poll, e.g. engine.customer.example" }
+    },
+    "bearerToken": {
+      "type": "securestring",
+      "metadata": { "description": "Bearer token issued by the Downpipes engine for /support/audit-feed read access. Mint it from the engine console: Settings > Pull credentials > SIEM audit feed > Mint credential." }
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]",
+      "metadata": { "description": "Azure region for the data-collection resources (endpoint and rule). Must match the Log Analytics workspace's region. Defaults to the resource group's region, which is correct when the workspace is in this resource group." }
+    }
+  },
+  "variables": {
+    "workspaceResourceId": "[resourceId('Microsoft.OperationalInsights/workspaces', parameters('workspaceName'))]",
+    "tableName": "DownpipesAudit_CL",
+    "streamName": "Custom-DownpipesAudit_CL",
+    "dceName": "[concat('dce-downpipes-', uniqueString(resourceGroup().id, parameters('workspaceName')))]",
+    "dcrName": "[concat('dcr-downpipes-', uniqueString(resourceGroup().id, parameters('workspaceName')))]",
+    "definitionName": "DownpipesAuditFeedDefinition",
+    "connectorId": "[guid(resourceGroup().id, parameters('workspaceName'), 'DownpipesAuditFeedConnector')]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Insights/dataCollectionEndpoints",
+      "apiVersion": "2024-03-11",
+      "name": "[variables('dceName')]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "networkAcls": { "publicNetworkAccess": "Enabled" }
+      }
+    },
+    {
+      "type": "Microsoft.OperationalInsights/workspaces/tables",
+      "apiVersion": "2025-07-01",
+      "name": "[concat(parameters('workspaceName'), '/', variables('tableName'))]",
+      "properties": {
+        "schema": {
+          "name": "[variables('tableName')]",
+          "columns": [
+            { "name": "TimeGenerated", "type": "datetime", "description": "Event time (parsed from source ts)." },
+            { "name": "seq", "type": "long", "description": "Monotonic audit-feed sequence number (cursor value)." },
+            { "name": "actorEmail", "type": "string" },
+            { "name": "actorSubject", "type": "string", "description": "Actor's stable subject/principal id. May be absent on legacy pre-subject-keying entries." },
+            { "name": "actorMethod", "type": "string", "description": "Auth method used by the actor (e.g. password, sso, api-token, engine)." },
+            { "name": "sourceIp", "type": "string" },
+            { "name": "action", "type": "string" },
+            { "name": "outcome", "type": "string", "description": "success | denied | failed." },
+            { "name": "target", "type": "dynamic", "description": "Structured, kind-discriminated target object. JSON, not a flat string." },
+            { "name": "prevHash", "type": "string", "description": "Hash-chain link to the previous event." },
+            { "name": "hash", "type": "string", "description": "Hash of this event (tamper-evidence)." }
+          ]
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Insights/dataCollectionRules",
+      "apiVersion": "2024-03-11",
+      "name": "[variables('dcrName')]",
+      "location": "[parameters('location')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Insights/dataCollectionEndpoints', variables('dceName'))]",
+        "[resourceId('Microsoft.OperationalInsights/workspaces/tables', parameters('workspaceName'), variables('tableName'))]"
+      ],
+      "properties": {
+        "dataCollectionEndpointId": "[resourceId('Microsoft.Insights/dataCollectionEndpoints', variables('dceName'))]",
+        "streamDeclarations": {
+          "Custom-DownpipesAudit_CL": {
+            "columns": [
+              { "name": "seq", "type": "long" },
+              { "name": "ts", "type": "string" },
+              { "name": "actorEmail", "type": "string" },
+              { "name": "actorSubject", "type": "string" },
+              { "name": "actorMethod", "type": "string" },
+              { "name": "sourceIp", "type": "string" },
+              { "name": "action", "type": "string" },
+              { "name": "outcome", "type": "string" },
+              { "name": "target", "type": "dynamic" },
+              { "name": "prevHash", "type": "string" },
+              { "name": "hash", "type": "string" }
+            ]
+          }
+        },
+        "destinations": {
+          "logAnalytics": [
+            {
+              "workspaceResourceId": "[variables('workspaceResourceId')]",
+              "name": "downpipesWorkspaceDest"
+            }
+          ]
+        },
+        "dataFlows": [
+          {
+            "streams": ["Custom-DownpipesAudit_CL"],
+            "destinations": ["downpipesWorkspaceDest"],
+            "outputStream": "Custom-DownpipesAudit_CL",
+            "transformKql": "source\n| extend TimeGenerated = todatetime(ts)\n| project TimeGenerated, seq, actorEmail, actorSubject, actorMethod, sourceIp, action, outcome, target, prevHash, hash"
+          }
+        ]
+      }
+    },
+    {
+      "type": "Microsoft.OperationalInsights/workspaces/providers/dataConnectorDefinitions",
+      "apiVersion": "2025-09-01",
+      "name": "[concat(parameters('workspaceName'), '/Microsoft.SecurityInsights/', variables('definitionName'))]",
+      "location": "[parameters('location')]",
+      "kind": "Customizable",
+      "dependsOn": [
+        "[resourceId('Microsoft.OperationalInsights/workspaces/tables', parameters('workspaceName'), variables('tableName'))]"
+      ],
+      "properties": {
+        "connectorUiConfig": {
+          "id": "[variables('definitionName')]",
+          "title": "Downpipes Audit Feed",
+          "publisher": "Maelstrom AI",
+          "descriptionMarkdown": "Polls the Downpipes engine's `/support/audit-feed` endpoint for hash-chained audit events and ingests them into the **DownpipesAudit_CL** table.",
+          "graphQueries": [
+            {
+              "metricName": "Audit events received",
+              "legend": "Downpipes audit events",
+              "baseQuery": "DownpipesAudit_CL"
+            }
+          ],
+          "dataTypes": [
+            {
+              "name": "DownpipesAudit_CL",
+              "lastDataReceivedQuery": "DownpipesAudit_CL\n| summarize Time = max(TimeGenerated)\n| where isnotempty(Time)"
+            }
+          ],
+          "connectivityCriteria": [
+            {
+              "type": "IsConnectedQuery",
+              "value": [
+                "DownpipesAudit_CL\n| summarize LastLogReceived = max(TimeGenerated)\n| project IsConnected = LastLogReceived > ago(3h)"
+              ]
+            }
+          ],
+          "availability": { "status": 1, "isPreview": false },
+          "permissions": {
+            "resourceProvider": [
+              {
+                "provider": "Microsoft.OperationalInsights/workspaces",
+                "permissionsDisplayText": "Read and write permissions on the workspace are required.",
+                "providerDisplayName": "Workspace",
+                "scope": "Workspace",
+                "requiredPermissions": { "read": true, "write": true, "delete": true }
+              }
+            ]
+          },
+          "instructionSteps": [
+            {
+              "title": "Deployment-configured connector",
+              "description": "This connector's host and bearer token were supplied as ARM deployment parameters (`apiHost`, `bearerToken`) at install time. No further action is required in this UI."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": "Microsoft.OperationalInsights/workspaces/providers/dataConnectors",
+      "apiVersion": "2025-09-01",
+      "name": "[concat(parameters('workspaceName'), '/Microsoft.SecurityInsights/', variables('connectorId'))]",
+      "location": "[parameters('location')]",
+      "kind": "RestApiPoller",
+      "dependsOn": [
+        "[resourceId('Microsoft.OperationalInsights/workspaces/providers/dataConnectorDefinitions', parameters('workspaceName'), 'Microsoft.SecurityInsights', variables('definitionName'))]",
+        "[resourceId('Microsoft.Insights/dataCollectionRules', variables('dcrName'))]",
+        "[resourceId('Microsoft.Insights/dataCollectionEndpoints', variables('dceName'))]"
+      ],
+      "properties": {
+        "connectorDefinitionName": "[variables('definitionName')]",
+        "dataType": "[variables('tableName')]",
+        "isActive": true,
+        "dcrConfig": {
+          "streamName": "Custom-DownpipesAudit_CL",
+          "dataCollectionEndpoint": "[reference(resourceId('Microsoft.Insights/dataCollectionEndpoints', variables('dceName')), '2024-03-11').logsIngestion.endpoint]",
+          "dataCollectionRuleImmutableId": "[reference(resourceId('Microsoft.Insights/dataCollectionRules', variables('dcrName')), '2024-03-11').immutableId]"
+        },
+        "auth": {
+          "type": "APIKey",
+          "ApiKey": "[parameters('bearerToken')]",
+          "ApiKeyName": "Authorization",
+          "ApiKeyIdentifier": "Bearer"
+        },
+        "request": {
+          "apiEndpoint": "[concat('https://', parameters('apiHost'), '/support/audit-feed')]",
+          "httpMethod": "GET",
+          "headers": { "Accept": "application/json" },
+          "queryParameters": { "afterSeq": "0" },
+          "retryCount": 3,
+          "timeoutInSeconds": 60,
+          "rateLimitQPS": 10
+        },
+        "paging": {
+          "pagingType": "PersistentToken",
+          "nextPageParaName": "afterSeq",
+          "nextPageTokenJsonPath": "$.nextAfterSeq",
+          "pageSize": 200,
+          "pageSizeParameterName": "limit"
+        },
+        "response": {
+          "eventsJsonPaths": ["$.events"],
+          "format": "json"
+        }
+      }
+    }
+  ],
+  "outputs": {
+    "dataCollectionEndpointUrl": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Insights/dataCollectionEndpoints', variables('dceName')), '2024-03-11').logsIngestion.endpoint]"
+    },
+    "dataCollectionRuleImmutableId": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Insights/dataCollectionRules', variables('dcrName')), '2024-03-11').immutableId]"
+    },
+    "connectorResourceId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.OperationalInsights/workspaces/providers/dataConnectors', parameters('workspaceName'), 'Microsoft.SecurityInsights', variables('connectorId'))]"
+    }
+  }
+}

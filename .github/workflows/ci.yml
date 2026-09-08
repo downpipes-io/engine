@@ -1,0 +1,216 @@
+# CI for the engine (in-account Cloudflare Worker). Independently failing jobs with a
+# single CI Success sentinel for branch protection. Deploys are manual (wrangler deploy);
+# this workflow validates the bundle and its behaviour.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "22"
+  # The pinned public downpipe release the cross-implementation validators run against.
+  # Bump this when a new downpipe release should become the reference reader.
+  DOWNPIPE_REF: "v0.3.0"
+
+jobs:
+  typecheck:
+    name: Type Check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with: { egress-policy: audit }
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
+        with: { node-version: "${{ env.NODE_VERSION }}" }
+      - run: npm ci
+      - name: tsc --noEmit
+        run: npm run typecheck
+
+  validate:
+    name: Crypto/format validators
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with: { egress-policy: audit }
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with: { path: engine, persist-credentials: false }
+      - name: Checkout the public downpipe reader (for the format schema cross-check)
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: downpipes-io/downpipe
+          ref: ${{ env.DOWNPIPE_REF }}
+          path: downpipe
+          persist-credentials: false
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
+        with: { node-version: "${{ env.NODE_VERSION }}" }
+      - run: npm ci
+        working-directory: engine
+      - name: Cross-implementation validators (vs the Go vectors)
+        run: npm run validate
+        working-directory: engine
+        env:
+          REQUIRE_DOWNPIPE: "1"
+      - name: cf-config safety guards (mutation test over the guarded rules)
+        run: npm run validate:cf-guards
+        working-directory: engine
+      - name: Cloudflare API drift cross-check (fetch the live schema and require it)
+        run: node scripts/fetch-cf-openapi.mjs && REQUIRE_CF_OPENAPI=1 node test/validate-cf-config-drift.ts
+        working-directory: engine
+      - name: Written values vs the Cloudflare schema (enum, range and type)
+        run: REQUIRE_CF_OPENAPI=1 npm run validate:autoprove-bodies
+        working-directory: engine
+
+  coverage:
+    name: Coverage (c8 over validators, gating)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with: { egress-policy: audit }
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with: { path: engine, persist-credentials: false }
+      - name: Checkout the public downpipe reader (for the two-reader differential)
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: downpipes-io/downpipe
+          ref: ${{ env.DOWNPIPE_REF }}
+          path: downpipe
+          persist-credentials: false
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
+        with: { node-version: "${{ env.NODE_VERSION }}" }
+      - run: npm ci
+        working-directory: engine
+      - name: c8 coverage over the validator suite (fails below the .c8rc.json thresholds)
+        run: npm run coverage
+        working-directory: engine
+        env:
+          REQUIRE_DOWNPIPE: "1"
+
+  build:
+    name: Bundle
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with: { egress-policy: audit }
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
+        with: { node-version: "${{ env.NODE_VERSION }}" }
+      - run: npm ci
+      - name: wrangler bundle (dry-run, no upload)
+        run: npx wrangler deploy --dry-run --outdir=dist
+
+  lint:
+    name: Lint (Biome)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with: { egress-policy: audit }
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
+        with: { node-version: "${{ env.NODE_VERSION }}" }
+      - run: npm ci
+      - name: biome lint (0 errors / 0 warnings / 0 infos required)
+        run: npm run lint
+
+  dependency-review:
+    name: Dependency review (PR only)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with: { egress-policy: audit }
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with: { persist-credentials: false }
+      - name: Review dependency changes (fail on high)
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: high
+          deny-licenses: GPL-2.0, GPL-3.0, AGPL-3.0, LGPL-2.1, LGPL-3.0
+
+  runtime:
+    name: Runtime (workerd via Miniflare + vitest-pool-workers)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with: { egress-policy: audit }
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
+        with: { node-version: "${{ env.NODE_VERSION }}" }
+      - run: npm ci
+      - name: SchedulerDO concurrency invariants in real workerd
+        run: npm run test:runtime
+      - name: Worker fetch entrypoint in real workerd (vitest-pool-workers)
+        run: npm run test:vitest
+
+  property:
+    name: Property tests (fast-check)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with: { egress-policy: audit }
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
+        with: { node-version: "${{ env.NODE_VERSION }}" }
+      - run: npm ci
+      - name: crypto/format property vectors
+        run: npm run test:property
+
+  ci-success:
+    name: CI Success
+    needs: [typecheck, validate, coverage, build, lint, dependency-review, runtime, property]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    if: always()
+    steps:
+      - name: Check required jobs
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: |
+          set -euo pipefail
+          status=0
+          echo "required job results:"
+          for name in $(printf '%s' "$NEEDS_JSON" | jq -r 'keys[]' | sort); do
+            result=$(printf '%s' "$NEEDS_JSON" | jq -r --arg n "$name" '.[$n].result')
+            printf '  %-28s %s\n' "$name" "$result"
+            case "$result" in
+              success) ;;
+              skipped) echo "::notice::job '$name' was skipped (an event-gated job, for example dependency-review on a push)" ;;
+              *) echo "::error::required job '$name' reported '$result'"; status=1 ;;
+            esac
+          done
+          if [ "$status" -ne 0 ]; then
+            echo "::error::a required job did not pass"
+            exit 1
+          fi
+          echo "all required jobs accounted for"

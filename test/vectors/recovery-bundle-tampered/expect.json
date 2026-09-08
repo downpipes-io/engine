@@ -1,0 +1,11 @@
+{
+  "mode": "negative",
+  "exitCode": 2,
+  "phase": "open",
+  "options": {
+    "checkRecoveryBundle": true
+  },
+  "labels": {
+    "recoveryBundleVerified": false
+  }
+}

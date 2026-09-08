@@ -1,0 +1,21 @@
+{
+  "mode": "negative",
+  "runId": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "exitCode": 5,
+  "phase": "open",
+  "also": [
+    {
+      "mode": "positive",
+      "runId": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+      "records": [
+        {
+          "name": "object-a",
+          "valueB64": "cmVjb3ZlciBtZSB3aXRob3V0IENsb3VkZmxhcmUgYW5kIHdpdGhvdXQgdGhlIHZlbmRvcg"
+        }
+      ],
+      "options": {
+        "allowStale": true
+      }
+    }
+  ]
+}

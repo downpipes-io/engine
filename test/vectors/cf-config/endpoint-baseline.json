@@ -1,0 +1,2024 @@
+{
+  "_comment": "Drift-guard baseline for engine/src/sources/cf-config-surfaces.ts (test/validate-cf-config-drift.ts). Regenerate after an INTENTIONAL change: node test/validate-cf-config-drift.ts --write-baseline",
+  "surfaceCount": 313,
+  "endpointCount": 450,
+  "surfaces": [
+    {
+      "id": "access-apps",
+      "scope": "account",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "access-custom-pages",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "access-groups",
+      "scope": "account",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "access-identity-providers",
+      "scope": "account",
+      "restoreTier": "reprovision"
+    },
+    {
+      "id": "access-key-configuration",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "access-mcp-portals",
+      "scope": "account",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "access-mcp-servers",
+      "scope": "account",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "access-mtls-certificates",
+      "scope": "account",
+      "restoreTier": "reprovision"
+    },
+    {
+      "id": "access-organizations",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "access-reusable-policies",
+      "scope": "account",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "access-service-tokens",
+      "scope": "account",
+      "restoreTier": "reprovision"
+    },
+    {
+      "id": "access-tags",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "account-api-tokens",
+      "scope": "account",
+      "restoreTier": "reprovision"
+    },
+    {
+      "id": "account-custom-nameservers",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "account-custom-page-assets",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "account-custom-pages",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "account-dns-settings",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "account-email-routing-rules",
+      "scope": "account",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "account-email-sending-suppressions",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "account-endpoint-healthchecks",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "account-firewall-access-rules",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "account-load-balancers",
+      "scope": "account",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "account-logpush",
+      "scope": "account",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "account-logs-explorer-datasets",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "account-members",
+      "scope": "account",
+      "restoreTier": "reprovision"
+    },
+    {
+      "id": "account-roles",
+      "scope": "account",
+      "restoreTier": "reprovision"
+    },
+    {
+      "id": "account-rule-list-items",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "account-rule-lists",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "account-rulesets",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "account-settings",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "account-tag-keys",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "account-waiting-rooms",
+      "scope": "account",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "acm-total-tls",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "address-maps",
+      "scope": "account",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "addressing-leases",
+      "scope": "account",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "addressing-services",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "advanced-dns-protection-rules",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "advanced-tcp-protection-allowlist",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "advanced-tcp-protection-prefixes",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "advanced-tcp-protection-status",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "advanced-tcp-protection-syn-filters",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "advanced-tcp-protection-syn-rules",
+      "scope": "account",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "advanced-tcp-protection-tcp-flow-filters",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "advanced-tcp-protection-tcp-flow-rules",
+      "scope": "account",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "ai-gateway-custom-providers",
+      "scope": "account",
+      "restoreTier": "reprovision"
+    },
+    {
+      "id": "ai-gateway-gateways",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "ai-search-instances",
+      "scope": "account",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "ai-search-namespaces",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "ai-search-tokens",
+      "scope": "account",
+      "restoreTier": "reprovision"
+    },
+    {
+      "id": "ai-security",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "api-gateway-discovery-settings",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "api-gateway-labels",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "api-gateway-schemas",
+      "scope": "zone",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "api-gateway-user-schema-hosts",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "api-shield-cert-hostname-associations",
+      "scope": "zone",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "api-shield-client-certificates",
+      "scope": "zone",
+      "restoreTier": "reprovision"
+    },
+    {
+      "id": "api-shield-operations",
+      "scope": "zone",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "api-shield-schema-validation-settings",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "api-shield-settings",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "api-shield-token-validation-config",
+      "scope": "zone",
+      "restoreTier": "reprovision"
+    },
+    {
+      "id": "api-shield-token-validation-rules",
+      "scope": "zone",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "api-shield-user-schemas",
+      "scope": "zone",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "argo-smart-routing",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "bot-management",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "botnet-feed-asn-configs",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "browser-extension-config",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "build-tokens",
+      "scope": "account",
+      "restoreTier": "reprovision"
+    },
+    {
+      "id": "cache-origin-pq-encryption",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "cache-reserve",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "cache-variants",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "calls-apps",
+      "scope": "account",
+      "restoreTier": "reprovision"
+    },
+    {
+      "id": "calls-turn-keys",
+      "scope": "account",
+      "restoreTier": "reprovision"
+    },
+    {
+      "id": "certificate-packs",
+      "scope": "zone",
+      "restoreTier": "reprovision"
+    },
+    {
+      "id": "cloud-connector-rules",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "cloudflare-one-applications",
+      "scope": "account",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "cloudflare-one-integrations",
+      "scope": "account",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "cloudforce-one-rules",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "cni-cnis",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "connectivity-services",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "container-applications",
+      "scope": "account",
+      "restoreTier": "reprovision"
+    },
+    {
+      "id": "content-scanning-expressions",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "content-scanning-settings",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "ct-alerting",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "custom-certificates",
+      "scope": "zone",
+      "restoreTier": "reprovision"
+    },
+    {
+      "id": "custom-csrs",
+      "scope": "zone",
+      "restoreTier": "reprovision"
+    },
+    {
+      "id": "custom-csrs-account",
+      "scope": "account",
+      "restoreTier": "reprovision"
+    },
+    {
+      "id": "custom-hostname-fallback-origin",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "custom-hostnames",
+      "scope": "zone",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "custom-nameserver-usage",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "custom-pages",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "custom-trust-store",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "d1-databases-config",
+      "scope": "account",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "data-security-posture-webhooks",
+      "scope": "account",
+      "restoreTier": "reprovision"
+    },
+    {
+      "id": "dcv-delegation",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "deployment-groups",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "device-ip-profiles",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "device-managed-networks",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "device-policy-default",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "device-policy-fallback-domains",
+      "scope": "account",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "device-policy-split-tunnel-exclude",
+      "scope": "account",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "device-policy-split-tunnel-include",
+      "scope": "account",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "device-posture-integrations",
+      "scope": "account",
+      "restoreTier": "reprovision"
+    },
+    {
+      "id": "device-posture-rules",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "device-resilience-disconnect",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "device-settings-policies",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "dex-rules",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "dex-tests",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "dlp-custom-prompt-topics",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "dlp-data-classes",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "dlp-data-tag-categories",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "dlp-datasets",
+      "scope": "account",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "dlp-document-fingerprints",
+      "scope": "account",
+      "restoreTier": "reprovision"
+    },
+    {
+      "id": "dlp-email-rules",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "dlp-entries",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "dlp-profiles",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "dlp-profiles-custom",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "dlp-sensitivity-groups",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "dlp-settings",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "dls-prefix-bindings",
+      "scope": "account",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "dns",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "dns-firewall",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "dns-internal-views",
+      "scope": "account",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "dns-settings",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "dnssec",
+      "scope": "zone",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "dnssec-zsk",
+      "scope": "zone",
+      "restoreTier": "reprovision"
+    },
+    {
+      "id": "durable-objects-namespaces",
+      "scope": "account",
+      "restoreTier": "reprovision"
+    },
+    {
+      "id": "email-dmarc-reports",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "email-routing",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "email-routing-addresses",
+      "scope": "account",
+      "restoreTier": "reprovision"
+    },
+    {
+      "id": "email-routing-catch-all",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "email-security-allow-policies",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "email-security-block-senders",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "email-security-domains",
+      "scope": "account",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "email-security-impersonation-registry",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "email-security-sending-domain-restrictions",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "email-security-trusted-domains",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "email-security-url-ignore-patterns",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "email-sending-subdomains",
+      "scope": "zone",
+      "restoreTier": "reprovision"
+    },
+    {
+      "id": "filters",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "firewall-access-rules",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "firewall-rules",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "flagship-apps",
+      "scope": "account",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "fraud-detection-settings",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "gateway-audit-ssh-settings",
+      "scope": "account",
+      "restoreTier": "reprovision"
+    },
+    {
+      "id": "gateway-certificates",
+      "scope": "account",
+      "restoreTier": "reprovision"
+    },
+    {
+      "id": "gateway-configuration",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "gateway-custom-certificate",
+      "scope": "account",
+      "restoreTier": "reprovision"
+    },
+    {
+      "id": "gateway-egress-cidr-pairs",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "gateway-lists",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "gateway-locations",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "gateway-logging",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "gateway-pac-files",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "gateway-proxy-endpoints",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "gateway-rules",
+      "scope": "account",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "gateway-ssh-ca",
+      "scope": "account",
+      "restoreTier": "reprovision"
+    },
+    {
+      "id": "google-tag-gateway",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "healthchecks",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "hyperdrive-configs",
+      "scope": "account",
+      "restoreTier": "reprovision"
+    },
+    {
+      "id": "iam-resource-groups",
+      "scope": "account",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "iam-user-groups",
+      "scope": "account",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "image-registries",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "images-variants",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "infrastructure-targets",
+      "scope": "account",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "intel-indicator-feeds",
+      "scope": "account",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "intel-ip-lists",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "intel-sinkholes",
+      "scope": "account",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "ip-prefixes",
+      "scope": "account",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "keyless-certificates",
+      "scope": "zone",
+      "restoreTier": "reprovision"
+    },
+    {
+      "id": "kv-namespaces-config",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "lb-monitor-groups",
+      "scope": "account",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "lb-monitors",
+      "scope": "account",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "lb-pools",
+      "scope": "account",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "leaked-credential-checks",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "leaked-credential-detections",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "load-balancers",
+      "scope": "zone",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "log-retention-flag",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "logcontrol-cmb-config",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "logpush",
+      "scope": "zone",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "logs-explorer-datasets",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "magic-bgp-filter-profiles",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "magic-bgp-settings",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "magic-cf-interconnects",
+      "scope": "account",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "magic-cf1-sites",
+      "scope": "account",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "magic-cloud-onramps",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "magic-cloud-providers",
+      "scope": "account",
+      "restoreTier": "reprovision"
+    },
+    {
+      "id": "magic-gre-tunnels",
+      "scope": "account",
+      "restoreTier": "reprovision"
+    },
+    {
+      "id": "magic-ipsec-tunnels",
+      "scope": "account",
+      "restoreTier": "reprovision"
+    },
+    {
+      "id": "magic-static-routes",
+      "scope": "account",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "managed-headers",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "mnm-config",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "mnm-rules",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "moq-relays",
+      "scope": "account",
+      "restoreTier": "reprovision"
+    },
+    {
+      "id": "mtls-certificates",
+      "scope": "account",
+      "restoreTier": "reprovision"
+    },
+    {
+      "id": "notification-pagerduty-destinations",
+      "scope": "account",
+      "restoreTier": "reprovision"
+    },
+    {
+      "id": "notification-policies",
+      "scope": "account",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "notification-silences",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "notification-webhooks",
+      "scope": "account",
+      "restoreTier": "reprovision"
+    },
+    {
+      "id": "oauth-clients",
+      "scope": "account",
+      "restoreTier": "reprovision"
+    },
+    {
+      "id": "observability-saved-queries",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "origin-cloud-regions",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "origin-tls-client-auth",
+      "scope": "zone",
+      "restoreTier": "reprovision"
+    },
+    {
+      "id": "origin-tls-client-auth-certificates",
+      "scope": "zone",
+      "restoreTier": "reprovision"
+    },
+    {
+      "id": "origin-tls-client-auth-hostnames",
+      "scope": "zone",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "origin-tls-client-auth-settings",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "page-rules",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "page-shield-policies",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "page-shield-settings",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "pages-projects",
+      "scope": "account",
+      "restoreTier": "reprovision"
+    },
+    {
+      "id": "pay-per-crawl-config",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "pay-per-crawl-crawler-stripe",
+      "scope": "account",
+      "restoreTier": "reprovision"
+    },
+    {
+      "id": "pay-per-crawl-publisher-stripe",
+      "scope": "account",
+      "restoreTier": "reprovision"
+    },
+    {
+      "id": "pipelines",
+      "scope": "account",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "pipelines-sinks",
+      "scope": "account",
+      "restoreTier": "reprovision"
+    },
+    {
+      "id": "pipelines-streams",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "queue-event-subscriptions",
+      "scope": "account",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "queues",
+      "scope": "account",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "r2-bucket-config",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "r2-catalog",
+      "scope": "account",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "r2-catalog-syncs",
+      "scope": "account",
+      "restoreTier": "reprovision"
+    },
+    {
+      "id": "rate-limits",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "realtimekit-apps",
+      "scope": "account",
+      "restoreTier": "reprovision"
+    },
+    {
+      "id": "regional-hostnames",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "regional-tiered-cache",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "registrar-domains",
+      "scope": "account",
+      "restoreTier": "reprovision"
+    },
+    {
+      "id": "registrar-registrations",
+      "scope": "account",
+      "restoreTier": "reprovision"
+    },
+    {
+      "id": "resource-shares",
+      "scope": "account",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "rulesets",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "rum-site-info",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "schema-validation-hosts",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "schema-validation-operations",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "schema-validation-schemas",
+      "scope": "zone",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "schema-validation-settings",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "scim-groups",
+      "scope": "account",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "scim-users",
+      "scope": "account",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "secondary-dns-acls",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "secondary-dns-incoming",
+      "scope": "zone",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "secondary-dns-outgoing",
+      "scope": "zone",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "secondary-dns-peers",
+      "scope": "account",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "secondary-dns-tsigs",
+      "scope": "account",
+      "restoreTier": "reprovision"
+    },
+    {
+      "id": "secrets-store-stores",
+      "scope": "account",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "security-txt",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "smart-shield",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "smart-shield-healthchecks",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "smart-tiered-cache",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "snippet-rules",
+      "scope": "zone",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "snippets",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "spectrum-apps",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "speed-monitored-pages",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "sso-connectors",
+      "scope": "account",
+      "restoreTier": "reprovision"
+    },
+    {
+      "id": "stream-live-inputs",
+      "scope": "account",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "stream-signing-keys",
+      "scope": "account",
+      "restoreTier": "reprovision"
+    },
+    {
+      "id": "stream-watermarks",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "stream-webhook",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "teamnet-routes",
+      "scope": "account",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "teamnet-virtual-networks",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "tiered-caching",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "tunnels-cloudflared",
+      "scope": "account",
+      "restoreTier": "reprovision"
+    },
+    {
+      "id": "turnstile",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "ua-rules",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "universal-ssl-settings",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "url-normalization",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "vectorize",
+      "scope": "account",
+      "restoreTier": "reprovision"
+    },
+    {
+      "id": "vectorize-indexes-config",
+      "scope": "account",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "vuln-scanner-credential-sets",
+      "scope": "account",
+      "restoreTier": "reprovision"
+    },
+    {
+      "id": "vuln-scanner-target-environments",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "waf-legacy-packages",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "waiting-room-events",
+      "scope": "zone",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "waiting-room-rules",
+      "scope": "zone",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "waiting-room-settings",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "waiting-rooms",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "warp-connector",
+      "scope": "account",
+      "restoreTier": "reprovision"
+    },
+    {
+      "id": "web-analytics-sites",
+      "scope": "account",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "web3-hostnames",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "workers-account-settings",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "workers-custom-domains",
+      "scope": "account",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "workers-for-platforms",
+      "scope": "account",
+      "restoreTier": "reprovision"
+    },
+    {
+      "id": "workers-observability-destinations",
+      "scope": "account",
+      "restoreTier": "reprovision"
+    },
+    {
+      "id": "workers-observability-metricsexport",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "workers-routes",
+      "scope": "zone",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "workers-subdomain",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "workflows",
+      "scope": "account",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "zaraz-config",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "zaraz-workflow",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "zerotrust-hostname-routes",
+      "scope": "account",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "zerotrust-subnets",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "zone-access-apps",
+      "scope": "zone",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "zone-access-groups",
+      "scope": "zone",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "zone-access-identity-providers",
+      "scope": "zone",
+      "restoreTier": "reprovision"
+    },
+    {
+      "id": "zone-access-service-tokens",
+      "scope": "zone",
+      "restoreTier": "reprovision"
+    },
+    {
+      "id": "zone-custom-page-assets",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "zone-device-policy-certificates",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "zone-entity",
+      "scope": "zone",
+      "restoreTier": "reprovision"
+    },
+    {
+      "id": "zone-environments",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "zone-hold",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "zone-lockdowns",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "zone-logpush-edge-jobs",
+      "scope": "zone",
+      "restoreTier": "ordered"
+    },
+    {
+      "id": "zone-rum",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "zone-setting-aegis",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "zone-setting-auto-origin-tls-kex",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "zone-setting-csam-scanner",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "zone-setting-fonts",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "zone-setting-origin-h2-max-streams",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "zone-setting-origin-max-http-version",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "zone-setting-origin-tls-compliance",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "zone-setting-speed-brain",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "zone-setting-ssl-automatic-mode",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "zone-setting-zaraz-default",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "zone-settings",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "zone-zero-trust-organization",
+      "scope": "zone",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "zt-connectivity-settings",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "zt-device-settings",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "zt-risk-scoring-behaviors",
+      "scope": "account",
+      "restoreTier": "idempotent"
+    },
+    {
+      "id": "zt-risk-scoring-integrations",
+      "scope": "account",
+      "restoreTier": "ordered"
+    }
+  ],
+  "endpoints": [
+    "GET /accounts/{}",
+    "GET /accounts/{}/access/ai-controls/mcp/portals",
+    "GET /accounts/{}/access/ai-controls/mcp/servers",
+    "GET /accounts/{}/access/apps",
+    "GET /accounts/{}/access/certificates",
+    "GET /accounts/{}/access/custom_pages",
+    "GET /accounts/{}/access/gateway_ca",
+    "GET /accounts/{}/access/groups",
+    "GET /accounts/{}/access/identity_providers",
+    "GET /accounts/{}/access/keys",
+    "GET /accounts/{}/access/organizations",
+    "GET /accounts/{}/access/policies",
+    "GET /accounts/{}/access/service_tokens",
+    "GET /accounts/{}/access/tags",
+    "GET /accounts/{}/addressing/address_maps",
+    "GET /accounts/{}/addressing/leases",
+    "GET /accounts/{}/addressing/prefixes",
+    "GET /accounts/{}/addressing/services",
+    "GET /accounts/{}/ai-gateway/custom-providers",
+    "GET /accounts/{}/ai-gateway/gateways",
+    "GET /accounts/{}/ai-search/instances",
+    "GET /accounts/{}/ai-search/namespaces",
+    "GET /accounts/{}/ai-search/tokens",
+    "GET /accounts/{}/alerting/v3/destinations/pagerduty",
+    "GET /accounts/{}/alerting/v3/destinations/webhooks",
+    "GET /accounts/{}/alerting/v3/policies",
+    "GET /accounts/{}/alerting/v3/silences",
+    "GET /accounts/{}/botnet_feed/configs/asn",
+    "GET /accounts/{}/browser-extension/config",
+    "GET /accounts/{}/builds/tokens",
+    "GET /accounts/{}/calls/apps",
+    "GET /accounts/{}/calls/turn_keys",
+    "GET /accounts/{}/cfd_tunnel",
+    "GET /accounts/{}/challenges/widgets",
+    "GET /accounts/{}/cloudforce-one/rules",
+    "GET /accounts/{}/cni/cnis",
+    "GET /accounts/{}/connectivity/directory/services",
+    "GET /accounts/{}/containers/applications",
+    "GET /accounts/{}/containers/registries",
+    "GET /accounts/{}/custom_csrs",
+    "GET /accounts/{}/custom_ns",
+    "GET /accounts/{}/custom_pages",
+    "GET /accounts/{}/custom_pages/assets",
+    "GET /accounts/{}/d1/database",
+    "GET /accounts/{}/data-security/posture/webhooks",
+    "GET /accounts/{}/devices/deployment-groups",
+    "GET /accounts/{}/devices/ip-profiles",
+    "GET /accounts/{}/devices/networks",
+    "GET /accounts/{}/devices/policies",
+    "GET /accounts/{}/devices/policy",
+    "GET /accounts/{}/devices/policy/exclude",
+    "GET /accounts/{}/devices/policy/fallback_domains",
+    "GET /accounts/{}/devices/policy/include",
+    "GET /accounts/{}/devices/posture",
+    "GET /accounts/{}/devices/posture/integration",
+    "GET /accounts/{}/devices/resilience/disconnect",
+    "GET /accounts/{}/devices/settings",
+    "GET /accounts/{}/dex/devices/dex_tests",
+    "GET /accounts/{}/dex/rules",
+    "GET /accounts/{}/diagnostics/endpoint-healthchecks",
+    "GET /accounts/{}/dlp/custom_prompt_topics",
+    "GET /accounts/{}/dlp/data_classes",
+    "GET /accounts/{}/dlp/data_tag_categories",
+    "GET /accounts/{}/dlp/datasets",
+    "GET /accounts/{}/dlp/document_fingerprints",
+    "GET /accounts/{}/dlp/email/rules",
+    "GET /accounts/{}/dlp/entries",
+    "GET /accounts/{}/dlp/profiles",
+    "GET /accounts/{}/dlp/profiles/custom",
+    "GET /accounts/{}/dlp/sensitivity_groups",
+    "GET /accounts/{}/dlp/settings",
+    "GET /accounts/{}/dls/regional_services/prefix_bindings",
+    "GET /accounts/{}/dns_firewall",
+    "GET /accounts/{}/dns_settings",
+    "GET /accounts/{}/dns_settings/views",
+    "GET /accounts/{}/email-security/settings/allow_policies",
+    "GET /accounts/{}/email-security/settings/block_senders",
+    "GET /accounts/{}/email-security/settings/domains",
+    "GET /accounts/{}/email-security/settings/impersonation_registry",
+    "GET /accounts/{}/email-security/settings/sending_domain_restrictions",
+    "GET /accounts/{}/email-security/settings/trusted_domains",
+    "GET /accounts/{}/email-security/settings/url_ignore_patterns",
+    "GET /accounts/{}/email/routing/addresses",
+    "GET /accounts/{}/email/routing/rules",
+    "GET /accounts/{}/email/sending/suppressions",
+    "GET /accounts/{}/event_notifications/r2/{}/configuration",
+    "GET /accounts/{}/event_subscriptions/subscriptions",
+    "GET /accounts/{}/firewall/access_rules/rules",
+    "GET /accounts/{}/flagship/apps",
+    "GET /accounts/{}/gateway/audit_ssh_settings",
+    "GET /accounts/{}/gateway/certificates",
+    "GET /accounts/{}/gateway/configuration",
+    "GET /accounts/{}/gateway/configuration/custom_certificate",
+    "GET /accounts/{}/gateway/egress_cidr_pairs",
+    "GET /accounts/{}/gateway/lists",
+    "GET /accounts/{}/gateway/lists/{}/items",
+    "GET /accounts/{}/gateway/locations",
+    "GET /accounts/{}/gateway/logging",
+    "GET /accounts/{}/gateway/pacfiles",
+    "GET /accounts/{}/gateway/proxy_endpoints",
+    "GET /accounts/{}/gateway/rules",
+    "GET /accounts/{}/hyperdrive/configs",
+    "GET /accounts/{}/iam/resource_groups",
+    "GET /accounts/{}/iam/user_groups",
+    "GET /accounts/{}/images/v1/variants",
+    "GET /accounts/{}/infrastructure/targets",
+    "GET /accounts/{}/intel/indicator-feeds",
+    "GET /accounts/{}/intel/ip-lists",
+    "GET /accounts/{}/intel/sinkholes",
+    "GET /accounts/{}/load_balancers",
+    "GET /accounts/{}/load_balancers/monitor_groups",
+    "GET /accounts/{}/load_balancers/monitors",
+    "GET /accounts/{}/load_balancers/pools",
+    "GET /accounts/{}/logpush/jobs",
+    "GET /accounts/{}/logs/control/cmb/config",
+    "GET /accounts/{}/logs/explorer/datasets",
+    "GET /accounts/{}/magic/advanced_dns_protection/configs/dns_protection/rules",
+    "GET /accounts/{}/magic/advanced_tcp_protection/configs/allowlist",
+    "GET /accounts/{}/magic/advanced_tcp_protection/configs/prefixes",
+    "GET /accounts/{}/magic/advanced_tcp_protection/configs/syn_protection/filters",
+    "GET /accounts/{}/magic/advanced_tcp_protection/configs/syn_protection/rules",
+    "GET /accounts/{}/magic/advanced_tcp_protection/configs/tcp_flow_protection/filters",
+    "GET /accounts/{}/magic/advanced_tcp_protection/configs/tcp_flow_protection/rules",
+    "GET /accounts/{}/magic/advanced_tcp_protection/configs/tcp_protection_status",
+    "GET /accounts/{}/magic/bgp/filter_profiles",
+    "GET /accounts/{}/magic/bgp/settings",
+    "GET /accounts/{}/magic/cf1_sites",
+    "GET /accounts/{}/magic/cf_interconnects",
+    "GET /accounts/{}/magic/cloud/catalog-syncs",
+    "GET /accounts/{}/magic/cloud/onramps",
+    "GET /accounts/{}/magic/cloud/providers",
+    "GET /accounts/{}/magic/gre_tunnels",
+    "GET /accounts/{}/magic/ipsec_tunnels",
+    "GET /accounts/{}/magic/routes",
+    "GET /accounts/{}/members",
+    "GET /accounts/{}/mnm/config",
+    "GET /accounts/{}/mnm/rules",
+    "GET /accounts/{}/moq/relays",
+    "GET /accounts/{}/mtls_certificates",
+    "GET /accounts/{}/oauth_clients",
+    "GET /accounts/{}/one/applications",
+    "GET /accounts/{}/one/integrations",
+    "GET /accounts/{}/pages/projects",
+    "GET /accounts/{}/pay-per-crawl/crawler/stripe",
+    "GET /accounts/{}/pay-per-crawl/publisher/stripe",
+    "GET /accounts/{}/pipelines/v1/pipelines",
+    "GET /accounts/{}/pipelines/v1/sinks",
+    "GET /accounts/{}/pipelines/v1/streams",
+    "GET /accounts/{}/queues",
+    "GET /accounts/{}/queues/{}/consumers",
+    "GET /accounts/{}/r2-catalog",
+    "GET /accounts/{}/r2/buckets",
+    "GET /accounts/{}/r2/buckets/{}/cors",
+    "GET /accounts/{}/r2/buckets/{}/domains/custom",
+    "GET /accounts/{}/r2/buckets/{}/lifecycle",
+    "GET /accounts/{}/r2/buckets/{}/lock",
+    "GET /accounts/{}/r2/buckets/{}/sippy",
+    "GET /accounts/{}/realtime/kit/apps",
+    "GET /accounts/{}/registrar/domains",
+    "GET /accounts/{}/registrar/registrations",
+    "GET /accounts/{}/roles",
+    "GET /accounts/{}/rules/lists",
+    "GET /accounts/{}/rules/lists/{}/items",
+    "GET /accounts/{}/rulesets",
+    "GET /accounts/{}/rulesets/{}",
+    "GET /accounts/{}/rum/site_info/list",
+    "GET /accounts/{}/rum/site_info/site_tag/list",
+    "GET /accounts/{}/rum/v2/{}/rules",
+    "GET /accounts/{}/scim/v2/Groups",
+    "GET /accounts/{}/scim/v2/Users",
+    "GET /accounts/{}/secondary_dns/acls",
+    "GET /accounts/{}/secondary_dns/peers",
+    "GET /accounts/{}/secondary_dns/tsigs",
+    "GET /accounts/{}/secrets_store/stores",
+    "GET /accounts/{}/shares",
+    "GET /accounts/{}/sso_connectors",
+    "GET /accounts/{}/storage/kv/namespaces",
+    "GET /accounts/{}/stream/keys",
+    "GET /accounts/{}/stream/live_inputs",
+    "GET /accounts/{}/stream/watermarks",
+    "GET /accounts/{}/stream/webhook",
+    "GET /accounts/{}/tags/keys",
+    "GET /accounts/{}/teamnet/routes",
+    "GET /accounts/{}/teamnet/virtual_networks",
+    "GET /accounts/{}/tokens",
+    "GET /accounts/{}/vectorize/indexes",
+    "GET /accounts/{}/vectorize/v2/indexes",
+    "GET /accounts/{}/vectorize/v2/indexes/{}/info",
+    "GET /accounts/{}/vuln_scanner/credential_sets",
+    "GET /accounts/{}/vuln_scanner/target_environments",
+    "GET /accounts/{}/waiting_rooms",
+    "GET /accounts/{}/warp_connector",
+    "GET /accounts/{}/workers/account-settings",
+    "GET /accounts/{}/workers/dispatch/namespaces",
+    "GET /accounts/{}/workers/dispatch/namespaces/{}/scripts",
+    "GET /accounts/{}/workers/dispatch/namespaces/{}/scripts/{}/settings",
+    "GET /accounts/{}/workers/domains",
+    "GET /accounts/{}/workers/durable_objects/namespaces",
+    "GET /accounts/{}/workers/observability/destinations",
+    "GET /accounts/{}/workers/observability/metricsexport",
+    "GET /accounts/{}/workers/observability/queries",
+    "GET /accounts/{}/workers/subdomain",
+    "GET /accounts/{}/workflows",
+    "GET /accounts/{}/zerotrust/connectivity_settings",
+    "GET /accounts/{}/zerotrust/routes/hostname",
+    "GET /accounts/{}/zerotrust/subnets",
+    "GET /accounts/{}/zt_risk_scoring/behaviors",
+    "GET /accounts/{}/zt_risk_scoring/integrations",
+    "GET /zones/{}",
+    "GET /zones/{}/access/apps",
+    "GET /zones/{}/access/groups",
+    "GET /zones/{}/access/identity_providers",
+    "GET /zones/{}/access/organizations",
+    "GET /zones/{}/access/service_tokens",
+    "GET /zones/{}/acm/custom_trust_store",
+    "GET /zones/{}/acm/total_tls",
+    "GET /zones/{}/addressing/regional_hostnames",
+    "GET /zones/{}/ai-security/custom-topics",
+    "GET /zones/{}/ai-security/settings",
+    "GET /zones/{}/api_gateway/configuration",
+    "GET /zones/{}/api_gateway/discovery",
+    "GET /zones/{}/api_gateway/labels",
+    "GET /zones/{}/api_gateway/operations",
+    "GET /zones/{}/api_gateway/schemas",
+    "GET /zones/{}/api_gateway/settings/schema_validation",
+    "GET /zones/{}/api_gateway/user_schemas",
+    "GET /zones/{}/api_gateway/user_schemas/hosts",
+    "GET /zones/{}/argo/smart_routing",
+    "GET /zones/{}/argo/tiered_caching",
+    "GET /zones/{}/bot_management",
+    "GET /zones/{}/cache/cache_reserve",
+    "GET /zones/{}/cache/origin_post_quantum_encryption",
+    "GET /zones/{}/cache/regional_tiered_cache",
+    "GET /zones/{}/cache/tiered_cache_smart_topology_enable",
+    "GET /zones/{}/cache/variants",
+    "GET /zones/{}/certificate_authorities/hostname_associations",
+    "GET /zones/{}/client_certificates",
+    "GET /zones/{}/cloud_connector/rules",
+    "GET /zones/{}/content-upload-scan/payloads",
+    "GET /zones/{}/content-upload-scan/settings",
+    "GET /zones/{}/ct/alerting",
+    "GET /zones/{}/custom_certificates",
+    "GET /zones/{}/custom_csrs",
+    "GET /zones/{}/custom_hostnames",
+    "GET /zones/{}/custom_hostnames/fallback_origin",
+    "GET /zones/{}/custom_ns",
+    "GET /zones/{}/custom_pages",
+    "GET /zones/{}/custom_pages/assets",
+    "GET /zones/{}/dcv_delegation/uuid",
+    "GET /zones/{}/devices/policy/certificates",
+    "GET /zones/{}/dns_records",
+    "GET /zones/{}/dns_settings",
+    "GET /zones/{}/dnssec",
+    "GET /zones/{}/dnssec/zsk",
+    "GET /zones/{}/email/auth/dmarc-reports",
+    "GET /zones/{}/email/routing",
+    "GET /zones/{}/email/routing/rules",
+    "GET /zones/{}/email/routing/rules/catch_all",
+    "GET /zones/{}/email/sending/subdomains",
+    "GET /zones/{}/environments",
+    "GET /zones/{}/filters",
+    "GET /zones/{}/firewall/access_rules/rules",
+    "GET /zones/{}/firewall/lockdowns",
+    "GET /zones/{}/firewall/rules",
+    "GET /zones/{}/firewall/ua_rules",
+    "GET /zones/{}/firewall/waf/packages",
+    "GET /zones/{}/fraud_detection/settings",
+    "GET /zones/{}/healthchecks",
+    "GET /zones/{}/hold",
+    "GET /zones/{}/keyless_certificates",
+    "GET /zones/{}/leaked-credential-checks",
+    "GET /zones/{}/leaked-credential-checks/detections",
+    "GET /zones/{}/load_balancers",
+    "GET /zones/{}/logpush/edge/jobs",
+    "GET /zones/{}/logpush/jobs",
+    "GET /zones/{}/logs/control/retention/flag",
+    "GET /zones/{}/logs/explorer/datasets",
+    "GET /zones/{}/managed_headers",
+    "GET /zones/{}/origin/cloud_regions",
+    "GET /zones/{}/origin_tls_client_auth",
+    "GET /zones/{}/origin_tls_client_auth/hostnames",
+    "GET /zones/{}/origin_tls_client_auth/hostnames/certificates",
+    "GET /zones/{}/origin_tls_client_auth/settings",
+    "GET /zones/{}/page_shield",
+    "GET /zones/{}/page_shield/policies",
+    "GET /zones/{}/pagerules",
+    "GET /zones/{}/pay-per-crawl/configuration",
+    "GET /zones/{}/rate_limits",
+    "GET /zones/{}/rulesets",
+    "GET /zones/{}/rulesets/{}",
+    "GET /zones/{}/schema_validation/schemas",
+    "GET /zones/{}/schema_validation/schemas/hosts",
+    "GET /zones/{}/schema_validation/settings",
+    "GET /zones/{}/schema_validation/settings/operations",
+    "GET /zones/{}/secondary_dns/incoming",
+    "GET /zones/{}/secondary_dns/outgoing",
+    "GET /zones/{}/security-center/securitytxt",
+    "GET /zones/{}/settings",
+    "GET /zones/{}/settings/aegis",
+    "GET /zones/{}/settings/auto_origin_tls_kex",
+    "GET /zones/{}/settings/csam_scanner_third_party",
+    "GET /zones/{}/settings/fonts",
+    "GET /zones/{}/settings/google-tag-gateway/config",
+    "GET /zones/{}/settings/origin_h2_max_streams",
+    "GET /zones/{}/settings/origin_max_http_version",
+    "GET /zones/{}/settings/origin_tls_compliance_modes",
+    "GET /zones/{}/settings/rum",
+    "GET /zones/{}/settings/speed_brain",
+    "GET /zones/{}/settings/ssl_automatic_mode",
+    "GET /zones/{}/settings/zaraz/config",
+    "GET /zones/{}/settings/zaraz/default",
+    "GET /zones/{}/settings/zaraz/workflow",
+    "GET /zones/{}/smart_shield",
+    "GET /zones/{}/smart_shield/healthchecks",
+    "GET /zones/{}/snippets",
+    "GET /zones/{}/snippets/snippet_rules",
+    "GET /zones/{}/snippets/{}/content",
+    "GET /zones/{}/spectrum/apps",
+    "GET /zones/{}/speed_api/pages",
+    "GET /zones/{}/ssl/certificate_packs",
+    "GET /zones/{}/ssl/universal/settings",
+    "GET /zones/{}/token_validation/config",
+    "GET /zones/{}/token_validation/rules",
+    "GET /zones/{}/url_normalization",
+    "GET /zones/{}/waiting_rooms",
+    "GET /zones/{}/waiting_rooms/settings",
+    "GET /zones/{}/waiting_rooms/{}/events",
+    "GET /zones/{}/waiting_rooms/{}/rules",
+    "GET /zones/{}/web3/hostnames",
+    "GET /zones/{}/workers/routes",
+    "PATCH /accounts/{}/devices/ip-profiles/{}",
+    "PATCH /accounts/{}/devices/policy",
+    "PATCH /accounts/{}/devices/settings",
+    "PATCH /accounts/{}/dlp/settings",
+    "PATCH /accounts/{}/dns_settings",
+    "PATCH /accounts/{}/firewall/access_rules/rules/{}",
+    "PATCH /accounts/{}/gateway/configuration",
+    "PATCH /accounts/{}/gateway/proxy_endpoints/{}",
+    "PATCH /accounts/{}/mnm/rules/{}",
+    "PATCH /accounts/{}/teamnet/virtual_networks/{}",
+    "PATCH /accounts/{}/workers/observability/queries/{}",
+    "PATCH /accounts/{}/zerotrust/connectivity_settings",
+    "PATCH /zones/{}/addressing/regional_hostnames/{}",
+    "PATCH /zones/{}/api_gateway/settings/schema_validation",
+    "PATCH /zones/{}/argo/tiered_caching",
+    "PATCH /zones/{}/cache/tiered_cache_smart_topology_enable",
+    "PATCH /zones/{}/ct/alerting",
+    "PATCH /zones/{}/dns_settings",
+    "PATCH /zones/{}/email/auth/dmarc-reports",
+    "PATCH /zones/{}/email/routing",
+    "PATCH /zones/{}/firewall/access_rules/rules/{}",
+    "PATCH /zones/{}/hold",
+    "PATCH /zones/{}/managed_headers",
+    "PATCH /zones/{}/schema_validation/settings",
+    "PATCH /zones/{}/settings/aegis",
+    "PATCH /zones/{}/settings/auto_origin_tls_kex",
+    "PATCH /zones/{}/settings/csam_scanner_third_party",
+    "PATCH /zones/{}/settings/fonts",
+    "PATCH /zones/{}/settings/origin_h2_max_streams",
+    "PATCH /zones/{}/settings/origin_max_http_version",
+    "PATCH /zones/{}/settings/origin_tls_compliance_modes",
+    "PATCH /zones/{}/settings/rum",
+    "PATCH /zones/{}/settings/speed_brain",
+    "PATCH /zones/{}/settings/ssl_automatic_mode",
+    "PATCH /zones/{}/settings/{}",
+    "PATCH /zones/{}/smart_shield",
+    "PATCH /zones/{}/ssl/universal/settings",
+    "PATCH /zones/{}/waiting_rooms/settings",
+    "PATCH /zones/{}/web3/hostnames/{}",
+    "POST /accounts/{}/access/tags",
+    "POST /accounts/{}/ai-gateway/gateways",
+    "POST /accounts/{}/ai-search/namespaces",
+    "POST /accounts/{}/custom_pages/assets",
+    "POST /accounts/{}/devices/ip-profiles",
+    "POST /accounts/{}/devices/networks",
+    "POST /accounts/{}/devices/resilience/disconnect",
+    "POST /accounts/{}/diagnostics/endpoint-healthchecks",
+    "POST /accounts/{}/dlp/custom_prompt_topics",
+    "POST /accounts/{}/dlp/data_classes",
+    "POST /accounts/{}/dlp/email/rules",
+    "POST /accounts/{}/dlp/profiles/custom",
+    "POST /accounts/{}/dlp/sensitivity_groups",
+    "POST /accounts/{}/firewall/access_rules/rules",
+    "POST /accounts/{}/gateway/lists",
+    "POST /accounts/{}/gateway/proxy_endpoints",
+    "POST /accounts/{}/magic/bgp/filter_profiles",
+    "POST /accounts/{}/mnm/rules",
+    "POST /accounts/{}/rules/lists",
+    "POST /accounts/{}/secondary_dns/acls",
+    "POST /accounts/{}/storage/kv/namespaces",
+    "POST /accounts/{}/teamnet/virtual_networks",
+    "POST /accounts/{}/workers/observability/queries",
+    "POST /zones/{}/acm/total_tls",
+    "POST /zones/{}/addressing/regional_hostnames",
+    "POST /zones/{}/custom_pages/assets",
+    "POST /zones/{}/dns_records",
+    "POST /zones/{}/firewall/access_rules/rules",
+    "POST /zones/{}/firewall/lockdowns",
+    "POST /zones/{}/firewall/ua_rules",
+    "POST /zones/{}/leaked-credential-checks",
+    "POST /zones/{}/leaked-credential-checks/detections",
+    "POST /zones/{}/page_shield/policies",
+    "POST /zones/{}/pagerules",
+    "POST /zones/{}/spectrum/apps",
+    "POST /zones/{}/waiting_rooms",
+    "POST /zones/{}/web3/hostnames",
+    "PUT /accounts/{}/access/keys",
+    "PUT /accounts/{}/access/organizations",
+    "PUT /accounts/{}/access/tags/{}",
+    "PUT /accounts/{}/ai-gateway/gateways/{}",
+    "PUT /accounts/{}/ai-search/namespaces/{}",
+    "PUT /accounts/{}/custom_pages/assets/{}",
+    "PUT /accounts/{}/devices/networks/{}",
+    "PUT /accounts/{}/diagnostics/endpoint-healthchecks/{}",
+    "PUT /accounts/{}/dlp/custom_prompt_topics/{}",
+    "PUT /accounts/{}/dlp/data_classes/{}",
+    "PUT /accounts/{}/dlp/email/rules/{}",
+    "PUT /accounts/{}/dlp/profiles/custom/{}",
+    "PUT /accounts/{}/dlp/sensitivity_groups/{}",
+    "PUT /accounts/{}/gateway/lists/{}",
+    "PUT /accounts/{}/gateway/logging",
+    "PUT /accounts/{}/magic/bgp/filter_profiles/{}",
+    "PUT /accounts/{}/magic/bgp/settings",
+    "PUT /accounts/{}/rules/lists/{}",
+    "PUT /accounts/{}/rulesets/{}",
+    "PUT /accounts/{}/secondary_dns/acls/{}",
+    "PUT /accounts/{}/storage/kv/namespaces/{}",
+    "PUT /accounts/{}/workers/account-settings",
+    "PUT /zones/{}/access/organizations",
+    "PUT /zones/{}/bot_management",
+    "PUT /zones/{}/cache/origin_post_quantum_encryption",
+    "PUT /zones/{}/content-upload-scan/settings",
+    "PUT /zones/{}/custom_ns",
+    "PUT /zones/{}/custom_pages/assets/{}",
+    "PUT /zones/{}/dns_records/{}",
+    "PUT /zones/{}/email/routing/rules/catch_all",
+    "PUT /zones/{}/email/routing/rules/{}",
+    "PUT /zones/{}/firewall/lockdowns/{}",
+    "PUT /zones/{}/firewall/ua_rules/{}",
+    "PUT /zones/{}/fraud_detection/settings",
+    "PUT /zones/{}/leaked-credential-checks/detections/{}",
+    "PUT /zones/{}/origin_tls_client_auth/settings",
+    "PUT /zones/{}/page_shield",
+    "PUT /zones/{}/page_shield/policies/{}",
+    "PUT /zones/{}/pagerules/{}",
+    "PUT /zones/{}/rulesets/{}",
+    "PUT /zones/{}/settings/zaraz/config",
+    "PUT /zones/{}/spectrum/apps/{}",
+    "PUT /zones/{}/url_normalization",
+    "PUT /zones/{}/waiting_rooms/{}"
+  ]
+}

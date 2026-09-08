@@ -1,0 +1,20 @@
+# Release-tag signer roster (DP-A). The Release workflow verifies every v* tag's SSH signature
+# against THIS file as committed on main (never the tag's own tree), so adding or rotating a
+# release-signing key is a reviewed main-branch change and a pushed tag can never vouch for
+# itself. While this roster is empty the Release workflow fails closed with a pointer here.
+#
+# OWNER ACTION: add each release-signing SSH PUBLIC key on its own line, allowed_signers format:
+#   <email-or-identity> namespaces="git" <keytype> <base64-key> <comment>
+# <keytype> is ssh-ed25519 for a software key, or sk-ssh-ed25519@openssh.com for a hardware-backed
+# FIDO/U2F security key; ssh-keygen -Y verify (invoked below via git verify-tag) accepts both key
+# types, since verifying a signature is a public-key operation needing only the line below, never
+# the signer's hardware.
+# Sign tags with: git -c gpg.format=ssh -c user.signingkey=<path-to-private> tag -s vX.Y.Z
+# The roster can carry more than one key at once, so rotating to a new signing key keeps tags cut
+# with the previous key verifiable; retire a superseded key by deleting its line once nothing
+# still relies on it. These keys identify WHO may cut a release tag; this is unrelated to the
+# offline channel-signing hybrid key (which never leaves the owner's custody and is what
+# customers' engines pin).
+
+tim@maelstrom.au namespaces="git" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN6NkEPKBNkt1M0cwLE2LUMvOcG/ajKbLo38nIBrGs4d downpipes release tags 2026-09-06
+tim@maelstrom.au namespaces="git" sk-ssh-ed25519@openssh.com AAAAGnNrLXNzaC1lZDI1NTE5QG9wZW5zc2guY29tAAAAIJRcTV9ERhsowa1RsT5w99AdsdMexa9WrcQFaL1rCueQAAAABHNzaDo= downpipes release tags, hardware-backed key 2026-09-08

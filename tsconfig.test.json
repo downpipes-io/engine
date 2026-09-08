@@ -1,0 +1,14 @@
+{
+  "//why": "tsconfig.json is include:[\"src\"], so this file exists to typecheck test/, scripts/ and tools/ too, where every validator lives. A type-level completeness guard placed in an unchecked directory would be inert, which is why the completion guard test/lib/verdict-guard.ts is a RUNTIME assertion instead.",
+  "//types": "These directories run on Node, not in workerd, so they need @types/node and the DOM lib rather than the WebWorker-only shape src/ compiles against.",
+  "//allowJs": "allowJs brings the .mjs files under scripts/, tools/ and test/ into the program, so an .mjs export used at the wrong type from a .ts file is a type error rather than silently any. checkJs is deliberately NOT set here: turning it on would also check the .mjs bodies themselves, which is a separate, larger change (see tsconfig.checkjs.json).",
+  "//excluded": "test/vitest/** is excluded: those files run under vitest with the workers pool, not as validator processes, and are typed separately by `npm run test:vitest`.",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM"],
+    "types": ["node", "@cloudflare/workers-types"],
+    "allowJs": true
+  },
+  "include": ["src", "test", "scripts", "tools"],
+  "exclude": ["test/vitest"]
+}

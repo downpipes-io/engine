@@ -1,0 +1,45 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": [
+    "scripts/*.{ts,mjs}",
+    "test/**/*.ts",
+    "test/runtime/*.mjs"
+  ],
+  "project": [
+    "src/**/*.ts"
+  ],
+  "ignoreExportsUsedInFile": true,
+  "tags": [
+    "-knipignore"
+  ],
+  "rules": {
+    "duplicates": "warn"
+  },
+  "ignoreDependencies": [
+    "@biomejs/biome",
+    "@noble/hashes",
+    "@stryker-mutator/command-runner",
+    "@stryker-mutator/core",
+    "c8",
+    "cloudflare",
+    "esbuild",
+    "madge",
+    "miniflare",
+    "wrangler"
+  ],
+  "ignoreBinaries": [
+    "biome",
+    "c8",
+    "go",
+    "knip",
+    "madge",
+    "stryker",
+    "tsc",
+    "tsx",
+    "vitest",
+    "wrangler"
+  ],
+  "ignoreUnresolved": [
+    "^\\.\\./\\.\\./console/src/"
+  ]
+}

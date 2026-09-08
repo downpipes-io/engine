@@ -1,0 +1,244 @@
+# The engine deploys into the CUSTOMER's own Cloudflare account. It is reached on a
+# custom domain only; the workers.dev route is disabled by policy (no *.workers.dev).
+# The bindings below are placeholders the customer fills in at onboarding.
+name = "downpipe-engine"
+main = "src/index.ts"
+compatibility_date = "2026-06-01"
+workers_dev = false
+# Upload source maps with the bundle so a stack trace in a thrown error maps back to the
+# original TypeScript rather than the minified output. Aids self-hosted debugging; the maps
+# stay in the customer's own account.
+upload_source_maps = true
+
+# DEFAULT TOPOLOGY: the engine has NO public hostname. The console reaches it over a
+# worker-to-worker service binding and proxies /admin/* and /support/* same-origin, so
+# the only public surface is the console's domain; cron triggers and Durable Objects
+# run without any route. SPLIT topology (uncomment to give the engine its own custom
+# domain, never *.workers.dev) exists for deployments that front the two surfaces
+# differently (e.g. separate Access policies per hostname):
+# route = { pattern = "engine.example.com", custom_domain = true }
+
+# The in-account console origin allowlisted for CORS.
+[vars]
+CONSOLE_ORIGIN = "https://console.downpipes.io"
+# RENAMING THE ENGINE WORKER TOUCHES THREE PLACES, NOT ONE, AND THIS IS THE CHECKLIST.
+# A cold operator following the published pages alone got two of the three wrong, and both mistakes
+# are silent: nothing refuses, nothing warns, and the damage shows up later
+# as a source attached to a worker nobody is running or a console that cannot reach its engine.
+#   1. `name` at the top of THIS file. The obvious one.
+#   2. `WORKER_NAME` immediately below. See its own paragraph.
+#   3. `service = "downpipe-engine"` under `[[services]]` in the CONSOLE'S wrangler.toml, which is a
+#      SEPARATE REPOSITORY. That binding is how the console reaches the engine at all, and it holds a
+#      second hard-coded copy of this worker's name. Miss it and the console's own deploy is refused by
+#      the Cloudflare API with "Service binding 'ENGINE' references Worker 'downpipe-engine' which was
+#      not found [code: 10143]", which at least fails loudly, but names a worker you never asked for.
+# And if you rename the CONSOLE, `CONSOLE_WORKER_NAME` below is the fourth copy, in the other direction.
+#
+# WORKER_NAME: the in-product source attach rewrites the bindings of THIS worker name
+# (src/admin/router.ts reads env.WORKER_NAME ?? "downpipe-engine"). The default is safe only
+# because the fallback string equals the "name" above. If you rename the worker in this file,
+# SET WORKER_NAME to the same value, or the attach would silently target "downpipe-engine"
+# rather than your renamed worker. That one does NOT fail loudly, which is what makes it the worst of
+# the three: the attach succeeds against a worker that is not yours. Uncomment and align if you rename.
+# WORKER_NAME = "downpipe-engine"
+# CONSOLE_WORKER_NAME: the CONSOLE's script name, the twin of WORKER_NAME for the multi-component
+# update path (POST /admin/update/apply with a console component deploys onto THIS script and no
+# other -- the deploy-target guarantee, since a Cloudflare token cannot be scoped to script names).
+# Optional; defaults to "downpipe-console" (the console's wrangler.toml name). Uncomment and align
+# ONLY if you rename the console worker, or a console update would target the wrong script.
+# CONSOLE_WORKER_NAME = "downpipe-console"
+# CF_ACCOUNT_ID (optional): the engine's OWN Cloudflare account id. The no-CLI key install and the
+# source-attach (POST /keys/install, /sources/attach) must name the engine's own account to PUT to it.
+# They resolve it from the console-marked account, then this var, then -- the fresh self-host case -- a
+# read-only discovery token that sees EXACTLY ONE account. SET THIS only when the engine's account is one
+# of SEVERAL the discovery token can see (otherwise a single-account token resolves it automatically, so
+# the first-run key install never dead-ends to the command line). Left unset by default.
+# CF_ACCOUNT_ID = "your-account-id"
+# The sender for outbound engine email (alerts, expiry, role invites, the first-Owner
+# set-up link). Must be an address on a domain onboarded for Cloudflare Email Sending;
+# until then every send is a clean, logged no-op (fail-open).
+EMAIL_FROM = "no-reply@downpipes.io"
+# BOOTSTRAP_OWNER_EMAIL (the email-link first-run, POST /admin/auth/bootstrap/send) is
+# set per deployment, not committed: npx wrangler secret put BOOTSTRAP_OWNER_EMAIL
+
+# ---- Assurance licence + free updates (activation) ------------------------------------------------
+# Customers ACTIVATE their licence FROM THE CONSOLE (Licence > Activate): the token is verified live
+# against the pinned signer and stored at RUNTIME in the scheduler DO — no CLI, no redeploy. The
+# DO-stored token wins over the deploy-time LICENCE_TOKEN below, exactly as the console-set destination
+# wins over the env destination. The values here are the VENDOR PINS the verify path checks against:
+# PUBLIC keys / a URL, never secrets, the SAME for every customer. Until they are pinned (a one-time
+# vendor ceremony) GET /admin/licence and GET /admin/updates report fail-open "community" / "not
+# configured" — which is correct and harmless (a licence and updates are never required).
+#
+# UPDATE_CHANNEL_URL is the vendor-hosted, signature-pinned version channel the engine PULLS (never a
+# push) and verifies against UPDATE_SIGNER_PUBLIC. A plain URL, not a secret. It is static signed
+# content (the engine trusts the PINNED SIGNATURE, not the host), so it is served as two static files
+# from an R2 public bucket on the update.downpipes.io custom domain (O-1: singular "update") — no
+# worker, no billing coupling. The engine fetches this URL for the channel body and this URL + ".sig"
+# for the detached signature. The channel is "not set" until the owner runs the signer ceremony below
+# (pins UPDATE_SIGNER_PUBLIC) and stands up the host; until then GET /admin/updates honestly reports
+# configured:false and the console shows a "configure the channel" posture (no crash).
+UPDATE_CHANNEL_URL = "https://update.downpipes.io/stable.json"
+#
+# These are vendor-pinned constants, set once by Maelstrom and the same for every customer. Customers
+# never generate or rotate them; they are published here purely so the engine can verify the update
+# channel and a pasted licence token against them.
+UPDATE_SIGNER_PUBLIC = "3or8OMMSi9P2wRktaAe1YTpCac90qCMplctvTGnm5Ozr5RLdB8Vh-kKpchoo8LgUmdfZN1E6_70EcMhF5rtOJSBPqZUoxw42gnk_m7NhCPib3aSnRCf4q_j1ZvhoTZpjDvMUS6CiaoYckqvWbMa-Y8BL89bzpqD16HbbuEOo-gubFfF0e2LybD4Yev_-mTT-rBbfg1hZ0rhMFOtP322ri7g4XUF-YGqb8zSSmRdGGRIEXVsdcFZbdRnypiYqIvVwy4C1_dbdiCKlfd9-MUHh41IF-H2qPHxfJy5Nsvi_Jl5Wn6JtPBm52O2kR4neB3aEXF3eacRXWxGsrdjMsm2PTo3trBGgyP34QOXSEzj7poYOHuq3nS6TEa8bB4Ix03ae4kY3adgazyxhfCR-tCOBKslJewKrk2mRWpDKYzU7QeWj3egT6IUH1kLvAm1X-4OcqKccBW_zV6j7fKE7qz2ynbilpxjN66RV42Zoj9h9rPiyjhgyAq6LYJLI3dvYS1on8hBvNmAQ7hDXQ10rdyk_iQ7_xLKqbt0gVyu_C-mFdsFUnC64LtYGXj1SfDo8IjSekMZxJ4wn3yPe1VDPLOZ4znkElle5n8L1JowF9CeilrwWakfasqFnCkfMVhbh_nAZYu42HvSOy-SJrzv6UjgW6D8AuafoIYw0JWOtO8_ApmEz_4tAo3iRX-IiNEXTwHpWvON3HQh_-nphpvJZlmChay1I_VIJSPH6yABLfHbMTJuzqBVd5TEhkHtpVGlIFkHaABSuuZPLiwP3qniI1mqacQcAyXcwr4xya1wqIacfFWwfoDdFIS-XcF50ZXnUakHKOu4WAn0NBl3xoZyabJ9m5vyEH_GzQTLtaTCH3hqggl2vMAimMY-diId8ANXli2iW_hFai3wPVh6523cLVcwMFviMJH651UUUQ6g5pKwBe_ldr8vhLnnm8ANxIwHVjJuDd2JVl4eo2ajffaAjuZdqsa_KM6_bUYTtuuv6nyUORa18dwIUzrRYLpEAS55HJIziU9qbiUo04w9QWncBKyP_mNS6kc_zcyBSMEKvil2viqmuT69Gs3dFFocVKbM_k1n3q-5IBWFB4nJo_BuHSSs8vE6APUlel-bwuSTK4ql6gnoPuyn16GPy_rS3SwUjU3wbyjQ7SzEU1eD3w-msoZOfK0iMEjDCAwbAhJirfm4MpapaJ-hnkQohQZmqSej6cA7cvEUiIGLONCEqFLmVnOmX1b1ukOo3Sv_QYMB25J59c1yQAwFoKJ64O_F0y2fWjR3Al-3ztHgqnYcwJ6aizVtLxHacGBGcUskCQWYaSLJbXKvHbH54AgBBjDsCjGMeBsM9u3aT9bt11svGDSxViOs2pfkcOQgMDajsxvyOhLc1zpeS2B2C3GEypkYdImrfCG4WtTEMdfDPKCSYx-E5GNOPfqaFswSsY33KnefNorY5Hn1QgoMU-9MnKWcdwWEtKAONrf6QNy-b78Vfi3NmVMPzXI2B_LCOmT_qwSnUATFqYB1TyHXtGNk-s6hDI84zz4cbMODaHqTgdfHwC3o50DsHT0iYPazMjQce1Jla4ZI6bFR1PVzUgz61SRGhMUV_1Ajck5rfSuSyL9NcUi7K-Iy_Gm8nntyM7PDqXgnggfoHMzwCi8MhzbJUWeDxbcI6b9CNe7tiZz-D2Kwac__3NeY9s68YpQUovICjNIKjFrp4TXEbGYBcLoMzjAXC3qTF9nB-1EvZ4_H8rjPEJv2Pvhbz49NTdY9k7NJjEOdA4uKrWoG3Oajn19CzTpcnKlrCE_-QlqepsxaPcPOQSzGx4jwKzBZ0HhwC71tFx5MS3hSE7-jHbX5HdH4LTYBr2GdaLukwIfZbdUQBCmmy30C5o7GKvoLO8l9DA9LWsa3hnOPWD5R23fyxXy9g63xR84o_NjW_eMJpU0Qu6mc5pT3_QDHtrp9E8r5DybaU4BbKjn4vBmfqlsQTLPHk-ufqQYVWVnuWBcwNle1IvsqkOakAP1mxlpSUYuwaxvdURWrTWSE0VKmpHDw2F7YuDQnWDsiqOcCjAlvm0HKMFfhJwlavII25AsQE8f-odc4OwztRPt9BlFDaPk0qDSV6Q8i6mlzAO0eI7jmV67IEOTH6cLHQUFhY6ZatN8QGdICYvMexacl9knJe5VV0NNau7SPTrRDigeGimMnr5A7zNbOsW0ky2SorJ8WQ-9l_n25gs9Ye3NpwFL4lSJ6NXqhptB_6LtCIIgAPUcKYXwxrgzlIYSZJ99CK-6MQlAuHp-tS-5QUGBFWALrc1zstJyjudBbfo-Z1zhv5bg5aVD0yxccTTUnZJE1QH1rlHcGcEduc6IUDiqEQCtJ3ew6XSGOkCYPL1IGYLjbfMjJEM2ZwQ8rXd1_gOYw6p-TIk2fXUWTTml9i4nUSskOp-ulf-UX1nNgPoPsRfTISxWybVEKorgUWe9HeTHvZJvDnaVXhbxbkW2yYO3ZS1FbxWs2_-OEjSJBmwai1Lo340W5KId1NIIYu5tjOAIavxx__mWIzZqs59W7ryyuSIhg7GgwgKEu6t8s3eLlirJ5uWGSLgIvI2Aa5Vpv-57v-ghc-jkXKqoV60Z9Qxp-Cq3B633GBOQ0p2n1ZjcoC7zsRtE6zF2IhEyQ6NLGtCEZEMm7diOY_DNQA-g8q1a7ZJsQ3vXEkBFwHf7JU1bt5q0Ib2G4IBPgBF3MK-Jq4w6WC1cvF8SRO4wDN1akZXRDmdZM9grtyQDtdC3oJDjEeZUzcBNmwmf3HkiaSxovWA_3JxKYQfLpjpCxnYhDUUV6ow8-jynd8LcwET53Si4yNBzo2MwEkbgbff8Eo55stBY1r9Qv4ldd6BNe9lDmmqbHpz0sKNmzkwAzZVLn5NquH1_DqZ3N0REzRu9Xuq4S6jxvVQiiCXdznlIXPL2SGeoZkXLsTeuabCrh4S75Y2UfDvbZDfmm--SmvkHiZBVKPYGvZSITyi8iyrEvYr8LUuy3Swk-aCDvIeC__vXaBhzE6r40fydpnnn5MkCCvy-R1I6lytgUGBfS953W_TjJDyVG0SdZj2dqDnuCcJZFqc6Oqpzu7mgwO0MeIM11EJ90uZ_rm34LHN50GLF0HuFfa6H6PcqtTSX2gxxOCRlrwJR7BQmGWgz9un9LV98wNvCsSQm5oZkIg2ztswQE4jtPRdBVWeEkBl7ufmvINQteAP8a4w6f1imxzm9KgEx5_hCYZaCpt20dUNyr26vh5WqJAzcURsrwtkRXhGC-DrXOsqhA5GhvRhimqsmG4O7dEvd7cy1nQAyQRiQ9XoaWNb6Jy5EZh1gTVyKjp18TBQzwyKhvxbcMy3woBwzBBwYjuOwFF7M790jgyHSd1RAMv3GxxgHCJIALoALGSvaTZnq0ZNBu-fUKF45d8fYIwJmd3km8PxqguyBJLSuw7yP7grgUQKzu-yWWjnGuwL_UQGarI8CTu8BWyVzNqQ37nfzG6XVB-MLvilKSAir_dx8-Zkd5e0mWv0Lk"   # base64url ed25519(32) || ML-DSA-87 public(2592) = 2624 bytes (owner ceremony key, pinned)
+# LICENCE_SIGNER_PUBLIC = "..."  # same 2624-byte layout; pinning this is what lets a pasted token verify
+# LICENCE_TOKEN is intentionally NOT set here: customers activate from the console (DO-stored, and the
+# DO-stored token wins over this var). It stays readable only as an optional IaC fallback.
+
+# Outbound email: the Cloudflare Email Service send binding (dash: Compute > Email
+# Service > Email Sending). PREREQUISITES the deployer completes once in the dash:
+# enable Email Service and onboard the EMAIL_FROM domain for sending (Cloudflare DNS
+# required; MX/SPF/DKIM/DMARC records are added automatically). Until then every send
+# is a clean, logged no-op whose error CODE names the gap
+# (E_SENDER_DOMAIN_NOT_AVAILABLE / E_SENDER_NOT_VERIFIED).
+#
+# NOT remote. It carried remote = true, which is a `wrangler dev` convenience that lets
+# local development send real mail; deploys ignore it, because a deployed Worker always gets the real
+# binding. But vitest-pool-workers reads this file to build the test environment, saw the remote
+# binding and tried to open a real remote dev session, which needs Cloudflare credentials. On a
+# developer machine that silently succeeds from wrangler's cached login; on a runner there are no
+# credentials, so the gating Runtime job failed with "Could not start remote dev session. No
+# credentials found, and the environment is non-interactive". A dev-time convenience is not worth a
+# gating job that cannot run. A developer who wants real mail can pass `wrangler dev --remote`.
+[[send_email]]
+name = "EMAIL"
+
+# Cloudflare Access (the higher-assurance admin auth) onboarding knobs; the code already reads both
+# (see src/admin/auth.ts). Set the team domain and the Access application AUD tag to require a
+# verified Access JWT; leave commented to use the ADMIN_TOKEN bearer fallback.
+# CF_ACCESS_TEAM_DOMAIN = "your-team.cloudflareaccess.com"
+# CF_ACCESS_AUD = "your-access-application-aud-tag"
+
+# The scheduler Durable Object that owns schedules, the run lock and the RUNLOG index.
+[[durable_objects.bindings]]
+name = "SCHEDULER"
+class_name = "SchedulerDO"
+
+# The per-downpipe seal Durable Object: a run too large for one invocation's
+# subrequest/CPU budget continues here as alarm-chained slices (fresh platform budget per
+# alarm) until it finalises. Small runs complete inline and never touch it. The optional
+# vars SCALE_SLICE_SUBREQUESTS / SCALE_SLICE_WALL_MS / SCALE_SHARD_MAX_RECORDS /
+# SCALE_SEGMENT_TARGET_BYTES tune it; SLICED_RUNS_DISABLED reverts to the v1 whole-run
+# seal (see src/env.d.ts and docs/OPERATIONS.md "Large environments").
+[[durable_objects.bindings]]
+name = "RUNSEAL"
+class_name = "RunSealDO"
+
+# The account-global CF API rate-limit Durable Object (the shared token bucket DistributedPacer fronts):
+# every CF account-API crawl draws a token from ONE bucket here, so concurrent crawls are paced in aggregate
+# below the account ~1200 req/5min limit, not just per-isolate (see src/sched/ratelimit-do.ts). It is
+# OPTIONAL/additive: accountPacer (src/cf-pace.ts) falls back to the per-isolate CfPacer when this binding is
+# absent. The binding is drafted; its live cross-isolate go-live is a deliberate later step.
+[[durable_objects.bindings]]
+name = "RATELIMIT_DO"
+class_name = "RateLimitDO"
+
+# version_metadata (W1 provenance): exposes the deployed Worker version's immutable identity
+# { id, tag, timestamp } at runtime, so the engine self-reports which Cloudflare version it is (GET
+# /admin/status) and the safe-apply self-check can confirm the live version id matches the just-promoted
+# one. It is already in cf-deploy.ts's RESENDABLE_TYPES, so a self-deploy preserves it (no brick-guard
+# trip). No cost; config-only. See src/env.d.ts (CF_VERSION_METADATA).
+[version_metadata]
+binding = "CF_VERSION_METADATA"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["SchedulerDO"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["RunSealDO"]
+
+[[migrations]]
+tag = "v3"
+new_sqlite_classes = ["RateLimitDO"]
+
+# Raise the per-invocation CPU ceiling (Workers paid; config-only, no extra cost until
+# used): sealing hashes and encrypts every byte it reads, so a slice that streams
+# hundreds of megabytes (or a chained >1 GiB object's windows) needs more than the 30 s
+# default.
+[limits]
+cpu_ms = 300000
+
+# Workers observability: ship invocation logs and metrics to the Cloudflare dashboard so a
+# self-hosting operator can see scheduler runs, seal failures and rate-limit events without
+# wiring an external sink. Config-only and no extra cost until logs accrue.
+[observability]
+enabled = true
+
+# The dispatch driver for new runs (the scheduler alarm currently only re-arms;
+# precise alarm-driven dispatch is a deferred refinement). Seal DO alarms carry
+# already-started large runs between ticks.
+[triggers]
+crons = ["*/15 * * * *"]
+
+# Outbound email senders (contract section 3): the EMAIL binding is declared once above (line 81). The
+# notification channel, the expiry alerts (src/email.ts), and the role-invite notification
+# (src/admin/router.ts) all send through it. Until the EMAIL_FROM domain is onboarded in the dashboard
+# (the prerequisites noted at the binding above), sendEmail is honestly fail-open ({ ok:false,
+# reason:"email-not-configured" }): notifications simply skip the email channel and a role-invite is
+# silently skipped, so an unbound or un-onboarded account never has a send block or fail a grant.
+# EMAIL_FROM is the sender for the notification/expiry channels, validated as a custom-domain address at
+# send time (never *.workers.dev). INVITE_EMAIL_FROM is the SEPARATE, opt-in sender for the role-invite
+# email sent when a role is granted to a person via POST /admin/roles: the invite is OFF unless
+# INVITE_EMAIL_FROM is set, so an account can run alerts/expiry email without emailing on every role
+# grant (or vice versa). A send failure never blocks or fails the grant. Set both as vars to enable:
+# [vars] (append): EMAIL_FROM = "alerts@your-custom-domain.example"
+# [vars] (append): INVITE_EMAIL_FROM = "invites@your-custom-domain.example"
+# CONSOLE_ORIGIN supplies the sign-in link the invite points at.
+
+# THE ARCHIVE DESTINATION. Where your backups are written.
+#
+# NOTHING HERE IS REQUIRED, AND THAT IS WHY THIS BLOCK EXISTS. The ordinary path is the console's
+# Destinations screen, which verifies the destination live before it stores it, gates it on Owner and
+# audits it; a destination set there WINS over everything below, exactly as a console-set discovery token
+# wins over DISCOVERY_API_TOKEN (src/dest/factory.ts, RuntimeDestConfig / fetchDestConfig).
+#
+# The block is here because a customer following the published deploy is told, at the moment of doing it,
+# to "set your destination in wrangler.toml", and then opens a file that says nothing about destinations
+# at all: no binding, no var, not even a commented placeholder. The
+# instruction was not wrong, the file was silent, and a file that is generous with placeholders everywhere
+# else reads as "there is nothing here to set" rather than as an omission.
+#
+# TWO WRITERS, and DEST_KIND chooses between them when both could apply.
+#
+# R2, in this account. No credentials on the wire: the bucket is a binding.
+# [[r2_buckets]]
+# binding = "DEST_R2"
+# bucket_name = "your-archive-bucket"
+#
+# S3-compatible, anywhere else. The endpoint, bucket and region are vars; the two keys are NOT, and must
+# never be written here. They are read from the Secrets Store via a binding, like every other secret this
+# engine holds.
+# [vars] (append): DEST_KIND = "s3"
+# [vars] (append): DEST_ENDPOINT = "https://s3.your-provider.example"
+# [vars] (append): DEST_BUCKET = "your-archive-bucket"
+# [vars] (append): DEST_REGION = "auto"
+#
+# DEST_KIND forces the choice: "r2" uses the DEST_R2 binding, "s3" uses the HTTP path. Absent, a bound
+# DEST_R2 is the default. See src/dest/factory.ts.
+
+# SOURCE BINDINGS — NONE live here, by design (READ THIS before editing).
+# A backup SOURCE is a Workers binding (KV / R2 / D1 / Secrets Store). EVERY source is attached from
+# the CONSOLE (Sources screen): the engine adds the binding to its own LIVE worker via the Cloudflare
+# API and proves the change drops nothing (src/admin/attach.ts) — no CLI, and it never edits this
+# file. This file therefore lists NO source bindings, on purpose: pinning one here would make that
+# one survive a `wrangler deploy` while every other source is dropped — the exact inconsistency we
+# refuse. Every source is treated identically.
+#
+# `wrangler deploy` REPLACES the worker's bindings with exactly what THIS file lists, so the ONLY
+# safe way to deploy is `npm run deploy`, which runs scripts/sync-bindings.mjs to read the LIVE
+# worker's bindings and deploy a SUPERSET (wrangler.deploy.toml = this file + EVERY live source),
+# carrying them all uniformly, and which STOPS rather than ship a binding-dropping config.
+#
+# A CLOUDFLARE API TOKEN IS OPTIONAL. An authenticated `wrangler login` session is enough for
+# `npm run deploy` to read the live bindings via scripts/sync-bindings.mjs; CLOUDFLARE_API_TOKEN +
+# CLOUDFLARE_ACCOUNT_ID are the alternative for an environment with no such session (CI, a machine you
+# cannot log in on).
+#
+# The Sources screen and the preflight "Source bindings" check surface any
+# binding that has gone missing. (Recipient public keys and the signer key are read from the Secrets
+# Store via a binding, never hard-coded.)

@@ -1,0 +1,9 @@
+{
+  "mode": "positive",
+  "records": [
+    {
+      "name": "object-a",
+      "valueB64": "cmVjb3ZlciBtZSB3aXRob3V0IENsb3VkZmxhcmUgYW5kIHdpdGhvdXQgdGhlIHZlbmRvcg"
+    }
+  ]
+}

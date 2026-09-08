@@ -1,0 +1,74 @@
+# gitleaks config for the engine repo. Extends the upstream default rule set and adds an
+# allowlist for the deliberate dummy credentials used by the validate suite. The engine holds
+# no real secrets in source: live recipient public keys and the signer come from the Cloudflare
+# Secrets Store at runtime, never the tree.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Deliberate non-secret test fixtures and example values."
+# Test vectors and the validate harness seed obviously-fake credentials (AKIAEXAMPLE,
+# AKIA-secret-id, super-secret-key) to exercise destination wiring and redaction. They are
+# not live and must not red the secret scan.
+#
+# targetRules pins this allowlist to the two default rules the test/ tree actually trips
+# (confirmed empirically: `gitleaks detect` over the full repo history with the `paths` entry
+# below removed surfaces exactly generic-api-key and github-refresh-token, both on synthetic
+# test/vectors/ fixture bytes, and nothing else). WITHOUT targetRules, a gitleaks global
+# allowlist takes precedence over every rule regardless of scope -- default AND custom alike --
+# so this `test/.*` path exemption would also silently blind the downpipe-break-glass-private-key
+# rule below across the ENTIRE test/ tree, not just the test/vectors/ fixtures its own rule-scoped
+# allowlist intends to exempt. That was exactly the gap in the first cut of this fix: a real key
+# committed under e.g. test/incident-notes/ or test/debug/ passed both the pre-commit hook and CI
+# silently, because this untargeted block already exempted the whole path regardless of what the
+# rule-scoped allowlist below said. Re-verify with `gitleaks detect --config .gitleaks.toml` (and
+# again with `paths` here temporarily widened) before ever broadening this list.
+# : github-app-token, stripe-access-token and private-key added after the first real CI run
+# in five weeks surfaced them. Each is a synthetic fixture under test/: a PUBLIC signer.pub in the
+# flipped-tag conformance vector (github-app-token matches its base64 shape), Stripe-shaped strings in
+# five evidence fixtures that exist to prove redaction, and the destsim throwaway TLS cert whose own
+# filename says so. downpipe-break-glass-private-key is STILL deliberately absent from this list, for
+# the reason the paragraph above gives: adding it would blind the custom rule across the whole test/
+# tree.
+targetRules = ["generic-api-key", "github-refresh-token", "github-app-token", "stripe-access-token", "private-key"]
+paths = [
+  '''test/.*''',
+  # Local scratch that a filesystem walk sees but git does not track: checked-out worktrees and the
+  # stryker mutation sandbox. CI scans history, where these never appear; this keeps a local
+  # `gitleaks dir` run honest too.
+  '''^\.worktrees/''',
+  '''^\.stryker-tmp/''',
+  # The stray archive/ artefacts from the same `git add -A` incident described under the
+  # custom rule below. History is deliberately not rewritten, so the commit is still reachable. Safe
+  # to exempt by path because /archive/ is root-anchored in .gitignore (line 12), so it cannot be
+  # re-committed without an explicit `git add -f`.
+  '''^archive/.*''',
+]
+regexes = [
+  '''AKIAEXAMPLE''',
+  '''AKIA-secret-id''',
+  '''super-secret-key''',
+]
+
+# Positive-detection rule for the product's own break-glass identity / signer-private key format
+# (label + base64url payload; see src/crypto/keys.ts LABEL_IDENTITY / LABEL_SIGNER_PRIVATE). Added
+# because gitleaks' upstream rules don't fire on this space-delimited label+blob shape (no PEM armor,
+# no key=/key: operator before the blob), so a real key in this format could otherwise pass both
+# the pre-commit hook and the blocking CI job undetected.
+[[rules]]
+id = "downpipe-break-glass-private-key"
+description = "downpipe identity/signer-private key material (label + base64url payload)"
+regex = '''downpipe-(identity|signer-private)-v1[ \t]+[A-Za-z0-9_-]{80,}'''
+tags = ["key", "downpipe", "custom"]
+
+# Scoped to THIS rule, not the top-level [allowlist] above: gitleaks ORs a block's paths and regexes
+# together, so folding this into the top-level allowlist would blind the whole file. A rule-scoped
+# allowlist with only `paths` has no OR-with-
+# a-regex footgun. Exempts the synthetic KAT/vector fixtures only; a real key anywhere else still fires
+# -- which depends on the top-level allowlist above staying targetRules-scoped away from this rule id
+# (see its comment). An untargeted global allowlist always wins over a rule-scoped one, so if that
+# targetRules list is ever dropped this exemption silently widens to the whole test/.* tree again.
+[rules.allowlist]
+paths = [
+  '''test/vectors/.*''',
+]

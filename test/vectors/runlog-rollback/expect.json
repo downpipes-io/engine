@@ -1,0 +1,9 @@
+{
+  "mode": "negative",
+  "runId": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "exitCode": 5,
+  "phase": "open",
+  "options": {
+    "minRunlogIndex": 2
+  }
+}

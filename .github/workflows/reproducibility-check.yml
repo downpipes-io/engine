@@ -1,0 +1,80 @@
+# The standing, empirical proof behind every "deterministic build" claim this repo makes.
+# Two runner images (matrix) each build the release artefact twice, from two different
+# working paths (the workspace checkout and a fresh clone under RUNNER_TEMP), and fail on
+# any digest drift.
+#
+# VERIFY.md may say "rebuild it yourself and compare" only while this workflow is green.
+name: Reproducibility check
+
+on:
+  pull_request:
+    paths:
+      - "src/**"
+      - "scripts/build-release.mjs"
+      - "package.json"
+      - "package-lock.json"
+      - "wrangler.toml"
+      - ".github/workflows/reproducibility-check.yml"
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "scripts/build-release.mjs"
+      - "package.json"
+      - "package-lock.json"
+      - "wrangler.toml"
+      - ".github/workflows/reproducibility-check.yml"
+  schedule:
+    - cron: "30 2 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "22"
+
+jobs:
+  rebuild-and-compare:
+    name: Build twice, two paths (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-22.04]
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with: { egress-policy: audit }
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
+        with: { node-version: "${{ env.NODE_VERSION }}" }
+      - name: Build A (workspace path)
+        run: |
+          set -euo pipefail
+          npm ci
+          node scripts/build-release.mjs --allow-dirty --out "${RUNNER_TEMP}/a.mjs" > "${RUNNER_TEMP}/a.json"
+          cat "${RUNNER_TEMP}/a.json"
+      - name: Build B (fresh clone at a different path)
+        run: |
+          set -euo pipefail
+          git clone --quiet "file://${GITHUB_WORKSPACE}" "${RUNNER_TEMP}/repro-b"
+          cd "${RUNNER_TEMP}/repro-b"
+          npm ci
+          node scripts/build-release.mjs --allow-dirty --out "${RUNNER_TEMP}/b.mjs" > "${RUNNER_TEMP}/b.json"
+          cat "${RUNNER_TEMP}/b.json"
+      - name: Compare
+        run: |
+          set -euo pipefail
+          A=$(node -p "require('${RUNNER_TEMP}/a.json').sha384")
+          B=$(node -p "require('${RUNNER_TEMP}/b.json').sha384")
+          echo "A: $A"
+          echo "B: $B"
+          if ! cmp -s "${RUNNER_TEMP}/a.mjs" "${RUNNER_TEMP}/b.mjs"; then
+            echo "::error::release build is NOT reproducible on ${{ matrix.os }}: the same commit produced different bytes from two paths."
+            exit 1
+          fi
+          [ "$A" = "$B" ]
+          echo "reproducible on ${{ matrix.os }}: $A"

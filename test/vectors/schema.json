@@ -1,0 +1,409 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/downpipes-io/downpipe/main/docs/format/schema.json",
+  "title": "downpipe/0.1.0 cleartext bootstrap and decrypted shard-record shapes",
+  "description": "Normative JSON shapes for downpipe/0.1.0, aligned field for field with SPEC.md. RootManifest is the cleartext bootstrap object stored at run/<runId>/root.manifest.json and serialised as RFC 8785 JCS (SPEC.md 5). ShardPreamble and ShardRecord are the per-line objects inside a decrypted shard manifest (after the downpipe-envelope unwrap, SPEC.md 6.1, 6.2); the shard payload is the downpipe STREAM (AES-256-GCM), never an age file. RunlogEntry is one line of _RECOVERY/RUNLOG (SPEC.md 10). RestoreReceipt is the machine-parseable receipt (SPEC.md 8.5). Binary-in-JSON is base64url no-pad (SPEC.md 11.4). Hashes and keyed-MAC outputs are bare lowercase hex SHA-384, 96 chars (SPEC.md 11.8). Recipient fingerprints carry the dpr1: prefix and signer fingerprints carry the edmldsa1: prefix (SPEC.md 7.6.1, 11.4); there is no age, x25519: or Bech32 recipient string in this major. Counts and sizes are a JSON number when at most 2^53-1 and a decimal string only when larger (SPEC.md 11.3). This schema cannot express the count canonical-form split, the byte-level container framing, the HKDF derivations, the recipient-set or break-glass byte binding, the RFC 8785 canonicalisation, or the codec-equality cross-field rule; those are normative only in SPEC.md and are enforced by the reader.",
+  "$defs": {
+    "formatVersion": { "type": "string", "const": "downpipe/0.1.0" },
+    "ulid": {
+      "type": "string",
+      "description": "Canonical 26-char uppercase Crockford base32 ULID; I L O U excluded (SPEC.md 11.6).",
+      "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "rfc3339Utc": {
+      "type": "string",
+      "description": "RFC 3339 UTC, literal Z, exactly three fractional digits (SPEC.md 11.5). Emission-canonical only; a reader makes no decision from a timestamp, so the regex does not range-check the instant.",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+    },
+    "hexSha384": {
+      "type": "string",
+      "description": "Bare lowercase hex SHA-384 or HMAC-SHA-384, 96 chars (48 bytes), no prefix (SPEC.md 11.8). Used for content, plaintext, segment, shard, record, recipient-set and Merkle hashes and for the keyed-MAC outputs segId, keyNameHash and keyCommitment.",
+      "pattern": "^[0-9a-f]{96}$"
+    },
+    "base64urlNoPad": {
+      "type": "string",
+      "description": "base64url with no padding (Go RawURLEncoding), the only base64 variant in downpipe JSON (SPEC.md 11.4).",
+      "pattern": "^[A-Za-z0-9_-]*$"
+    },
+    "recipientFingerprint": {
+      "type": "string",
+      "description": "Hybrid X25519 + ML-KEM-1024 recipient fingerprint: 'dpr1:' then lowercase hex SHA-384 over pk_X25519(32) || ek_MLKEM1024(1568) (SPEC.md 7.6.1).",
+      "pattern": "^dpr1:[0-9a-f]{96}$"
+    },
+    "signerFingerprint": {
+      "type": "string",
+      "description": "Hybrid Ed25519 + ML-DSA-87 signer fingerprint hint: 'edmldsa1:' then lowercase hex SHA-384 over ed25519Pub(32) || mldsa87Pub(2592) (SPEC.md 11.4). A hint only, never a trust decision (SPEC.md 8.3).",
+      "pattern": "^edmldsa1:[0-9a-f]{96}$"
+    },
+    "uint53": {
+      "description": "An in-range count or size as a JSON number; MUST be at most 2^53-1. A value above this MUST be a decimal string (see countField). The string form is NOT permitted for an in-range value (SPEC.md 11.3).",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "countField": {
+      "description": "A count or size (SPEC.md 11.3). Canonical form: a JSON number when at most 2^53-1, a decimal string ONLY when larger. JSON Schema cannot express the threshold split, so this oneOf accepts either representation for in-range values; the reader MUST additionally reject the string form for any value at most 2^53-1 and reject a number above 2^53-1 (exit 6).",
+      "oneOf": [
+        { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+        { "type": "string", "pattern": "^(0|[1-9][0-9]*)$" }
+      ]
+    },
+    "codec": { "type": "string", "enum": ["none", "gzip"] },
+    "sourceType": {
+      "type": "string",
+      "description": "The supported downpipe/0.1.0 source types (SPEC.md 12.1). kv, r2, secrets and d1 restore by a direct value write; workers, cf-config, stream, images and artifacts restore by re-provisioning or replay (their value is verified and surfaced, never blind re-applied). The reserved durable_object and vectorize are deliberately excluded: a reader refuses a sourceType outside this set (SPEC.md 12.1).",
+      "enum": ["kv", "r2", "secrets", "d1", "workers", "cf-config", "stream", "images", "artifacts"]
+    },
+    "recordSalt": {
+      "description": "16 random bytes, base64url no-pad (exactly 22 chars). Present ONLY on a secrets record, where it is fresh random; a non-secret record OMITS the field entirely, with no all-zero placeholder (SPEC.md 6.3).",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{22}$"
+    },
+
+    "RootManifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "formatVersion", "runId", "createdAt", "downpipeId", "envelope",
+        "recipients", "masterCapsule", "recipientSetHash", "keyCommitment",
+        "breakGlassPresent", "shards", "shardCount", "declaredRecordCount",
+        "merkleRoot", "freshness", "signingKeyFingerprint"
+      ],
+      "properties": {
+        "formatVersion": { "$ref": "#/$defs/formatVersion" },
+        "runId": { "$ref": "#/$defs/ulid" },
+        "createdAt": { "$ref": "#/$defs/rfc3339Utc" },
+        "downpipeId": { "type": "string", "minLength": 1 },
+        "envelope": {
+          "type": "object",
+          "description": "Exactly six fields and no others (SPEC.md 5.2). keyCommitment and recipientSetHash are top-level, not nested here, and there is no secretsCompressionDisabled or any run-wide secrets-compression flag.",
+          "additionalProperties": false,
+          "required": ["aead", "kem", "sig", "kdf", "chunkSize", "codec"],
+          "properties": {
+            "aead": { "type": "string", "const": "AES-256-GCM" },
+            "kem": { "type": "string", "const": "X25519+ML-KEM-1024" },
+            "sig": { "type": "string", "const": "Ed25519+ML-DSA-87" },
+            "kdf": { "type": "string", "const": "HKDF-SHA-384" },
+            "chunkSize": { "type": "integer", "const": 65536 },
+            "codec": { "$ref": "#/$defs/codec" }
+          }
+        },
+        "recipients": {
+          "type": "array",
+          "description": "Recipient PUBLIC keys, inline in the signed root. Break-glass first, then operational when present. The default posture has 2 entries; the break-glass-only posture has 1 (SPEC.md 5.1, 5.2, 7.6).",
+          "minItems": 1,
+          "maxItems": 2,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["fingerprint", "role", "x25519", "mlkem"],
+            "properties": {
+              "fingerprint": { "$ref": "#/$defs/recipientFingerprint" },
+              "role": { "type": "string", "enum": ["break-glass", "operational"] },
+              "x25519": { "$ref": "#/$defs/base64urlNoPad" },
+              "mlkem": { "$ref": "#/$defs/base64urlNoPad" }
+            }
+          },
+          "allOf": [
+            {
+              "description": "Exactly one break-glass recipient.",
+              "contains": {
+                "type": "object",
+                "properties": { "role": { "const": "break-glass" } },
+                "required": ["role"]
+              },
+              "minContains": 1,
+              "maxContains": 1
+            },
+            {
+              "description": "At most one operational recipient.",
+              "contains": {
+                "type": "object",
+                "properties": { "role": { "const": "operational" } },
+                "required": ["role"]
+              },
+              "minContains": 0,
+              "maxContains": 1
+            }
+          ]
+        },
+        "masterCapsule": {
+          "type": "array",
+          "description": "A BARE ARRAY of wraps, one per recipient in canonical recipient order (SPEC.md 5.4). NOT an enclosing object with a member array, NOT a base64url blob and NOT an age file. Each wrap's selector field is 'fingerprint', the same dpr1: value as the matching recipients[] entry.",
+          "minItems": 1,
+          "maxItems": 2,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["fingerprint", "kemCiphertext", "sealed"],
+            "properties": {
+              "fingerprint": { "$ref": "#/$defs/recipientFingerprint" },
+              "kemCiphertext": { "$ref": "#/$defs/base64urlNoPad" },
+              "sealed": { "$ref": "#/$defs/base64urlNoPad" }
+            }
+          }
+        },
+        "recipientSetHash": {
+          "$ref": "#/$defs/hexSha384",
+          "description": "Top-level field, NOT nested under envelope. SHA-384 over the sorted 1600-byte hybrid recipient encodings (SPEC.md 7.6.1)."
+        },
+        "keyCommitment": {
+          "$ref": "#/$defs/hexSha384",
+          "description": "Top-level field, NOT nested under envelope. HMAC-SHA-384 over the recovered master (SPEC.md 8.4)."
+        },
+        "breakGlassPresent": { "type": "boolean", "const": true },
+        "shards": {
+          "type": "array",
+          "minItems": 0,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "object", "sha384"],
+            "properties": {
+              "id": { "type": "string", "pattern": "^[0-9]{5,}$" },
+              "object": {
+                "type": "string",
+                "description": "The stored shard-manifest path, the encrypted .dpe container (SPEC.md 5.1, 5.2). The wire form carries the full run-relative path run/<runId>/manifest/<shardId>.dpe.",
+                "pattern": "^(run/[0-9A-HJKMNP-TV-Z]{26}/)?manifest/[0-9]{5,}\\.dpe$"
+              },
+              "sha384": { "$ref": "#/$defs/hexSha384" }
+            }
+          }
+        },
+        "shardCount": { "$ref": "#/$defs/uint53" },
+        "declaredRecordCount": { "$ref": "#/$defs/countField" },
+        "merkleRoot": { "$ref": "#/$defs/hexSha384" },
+        "freshness": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["prevRunId", "runlogIndex"],
+          "properties": {
+            "prevRunId": { "oneOf": [ { "$ref": "#/$defs/ulid" }, { "type": "null" } ] },
+            "runlogIndex": { "$ref": "#/$defs/uint53" }
+          }
+        },
+        "signingKeyFingerprint": { "$ref": "#/$defs/signerFingerprint" }
+      }
+    },
+
+    "ShardPreamble": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "formatVersion", "runId", "shardId", "manifestCodec", "source", "recordCountInShard"],
+      "properties": {
+        "kind": { "type": "string", "const": "preamble" },
+        "formatVersion": { "$ref": "#/$defs/formatVersion" },
+        "runId": { "$ref": "#/$defs/ulid" },
+        "shardId": { "type": "string", "pattern": "^[0-9]{5,}$" },
+        "manifestCodec": { "$ref": "#/$defs/codec" },
+        "downpipe": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name"],
+          "properties": {
+            "name": { "type": "string" },
+            "cadence": { "type": "string" }
+          }
+        },
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type"],
+          "properties": {
+            "type": { "$ref": "#/$defs/sourceType" },
+            "namespaceId": { "type": "string" },
+            "bucket": { "type": "string" },
+            "label": { "type": "string" },
+            "include": { "type": "array", "items": { "type": "string" } },
+            "exclude": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "window": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["start", "end"],
+          "properties": {
+            "start": { "$ref": "#/$defs/rfc3339Utc" },
+            "end": { "$ref": "#/$defs/rfc3339Utc" }
+          }
+        },
+        "consistency": { "type": "string" },
+        "recordCountInShard": { "$ref": "#/$defs/uint53" }
+      }
+    },
+
+    "ShardRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "sourceType", "name", "keyNameHash", "recordId", "plaintextSize", "plaintextSha384", "recordHash", "codec", "segments"],
+      "properties": {
+        "kind": { "type": "string", "const": "record" },
+        "sourceType": { "$ref": "#/$defs/sourceType" },
+        "namespace": { "type": "string", "description": "Present only for a namespaced source such as KV (SPEC.md 6.2, 6.3)." },
+        "bucket": { "type": "string", "description": "Present only for a bucketed source such as R2 (SPEC.md 6.2, 6.3)." },
+        "database": { "type": "string", "minLength": 1, "description": "Identity annotation, emitted only on a d1 record: the D1 native database UUID this backup is OF (the record name carries only the binding name). Optional, omitted when empty; NOT an input to recordHash (SPEC.md 6.5)." },
+        "account": { "type": "string", "minLength": 1, "description": "Identity annotation, emitted only on an API-discovery record (workers, cf-config, stream, images, artifacts): the Cloudflare account this backup is OF. Optional, omitted when empty; NOT an input to recordHash (SPEC.md 6.5)." },
+        "name": { "type": "string" },
+        "keyNameHash": { "$ref": "#/$defs/hexSha384" },
+        "recordId": { "type": "string", "pattern": "^r[0-9]{15}$" },
+        "plaintextSize": { "$ref": "#/$defs/countField" },
+        "plaintextSha384": { "$ref": "#/$defs/hexSha384" },
+        "recordHash": { "$ref": "#/$defs/hexSha384" },
+        "recordSalt": { "$ref": "#/$defs/recordSalt" },
+        "codec": { "$ref": "#/$defs/codec" },
+        "segments": {
+          "type": "array",
+          "description": "Ordered, non-empty (SPEC.md 6.3). Every emitted record line is a present, readable record; there is no vanished record line in this format (SPEC.md 6.3, 12.5).",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["object", "chunkRange", "packed"],
+            "properties": {
+              "object": { "type": "string", "pattern": "^seg/[0-9a-f]{2}/[0-9a-f]{96}\\.seg$" },
+              "chunkRange": {
+                "type": "array",
+                "minItems": 2,
+                "maxItems": 2,
+                "items": { "$ref": "#/$defs/uint53" }
+              },
+              "packed": {
+                "oneOf": [
+                  { "type": "null" },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["offset", "length"],
+                    "properties": {
+                      "offset": { "$ref": "#/$defs/uint53" },
+                      "length": { "$ref": "#/$defs/uint53" }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "kv": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "metadata": {}, "expiration": { "$ref": "#/$defs/countField" } }
+        },
+        "r2": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "httpMetadata": {}, "customMetadata": {} }
+        },
+        "secrets": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "store": { "type": "string" },
+            "scope": { "type": "string" },
+            "comment": { "type": "string" },
+            "worker": { "type": "string" },
+            "bindingVar": { "type": "string" }
+          }
+        },
+        "d1": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": { "format": { "type": "string" } }
+        },
+        "incompleteMarker": {
+          "type": "string",
+          "enum": ["_truncated", "_unavailable", "_skipped", "_pending", "_refused", "_vanished"],
+          "description": "Present ONLY when this record's value is an incompleteness SENTINEL the writer emitted in place of real bytes; the value is the marker kind (the closed set the reference writer stamps). Absent on every real-data record and on every archive sealed before the field shipped. Sealed inside the shard manifest whose SHA-384 the signed root binds (tamper-evident), but NOT an input to recordHash (SPEC.md 6.5)."
+        }
+      },
+      "allOf": [
+        {
+          "description": "recordSalt is secrets-only: present for a secrets record, which MUST also have codec none (SPEC.md 6.3, 7.5, 12.4). Modelled with if/then, not in the base required list.",
+          "if": { "properties": { "sourceType": { "const": "secrets" } }, "required": ["sourceType"] },
+          "then": {
+            "required": ["recordSalt"],
+            "properties": { "codec": { "const": "none" } }
+          },
+          "else": { "not": { "required": ["recordSalt"] } }
+        }
+      ]
+    },
+
+    "RunlogEntry": {
+      "type": "object",
+      "description": "Exactly seven fields (SPEC.md 10). No recoveryBundle field; the bundle's integrity is anchored by its own SHA384SUMS (SPEC.md 9).",
+      "additionalProperties": false,
+      "required": ["index", "runId", "downpipeId", "time", "recordCount", "prevRunId", "status"],
+      "properties": {
+        "index": { "$ref": "#/$defs/uint53" },
+        "runId": { "$ref": "#/$defs/ulid" },
+        "downpipeId": { "type": "string", "minLength": 1 },
+        "time": { "$ref": "#/$defs/rfc3339Utc" },
+        "recordCount": { "$ref": "#/$defs/countField" },
+        "prevRunId": { "oneOf": [ { "$ref": "#/$defs/ulid" }, { "type": "null" } ] },
+        "status": { "type": "string", "enum": ["active", "superseded"] }
+      }
+    },
+
+    "RestoreReceipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "formatVersion", "runId", "downpipeId", "startedAt", "finishedAt", "mode", "signerExpected", "signatureResult", "completeness", "breakGlassVerified", "declaredRecordCount", "recordsVerified", "recordsRestored", "freshness", "recoveryBundleVerified", "target", "exitCode", "signed"],
+      "properties": {
+        "kind": { "type": "string", "const": "downpipe-restore-receipt" },
+        "formatVersion": { "$ref": "#/$defs/formatVersion" },
+        "runId": { "$ref": "#/$defs/ulid" },
+        "downpipeId": { "type": "string" },
+        "startedAt": { "$ref": "#/$defs/rfc3339Utc" },
+        "finishedAt": { "$ref": "#/$defs/rfc3339Utc" },
+        "mode": { "type": "string", "enum": ["verified", "allow-unverified"] },
+        "signerExpected": { "oneOf": [ { "$ref": "#/$defs/signerFingerprint" }, { "type": "null" } ] },
+        "signatureResult": { "type": "string", "enum": ["valid", "invalid", "absent", "wrong-signer"] },
+        "completeness": { "type": "string", "enum": ["complete", "UNVERIFIED", "incomplete"] },
+        "breakGlassVerified": { "type": "boolean" },
+        "declaredRecordCount": { "$ref": "#/$defs/countField" },
+        "recordsVerified": { "$ref": "#/$defs/countField" },
+        "recordsRestored": { "$ref": "#/$defs/countField" },
+        "vanishedExcluded": { "$ref": "#/$defs/countField" },
+        "danglingSegments": { "$ref": "#/$defs/countField" },
+        "freshness": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["runlogIndex", "isLatestForDownpipe", "rollbackWarning", "checked"],
+          "properties": {
+            "runlogIndex": { "$ref": "#/$defs/uint53" },
+            "isLatestForDownpipe": { "type": "boolean" },
+            "rollbackWarning": { "type": "boolean" },
+            "checked": { "type": "boolean" },
+            "minIndexPinned": { "oneOf": [ { "$ref": "#/$defs/uint53" }, { "type": "null" } ] }
+          }
+        },
+        "recoveryBundleVerified": { "type": "boolean" },
+        "target": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "valueVerified"],
+          "properties": {
+            "type": {
+              "type": "string",
+              "description": "The restore sink the offline binary actually emits: 'file' (one file per record under --out), 'env' (dotenv lines), 'discard' (a restorability check that verifies and writes nothing), or 'verify' for a verify-only run (SPEC.md 8.5, 12.6). A Secrets Store / secrets-manager / S3 / stdout target needs the engine and is not a sink this offline tool writes, so it is not in this enum.",
+              "enum": ["file", "env", "discard", "verify"]
+            },
+            "valueVerified": { "type": "boolean" }
+          }
+        },
+        "exitCode": { "type": "integer", "enum": [0, 2, 3, 4, 5, 6] },
+        "signed": { "type": "boolean" },
+        "receiptSignature": { "$ref": "#/$defs/base64urlNoPad" }
+      }
+    }
+  },
+
+  "oneOf": [
+    { "$ref": "#/$defs/RootManifest" },
+    { "$ref": "#/$defs/ShardPreamble" },
+    { "$ref": "#/$defs/ShardRecord" },
+    { "$ref": "#/$defs/RunlogEntry" },
+    { "$ref": "#/$defs/RestoreReceipt" }
+  ]
+}

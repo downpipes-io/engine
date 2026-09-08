@@ -1,0 +1,66 @@
+node_modules/
+dist/
+.wrangler/
+*.log
+.dev.vars
+
+# The release workflow's build step writes these at the repo root via shell redirection
+# (`node scripts/build-release.mjs > release-facts.json`), which creates the file before
+# the script's own git-dirty guard runs; leaving them untracked keeps that guard from
+# refusing its own output. Never committed (per-release, derived), same treatment dist/
+# already gets.
+/release-facts.json
+/SHA256SUMS.txt
+/sbom.cdx.json
+
+# Stray test artefacts must never enter the repo (root-anchored so test/vectors fixtures are kept).
+/identity.key
+/signer.pub
+/recipient.pub
+/*.key
+/archive/
+coverage/
+.nyc_output/
+node_modules
+wrangler.live.toml
+# The deploy-time reconcile output (scripts/sync-bindings.mjs): wrangler.toml + the LIVE worker's
+# source bindings, regenerated on every deploy. Never committed (per-deployment, derived).
+wrangler.deploy.toml
+wrangler.*.deploy.toml
+
+# The real-workerd runtime test (npm run test:runtime) bundles the test Worker entry here on every
+# run via esbuild; it is a derived artefact, never committed.
+test/runtime/.bundle/
+
+# StrykerJS mutation-testing working directory (npm run test:mutation): derived, never committed.
+.stryker-tmp/
+stryker.log
+
+# The deploy-time recovery kit (scripts/generate-keys.ts): the break-glass private
+# key and recovery sheet land here for the operator to move OFFLINE — never commit.
+recovery-kit/
+
+# --- Private key material — never commit. Fixtures under test/vectors/ are exempt. ---
+*.key
+!test/vectors/**/*.key
+*.pem
+*.p12
+*.pfx
+*-private.b64
+*-private.key
+release-signer.key
+recovery-kit/
+
+# The full NIST ACVP internalProjection.json files (multi-MB) that scripts/fetch-acvp.mjs
+# downloads to enable the complete FIPS 203 / FIPS 204 conformance anchor in
+# test/validate-acvp.ts. They are optional and large, so they are NEVER committed; only the
+# small VERBATIM *-nist-subset.json fixtures (the always-on anchor) are tracked.
+/test/vectors/acvp/ML-KEM-1024.json
+/test/vectors/acvp/ML-DSA-87.json
+
+# Cloudflare's published OpenAPI (multi-MB) that scripts/fetch-cf-openapi.mjs downloads to
+# enable the optional Cloudflare cross-check (Section 2) in test/validate-cf-config-drift.ts.
+# Optional and large, so it is NEVER committed; the always-on self-drift baseline (Section 1,
+# test/vectors/cf-config/endpoint-baseline.json) and the allow-list ARE tracked and run without it.
+/test/vectors/cf-openapi/openapi.json
+

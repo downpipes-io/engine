@@ -1,0 +1,37 @@
+{
+  "comment": "Fixed-input KAT for multi-chunk STREAM seal and name-MAC. Inputs are frozen; any output change is a regression in the crypto port.",
+  "master": "fn5-fn5-fn5-fn5-fn5-fn5-fn5-fn5-fn5-fn5-fn4",
+  "downpipeId": "dp_kat_multi",
+  "runId": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "multiChunkSeal": {
+    "comment": "Plaintext: 2*65536+1337 = 132409 bytes. Fill pattern: b[i] = (i*31+7)&0xff. Nonce: 16 bytes of 0xab. Output pins: CAK, segId, fileKey, and SHA-384 of the full sealed output (the SHA-384 pin binds every chunk boundary, every GCM tag, and the chunk-nonce counter sequence across all 3 chunks).",
+    "plaintextLen": 132409,
+    "payloadNonce": "q6urq6urq6urq6urq6urqw",
+    "cak": "LBi2BemoxKzH3sJxTecn-Q2_K-fjbYSB3xIArugMa28",
+    "segIdHex": "d81e794d466faf8bfcbc447d5725921675fd2d7f14bbc4608902c2f96d093e9b8f0061945f6d6b60b8349758336bc64d",
+    "fileKey": "LsIxUmMmEyH9PPFHNfCHu7IxgmM2Wd8dR1NbKYJmBdo",
+    "sealedLen": 132473,
+    "sealedSha384Hex": "1ad4dbb4060f1be994a8f313877fedba6a7744c9668408f217984e058293fdf53ac039c541563769f89f0f40e5279607"
+  },
+  "nameMAC": {
+    "comment": "nameMAC = HMAC-SHA-384(nameMACKey, sourceType || 0x00 || name). The nameMACKey is derived from deriveMK(master, runIDBytes) then deriveNameMACKey(mk, runIDBytes). All MAC outputs are 48 bytes, hex-encoded.",
+    "nameMACKeyB64": "nA_EhBjLR2NOghyasjN6ulIoqUZGinbf1oGXKfwES0I",
+    "vectors": [
+      {
+        "sourceType": "kv",
+        "name": "config/settings.json",
+        "macHex": "4986727bb45cd6dd69961cd160facb7abdfa59dc9264ee76ad1831bc1c5730c3e422d8a1a804d95d530fbb3147a86f76"
+      },
+      {
+        "sourceType": "r2",
+        "name": "backups/2026-01-01/data.gz",
+        "macHex": "5b4916d7b7c64fe554eff2a0c60b10947e3ca81fed6c13e798bcb278befbc76ee3eceda9e42f9f4492d20004dae62a57"
+      },
+      {
+        "sourceType": "secret",
+        "name": "PROVII_API_KEY",
+        "macHex": "127a1a55114a659d6adbdc8ee95d23e5c603e1cdb8c5a7e95608b1a5649a47f894c3dbec9d97d29ca28db339da5081ca"
+      }
+    ]
+  }
+}

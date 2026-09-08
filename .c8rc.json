@@ -1,0 +1,22 @@
+{
+  "//": "Coverage gate for the engine. The bespoke node validators under test/ (npm run validate) are the engine's real test surface; this instruments them with c8 (V8 coverage maps cleanly through Node's type-stripping). The workerd vitest-pool suite is a runtime smoke test and is not the coverage source.",
+  "//thresholds": "RATCHET, NOT THE TARGET. These floors sit just under the measured figures so the gate blocks a REGRESSION from today's level. They are deliberately not the 90 per cent project standard. Reaching 90 would mean writing tests across a large share of the source tree. RAISE THESE as that work lands; never lower them.",
+  "//known-variance": "The same suite measures differently on the runner (74.6 statements, 17,546 branches) than locally (60.30, 7,723). Both are far below 90, so it does not change the decision, but a branch denominator differing by more than twice means the two environments instrument a different file set, and that is unexplained. Worth resolving before these floors are tightened, or a raise will flap.",
+  "//excluded": "src/sched/scheduler-do.ts (10,034 lines) and src/admin/router.ts (3,002 lines) are carved out pending a planned decomposition: testing them to 90 now would be obsoleted by the split. Type-only modules (env.d.ts, types.ts, *-types.ts) are carved out because they hold no executable statement, so counting them only dilutes the figure.",
+  "include": ["src/**/*.ts"],
+  "exclude": [
+    "src/sched/scheduler-do.ts",
+    "src/admin/router.ts",
+    "src/env.d.ts",
+    "src/**/types.ts",
+    "src/**/*-types.ts"
+  ],
+  "all": true,
+  "reporter": ["text-summary", "json-summary"],
+  "reports-dir": "coverage/c8",
+  "check-coverage": true,
+  "lines": 59,
+  "statements": 59,
+  "functions": 31,
+  "branches": 85
+}
