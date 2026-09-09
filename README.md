@@ -112,6 +112,19 @@ npm run typecheck
 
 The validators cover crypto conformance (byte-identical against the Go reader's known-answer vectors, so the TypeScript writer and the Go reader provably agree on the archive format), the format reader, SigV4, Access JWT verification, STREAM sealing, restore and D1 restore, RBAC and group-role mapping, dual-control, the scheduler, every source adapter, canary flights, licensing, updates and webhook notification. Requires Node 22+.
 
+## Integrations
+
+`integrations/microsoft-sentinel/` ships a standalone ARM template that deploys a Microsoft Sentinel connector for the audit feed (`GET /support/audit-feed`) directly into your own Azure workspace, no Content Hub listing required. Running it creates a Data Collection Endpoint, a custom `DownpipesAudit_CL` Log Analytics table, a Data Collection Rule, and a Sentinel `RestApiPoller` data connector that pages forward on the feed's own `afterSeq`/`nextAfterSeq` cursor. Two example parameters files are included: `parameters.example.json` carries the bearer token as a plain inline value, and `parameters.keyvault.example.json` pulls it live from an Azure Key Vault secret at deployment time so the token never sits in the parameters file at all. Deploy from that directory with:
+
+```bash
+az deployment group create \
+  --resource-group <rg> \
+  --template-file mainTemplate.json \
+  --parameters @parameters.example.json
+```
+
+Full prerequisites, the Key Vault variant, and the Cloudflare Access exemption needed for a pull connector are in [integrations/microsoft-sentinel/README.md](integrations/microsoft-sentinel/README.md).
+
 ## The downpipes family
 
 | Repository | What it is | Licence |
