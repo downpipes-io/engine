@@ -24,7 +24,7 @@ No custody, structurally: the engine runs entirely in your own Cloudflare accoun
 
 ## What it backs up
 
-The engine covers the Cloudflare data and configuration layer, not the compute layer. that is nine source types plus 214 configuration surfaces:
+The engine covers the Cloudflare data and configuration layer, not the compute layer. That is nine source types plus 214 configuration surfaces:
 
 | Source | Captured | Restore path |
 |--------|----------|--------------|
