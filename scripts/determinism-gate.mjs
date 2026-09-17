@@ -61,7 +61,7 @@
 //                                               [--only <substring>] [--max-members N]
 //   node scripts/determinism-gate.mjs --self-test
 //
-// House style: Australian English, no em dashes, no rule-of-three, no AI attribution.
+// House style: Australian English, no em dashes, no rule-of-three.
 
 import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";

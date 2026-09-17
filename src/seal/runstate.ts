@@ -41,7 +41,7 @@ import { causeDigest, coarseRunError, finaliseRun, redactedRunError, runSlice, t
 // re-exported here so existing importers (index.ts registers RunSealDO; the slice validator drives both)
 // keep their import path. The module-level helpers live in runstate-helpers.ts. This file holds the
 // worker-side seal entry points sealRunSliced / sealRunBuffered.
-export { RunSealDO, runSealStub, type StartSliceRun } from "./runseal-do.ts";
+export { RunSealDO, type StartSliceRun } from "./runseal-do.ts";
 
 // RunTrigger is the (runId, index, prevRunId) tuple the cron driver hands a seal entry point.
 type RunTrigger = { runId: string; index: number; prevRunId: string | null };

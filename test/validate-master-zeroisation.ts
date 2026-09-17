@@ -33,7 +33,7 @@
 //
 // Run with `node test/validate-master-zeroisation.ts`.
 //
-// House style: Australian English, no em dashes, no rule-of-three, no AI attribution.
+// House style: Australian English, no em dashes, no rule-of-three.
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";

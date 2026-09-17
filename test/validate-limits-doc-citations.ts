@@ -35,7 +35,7 @@
 //
 // Run with `node test/validate-limits-doc-citations.ts`.
 //
-// House style: Australian English, no em dashes, no rule-of-three, no AI attribution.
+// House style: Australian English, no em dashes, no rule-of-three.
 
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";

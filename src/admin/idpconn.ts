@@ -27,7 +27,6 @@ export type {
   OidcClientAuth,
   OidcConnection,
   SamlConnection,
-  SecretMode,
   SecretRef,
 } from "./idpconn-types.ts";
 

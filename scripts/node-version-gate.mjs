@@ -20,7 +20,7 @@
 // It deliberately does NOT rewrite the workflows to read .nvmrc directly. That would be the tidier shape,
 // and it would change how every job resolves its runtime for a benefit this gate already delivers.
 //
-// House style: Australian English, no em dashes, no rule-of-three, no AI attribution.
+// House style: Australian English, no em dashes, no rule-of-three.
 
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { join } from "node:path";

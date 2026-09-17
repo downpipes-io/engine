@@ -9,7 +9,7 @@
 // Editing a statement's words is a NEW VERSION: bump the version id and regenerate the vector,
 // never edit v1's text in place (an edited-in-place text would make every historical v1 ack refer
 // to words that were never shown). House rules: Australian English, no em dashes, no rule-of-three,
-// precise claims, no AI attribution.
+// precise claims.
 
 import { sha384 } from "../crypto/primitives.ts";
 import { hexEncode, utf8 } from "../crypto/bytes.ts";

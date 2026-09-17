@@ -41,7 +41,7 @@
 // could a change in how the runtime strips types. Both make proofs EXPIRE, never the reverse: the direction
 // of error is a re-run, not a false green. That trade is deliberate.
 //
-// House style: Australian English, no em dashes, no rule-of-three, no AI attribution.
+// House style: Australian English, no em dashes, no rule-of-three.
 
 import type { CfConfigSurface } from "./cf-config-core.ts";
 import { CF_CONFIG_SURFACES } from "./cf-config-registry.ts";

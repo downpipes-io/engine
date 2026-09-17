@@ -59,7 +59,7 @@ import type { CronSpec, FieldSpec } from "./cron-types.ts";
 
 // CronSpec/FieldSpec live in cron-types.ts so the field-parsing helpers can reference them without a
 // cycle. Re-exported here so existing importers of "./cron.ts" see no change.
-export type { CronSpec, FieldSpec } from "./cron-types.ts";
+export type { CronSpec } from "./cron-types.ts";
 
 // MAX_SEARCH_MINUTES bounds the forward minute-walk so a cron that can NEVER match (e.g. an
 // impossible day like Feb 30, "0 0 30 2 *") fails fast with a clear error instead of spinning.

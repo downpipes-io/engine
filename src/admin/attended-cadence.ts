@@ -29,7 +29,7 @@
 // A downpipe that has never completed a run is excluded entirely: there is no sealed archive to verify yet,
 // the same has-a-run exclusion buildRestoreTestRecency already applies, keyed on the same lastRunId.
 //
-// House style: Australian English, no em dashes, no rule-of-three, no AI attribution.
+// House style: Australian English, no em dashes, no rule-of-three.
 
 import type { PostureDownpipeInput } from "./posture-types.ts";
 

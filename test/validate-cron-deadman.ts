@@ -24,7 +24,7 @@
 //   7) best-effort: a storage fault inside the backstop is swallowed and never escapes alarm().
 //   8) the cron heartbeat: POST /reconcile-alerts stamps CRON_ALERT_SWEEP_AT_KEY (cron-only liveness).
 //
-// Australian English, no AI attribution. Run: node test/validate-cron-deadman.ts
+// Australian English. Run: node test/validate-cron-deadman.ts
 
 import { SchedulerDO } from "../src/sched/scheduler-do.ts";
 import type { SchedulerDOSurface } from "../src/sched/scheduler-do-base.ts";

@@ -31,7 +31,7 @@
 //
 // Run: node test/validate-corrupt-state-honesty.ts
 //
-// House style: Australian English, no em dashes, no rule-of-three, precise claims, no AI attribution.
+// House style: Australian English, no em dashes, no rule-of-three, precise claims.
 
 import { SchedulerDO } from "../src/sched/scheduler-do.ts";
 import { CALLER_HEADER, encodeCaller, type Caller } from "../src/admin/identity.ts";

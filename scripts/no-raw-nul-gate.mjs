@@ -102,7 +102,7 @@
 // outranks a pass. An uncaught throw exiting 1 would read as "finding found", and a stack trace read as a
 // finding has already cost this workspace a pass, so every failure path here ends at 2.
 //
-// House style: Australian English, no em dashes, no rule-of-three, no AI attribution.
+// House style: Australian English, no em dashes, no rule-of-three.
 
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";

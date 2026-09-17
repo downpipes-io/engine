@@ -47,7 +47,7 @@
 // source typechecks + tests run with no build step); this step OVERWRITES it with the real digest at
 // build, like wrangler.deploy.toml. Commit it only in placeholder form.
 //
-// House style: Australian English, no em dashes, no rule-of-three, no AI attribution.
+// House style: Australian English, no em dashes, no rule-of-three.
 
 import { readFileSync, writeFileSync, mkdtempSync, rmSync, existsSync, readdirSync, realpathSync } from "node:fs";
 import { execFileSync } from "node:child_process";

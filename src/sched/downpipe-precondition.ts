@@ -30,11 +30,6 @@
 
 import type { DownpipeConfig, DownpipeState, LastConfigChange } from "./types.ts";
 
-// Re-exported so a reader who arrives at the precondition logic finds the shape it decides on beside it.
-// It is DEFINED in types.ts to keep that leaf's leaf-only import discipline intact (it names
-// DownpipeState, so the type cannot live here and be named there).
-export type { LastConfigChange } from "./types.ts";
-
 // A downpipe's CONFIG revision. It is bumped by addDownpipe and by nothing else, which is what makes it
 // usable as an operator-facing precondition: the run path rewrites dp:<id> constantly (heartbeats, run
 // completions, restore-test stamps) through persistDownpipeState, and if the revision moved on those the

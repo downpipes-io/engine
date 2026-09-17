@@ -5,13 +5,12 @@
 // DestinationCollection, DestStatusView) + the this-free validateDestPricing helper, the DO storage LIMITS
 // and KEYS (the rate-limit + recovery-rate caps/windows/prefixes, RING_CAP, DO_LIST_PAGE/MAX_PAGES, the due:
 // index prefix + the reconcile cadence + tick key, and the audit rollover/head keys + shapes), the pad16
-// index-key helper, and the AUDIT_CAP re-export (defined in audit.ts, enforced in the DO). It is a pure leaf
+// index-key helper. It is a pure leaf
 // (no `this`, no DO state) that base.ts re-exports verbatim, so every module importing these by name from
 // scheduler-do-base.ts is unchanged. The sibling scheduler-do-records.ts holds the at-rest record shapes and
 // the notify/expiry/discovery vocabulary. Move-only: every value, key, cap, bound and type is byte-identical.
 // A leaf the base depends on, never the reverse.
 
-import { AUDIT_CAP } from "../admin/audit.ts";
 import { CRON_CADENCE_MS } from "../cron/cron-cadence.ts";
 import type { WrappedSecret } from "../admin/config-secret.ts";
 import type { DestPruneState } from "../cron/retention-dest-prune.ts";
@@ -887,13 +886,6 @@ export const CRON_DEADMAN_SWEEP_INTERVAL_MS = CRON_CADENCE_MS;
 export function pad16(epochMs: number): string {
   return String(epochMs).padStart(16, "0");
 }
-
-// AUDIT_CAP is the retention cap on the tamper-evident audit chain this DO holds. It is defined canonically
-// in audit.ts (the audit domain) and re-exported HERE because the
-// DO is where the cap is ENFORCED: appendAudit rolls over the oldest entries once the retained count
-// would exceed it. Re-exporting keeps the constant available "in the DO" without a second literal to
-// drift from the audit module's value.
-export { AUDIT_CAP };
 
 // AUDIT_ROLLOVER_KEY records the retention rollover state under a single DO storage key: the earliest
 // seq still retained and how many entries have been rolled over (pruned) in total. It is written only

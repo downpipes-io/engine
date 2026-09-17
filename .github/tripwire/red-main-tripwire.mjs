@@ -60,7 +60,7 @@
 //   GITHUB_API_URL      optional, defaults to https://api.github.com
 //   TRIPWIRE_RUN_JSON   the triggering run, as ${{ toJSON(github.event.workflow_run) }}
 //
-// House style: Australian English, no em dashes, no rule-of-three, precise claims, no AI attribution.
+// House style: Australian English, no em dashes, no rule-of-three, precise claims.
 
 const LABEL = "red-main";
 const MARKER = "<!-- red-main-tripwire -->";

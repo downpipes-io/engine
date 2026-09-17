@@ -11,7 +11,7 @@
 // with the tampered entry (so it cannot silently rubber-stamp the product's hashing).
 //
 // The ONLY product symbol imported is the AuditEvent TYPE, which is erased at runtime and carries no logic.
-// House style: Australian English, no em dashes, no rule-of-three, precise claims, no AI attribution.
+// House style: Australian English, no em dashes, no rule-of-three, precise claims.
 
 import { createHash } from "node:crypto";
 import type { AuditEvent } from "../src/admin/audit.ts";

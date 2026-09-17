@@ -14,7 +14,7 @@
 //
 // NET-ZERO: in-process seal, a locally built Go binary, harness-minted keys, fuzzed fake data; ephemeral temp
 // dirs only (assertEphemeralWorkdir refuses a repo-tree or live-keys path). No estate, bucket, network, seed
-// or spend. House style: Australian English, no em dashes, no rule-of-three, no AI attribution.
+// or spend. House style: Australian English, no em dashes, no rule-of-three.
 
 import { mkdtempSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";

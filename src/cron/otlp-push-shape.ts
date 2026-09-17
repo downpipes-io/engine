@@ -27,7 +27,7 @@
 import { ENGINE_VERSION } from "../format/version.ts";
 import type { OtlpDestinationHealth, OtlpDownpipeMetrics } from "../sched/scheduler-do-base.ts";
 
-export type { OtlpDestinationHealth, OtlpDownpipeMetrics };
+export type { OtlpDownpipeMetrics };
 
 // OTLP_PUSH_DOWNPIPE_CAP bounds the per-tick snapshot to a finite number of downpipes (defence in depth,
 // mirroring SIEM_PUSH_BATCH_CAP). It is set WELL ABOVE the known large-fleet scale: the engine's own scale

@@ -48,7 +48,7 @@
 // Run: node scripts/void-waituntil-gate.mjs              (add --write-baseline to re-pin after a real fix)
 //      node scripts/void-waituntil-gate.mjs --self-test   (proves the gate has teeth, on disposable fixtures)
 //
-// House style: Australian English, no em dashes, no rule-of-three, no AI attribution.
+// House style: Australian English, no em dashes, no rule-of-three.
 
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";

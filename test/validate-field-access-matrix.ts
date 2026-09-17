@@ -34,7 +34,7 @@
 //     claim about what those bearers can and cannot reach is grounded in a running check, not
 //     prose alone.
 //
-// House style: Australian English, no em dashes, no rule-of-three, no AI attribution.
+// House style: Australian English, no em dashes, no rule-of-three.
 
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";

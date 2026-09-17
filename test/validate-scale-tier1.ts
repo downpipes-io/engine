@@ -28,7 +28,7 @@
 //
 // Run: node test/validate-scale-tier1.ts
 //
-// House style: Australian English, no em dashes, no rule-of-three, no AI attribution.
+// House style: Australian English, no em dashes, no rule-of-three.
 
 import { createHash } from "node:crypto";
 import { rmSync } from "node:fs";

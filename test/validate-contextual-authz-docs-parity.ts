@@ -22,7 +22,7 @@
 //
 // Run with `node test/validate-contextual-authz-docs-parity.ts`.
 //
-// House style: Australian English, no em dashes, no AI attribution.
+// House style: Australian English, no em dashes.
 
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";

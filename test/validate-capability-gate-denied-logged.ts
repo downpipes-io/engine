@@ -12,7 +12,7 @@
 //
 // Run: node test/validate-capability-gate-denied-logged.ts
 //
-// House style: Australian English, no em dashes, no rule-of-three, no AI attribution.
+// House style: Australian English, no em dashes, no rule-of-three.
 
 import { gate } from "../src/admin/router-core.ts";
 import type { Caller } from "../src/admin/identity.ts";

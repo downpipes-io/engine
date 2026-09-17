@@ -30,7 +30,6 @@
 // enums, explicit field declarations.
 
 import { ab, b64urlDecode, b64urlEncode, constantTimeEqual, hexEncode } from "../crypto/bytes.ts";
-import { RECOVERY_CODES_LOW_THRESHOLD } from "./recovery-constants.ts";
 
 // RECOVERY_CODE_COUNT is how many single-use codes a generation mints (the caller's spec: 10). A user
 // saves the whole set offline; each is good for exactly one sign-in.
@@ -375,8 +374,3 @@ export function remainingCount(record: RecoveryRecord | null): number {
   for (const c of record.codes) if (!c.consumed) n++;
   return n;
 }
-
-// RECOVERY_CODES_LOW_THRESHOLD now lives in recovery-constants.ts (a dependency-free module) so the pure
-// posture-checks module and scheduler-do.ts bind to the same literal. Re-exported here to keep the existing
-// public import path stable.
-export { RECOVERY_CODES_LOW_THRESHOLD };

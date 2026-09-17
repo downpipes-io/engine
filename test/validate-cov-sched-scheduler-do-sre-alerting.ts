@@ -13,7 +13,7 @@
 //     clear a stale cooldown, the same-state suppression and elapsed re-nudge, and the proven-copy maths;
 //   - markReplicationAlertsDelivered: the same two-phase clear on the replication cooldown prefix.
 //
-// Australian English, no AI attribution. Run: node test/validate-cov-sched-scheduler-do-sre-alerting.ts
+// Australian English. Run: node test/validate-cov-sched-scheduler-do-sre-alerting.ts
 
 import { makeScheduler, stubFetch, makeConfig } from "./validate-notify-shared.ts";
 import { ALERT_COOLDOWN_MS, STALE_CADENCE_MULTIPLE } from "../src/notify.ts";

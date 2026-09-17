@@ -27,7 +27,7 @@
 # THE ONE LINE THAT CHANGES PER REPO is `workflows:` below. It must name the triggering workflow by its
 # `name:`, not by its filename. Everything else in this file and in the script beside it is repo-independent.
 #
-# House style: Australian English, no em dashes, no rule-of-three, precise claims, no AI attribution.
+# House style: Australian English, no em dashes, no rule-of-three, precise claims.
 
 name: Red-main tripwire
 

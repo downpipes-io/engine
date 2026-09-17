@@ -15,7 +15,7 @@ import {
   probeSourceResources,
   probeWorkersPlan,
 } from "./preflight-probes.ts";
-import type { PreflightItem, PreflightReport, PreflightStatus } from "./preflight-types.ts";
+import type { PreflightItem, PreflightReport } from "./preflight-types.ts";
 import { doURL } from "../do-url.ts";
 
 // Preflight: AFFIRMATIVE entitlement and prerequisite verification. Onboarding must not
@@ -32,7 +32,7 @@ import { doURL } from "../do-url.ts";
 // the established order and folds their items into the report summary. The probe order
 // is load-bearing: the Durable Objects probe runs first so later items can reference it.
 
-export type { PreflightItem, PreflightReport, PreflightStatus };
+export type { PreflightReport };
 
 function nowIso(): string {
   return new Date().toISOString().replace(/(\.\d{3})\d*Z$/, "$1Z");

@@ -20,22 +20,21 @@ import { can } from "./identity-rbac.ts";
 import type { AuthMethod, Role } from "./identity-roles.ts";
 import { isRole } from "./identity-roles.ts";
 
-export type { Capability, CustomRole, CustomRoleProposal, Presentation, SurfaceMode } from "./identity-rbac.ts";
+export type { Capability, CustomRole, CustomRoleProposal } from "./identity-rbac.ts";
 export {
   ALL_CAPABILITIES,
-  CUSTOM_ROLE_NAME_PATTERN,
   can,
   capabilitiesOfCustomRole,
   customRoleReservedCapabilityDrops,
   isCapability,
-  isScreen,
   OWNER_RESERVED_CAPABILITIES,
   ROLE_CAPABILITIES,
-  SCREEN_WRITE_CAPABILITY,
   validateCustomRole,
 } from "./identity-rbac.ts";
 export type { AuthMethod, Role } from "./identity-roles.ts";
-export { canonicalEmail, isCookieBorneMethod, isRole, maxRole, ROLE_RANK, roleAtLeast } from "./identity-roles.ts";
+export { canonicalEmail, isCookieBorneMethod, isRole, maxRole, ROLE_RANK } from "./identity-roles.ts";
+/** @knipignore Cumulative-role gate primitive; currently unused (route gating keys on capabilities). */
+export { roleAtLeast } from "./identity-roles.ts";
 
 // callerCan is the SINGLE authorisation primitive the router and DO use now that a caller may be on a
 // custom role: if the caller carries an explicit resolved capability set (a custom-role caller), the

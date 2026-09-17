@@ -4,7 +4,7 @@
 // detectable signal, and a rollback must leave already-sealed runs READABLE + recoverable (or fail
 // LOUD, never mis-read). Each scenario drives the REAL DOs / seal / version state over in-memory
 // doubles (no network, no deploy) and asserts the invariant, either confirming the engine holds or
-// surfacing a concrete finding. Australian English, no AI attribution.
+// surfacing a concrete finding. Australian English.
 //
 //   DEP-01 redeploy-mid-run resume: an in-flight run with a persisted checkpoint is resumed by a FRESH
 //          RunSealDO instance over the SAME durable storage (a "redeploy": new isolate, same persisted

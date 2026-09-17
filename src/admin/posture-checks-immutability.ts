@@ -11,7 +11,7 @@
 // reaches back for it. It is re-exported from posture-checks.ts so every existing importer, and every
 // citation pinned at that module, keeps working.
 //
-// House style: Australian English, no em dashes, no rule-of-three, precise claims, no AI attribution.
+// House style: Australian English, no em dashes, no rule-of-three, precise claims.
 
 // CheckDraft and PostureInput are both defined in the leaf posture-types.ts (posture-checks.ts and
 // posture.ts each only re-export them), so importing from there, rather than from posture-checks.ts or

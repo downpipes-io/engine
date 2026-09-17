@@ -40,7 +40,7 @@ import { classifyEnvKnob, classifyFlagKnob, type KnobResolution } from "./budget
 // cycle that ran scheduler-do -> verify-at-seal -> notify -> scheduler-do (scheduler-do needed the
 // SealVerification type that lived here). Re-exported so callers importing them by name from this
 // module keep working.
-export type { SealVerification, SealVerificationTier } from "../sched/types.ts";
+export type { SealVerification } from "../sched/types.ts";
 
 import type { SealVerification, SealVerificationTier } from "../sched/types.ts";
 
