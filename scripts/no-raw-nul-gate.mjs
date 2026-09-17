@@ -163,8 +163,7 @@ export function trackedSourceFiles(root = ROOT) {
   // The -z separator is itself a NUL, which is both the reason this gate exists and the reason the listing
   // must be split on bytes rather than on lines: a path may legitimately contain a newline, and git says
   // so by offering -z at all.
-  return out
-    .toString("utf8")
+  return new TextDecoder().decode(out)
     .split("\u0000")
     .filter(Boolean)
     .filter((rel) => !rel.includes("node_modules/") && !rel.includes("vendor/") && inScope(root, rel));

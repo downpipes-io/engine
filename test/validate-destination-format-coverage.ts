@@ -602,7 +602,7 @@ async function main(): Promise<void> {
         };
         // The same loopback seam the census uses: the drop emulator is on 127.0.0.1.
         await deliverResolvedPush(cfg, EVENTS, META, { allowInternalSink: true });
-        bodies.set(format, s3.objects[0]!.body.toString("utf8"));
+        bodies.set(format, new TextDecoder().decode(s3.objects[0]!.body));
         keys.set(format, s3.objects[0]!.key);
       } finally {
         await s3.close();

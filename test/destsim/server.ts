@@ -293,7 +293,7 @@ function parseByEmulatorFormat(format: EmulatorFormat, body: Buffer, contentType
 
 function safeJsonParse(body: Buffer): unknown {
   try {
-    return JSON.parse(body.toString("utf8"));
+    return JSON.parse(new TextDecoder().decode(body));
   } catch {
     return undefined;
   }

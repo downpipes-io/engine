@@ -61,7 +61,7 @@ function fail(message: string): never {
 }
 
 function toText(raw: string | Buffer): string {
-  return typeof raw === "string" ? raw : raw.toString("utf8");
+  return typeof raw === "string" ? raw : new TextDecoder().decode(raw);
 }
 
 function toBuffer(raw: string | Buffer): Buffer {
@@ -602,14 +602,14 @@ export function parseSyslogFrames(raw: string | Buffer, opts?: { format?: "cef" 
     }
     if (j >= bytes.length) fail(`syslog framing: no space found after the length prefix starting at offset ${i} (framing desynchronised or truncated)`);
     if (j === i) fail(`syslog framing: empty length prefix at offset ${i}`);
-    const lenStr = bytes.subarray(i, j).toString("ascii");
+    const lenStr = new TextDecoder().decode(bytes.subarray(i, j));
     const len = Number(lenStr);
     if (!Number.isInteger(len) || len < 0) fail(`syslog framing: invalid length prefix "${lenStr}" at offset ${i}`);
     const start = j + 1;
     const end = start + len;
     if (end > bytes.length) fail(`syslog framing: declared length ${len} at offset ${i} overruns the remaining buffer (have ${bytes.length - start} bytes left)`);
     const recordBytes = bytes.subarray(start, end);
-    const record = recordBytes.toString("utf8");
+    const record = new TextDecoder().decode(recordBytes);
     const actualByteLen = Buffer.byteLength(record, "utf8");
     if (actualByteLen !== len) fail(`syslog framing: declared length ${len} at offset ${i} does not match the record's actual UTF-8 byte length ${actualByteLen}`);
     frames.push(parseOneSyslogRecord(record, len, idx, opts));
