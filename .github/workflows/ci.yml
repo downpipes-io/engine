@@ -94,7 +94,7 @@ jobs:
         with: { egress-policy: audit }
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with: { persist-credentials: false }
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v4
         with: { node-version: "${{ env.NODE_VERSION }}" }
       - run: npm ci
       - name: tsc --noEmit
@@ -155,7 +155,7 @@ jobs:
           # downpipe is now public (flipped); this checkout is anonymous and pinned to the current public release tag (v0.3.1 is the first tag on the recreated public repository; v0.3.0 exists only in the private archive) rather than dropped, so the cross-implementation validators against the Go reference still run in the public export
           ref: v0.3.1
           persist-credentials: false
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v4
         with: { node-version: "${{ env.NODE_VERSION }}" }
       - run: npm ci
         working-directory: engine
@@ -344,7 +344,7 @@ jobs:
           # downpipe is now public (flipped); this checkout is anonymous and pinned to the current public release tag (v0.3.1 is the first tag on the recreated public repository; v0.3.0 exists only in the private archive) rather than dropped, so the cross-implementation validators against the Go reference still run in the public export
           ref: v0.3.1
           persist-credentials: false
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v4
         with: { node-version: "${{ env.NODE_VERSION }}" }
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with: { go-version-file: downpipe/go.mod, cache: false }
@@ -372,7 +372,7 @@ jobs:
         with: { egress-policy: audit }
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with: { persist-credentials: false }
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v4
         with: { node-version: "${{ env.NODE_VERSION }}" }
       - run: npm ci
       - name: wrangler bundle (dry-run, no upload)
@@ -410,7 +410,7 @@ jobs:
         with: { egress-policy: audit }
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with: { persist-credentials: false }
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v4
         with: { node-version: "${{ env.NODE_VERSION }}" }
       - run: npm ci
       - name: Two consecutive stamps against one checkout must be byte-identical (npm run validate:stamp-idempotency)
@@ -426,7 +426,7 @@ jobs:
         with: { egress-policy: audit }
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with: { persist-credentials: false }
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v4
         with: { node-version: "${{ env.NODE_VERSION }}" }
       - run: npm ci
       # The simplest possible statement of the production rule, kept as its own step. The gate below is a
@@ -594,7 +594,7 @@ jobs:
         with: { egress-policy: audit }
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with: { persist-credentials: false }
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v4
         with: { node-version: "${{ env.NODE_VERSION }}" }
       - run: npm ci
       - name: biome lint (0 errors / 0 warnings / 0 infos required)
@@ -695,7 +695,7 @@ jobs:
         with: { egress-policy: audit }
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with: { persist-credentials: false }
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v4
         with: { node-version: "${{ env.NODE_VERSION }}" }
       - run: npm ci
       - name: SchedulerDO concurrency invariants in real workerd
@@ -716,7 +716,7 @@ jobs:
         with: { egress-policy: audit }
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with: { persist-credentials: false }
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v4
         with: { node-version: "${{ env.NODE_VERSION }}" }
       - run: npm ci
       - name: crypto/format property vectors
@@ -752,7 +752,7 @@ jobs:
           # downpipe is now public (flipped); this checkout is anonymous and pinned to the current public release tag (v0.3.1 is the first tag on the recreated public repository; v0.3.0 exists only in the private archive) rather than dropped, so the cross-implementation validators against the Go reference still run in the public export
           ref: v0.3.1
           persist-credentials: false
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v4
         with: { node-version: "${{ env.NODE_VERSION }}" }
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with: { go-version: "1.26.5" }
@@ -777,7 +777,7 @@ jobs:
         with: { egress-policy: audit }
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with: { persist-credentials: false }
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v4
         with: { node-version: "${{ env.NODE_VERSION }}" }
       - run: npm ci
       - name: Type-check the test surface (tsconfig.test.json includes test/, src-only typecheck does not)
@@ -839,7 +839,7 @@ jobs:
         with: { egress-policy: audit }
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with: { persist-credentials: false }
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v4
         with: { node-version: "${{ env.NODE_VERSION }}" }
       - run: npm ci
       - name: TSDoc on public exports in src/crypto, src/format, src/dest
@@ -865,7 +865,7 @@ jobs:
         # neither of those commits locally -- and persist-credentials:false means a later
         # `git fetch` step has no stored token to fetch it with, so the history must already be here.
         with: { path: engine, persist-credentials: false, fetch-depth: 0 }
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v4
         with: { node-version: "${{ env.NODE_VERSION }}" }
       - run: npm ci
         working-directory: engine

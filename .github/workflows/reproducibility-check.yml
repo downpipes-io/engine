@@ -56,7 +56,7 @@ jobs:
         with: { egress-policy: audit }
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with: { persist-credentials: false }
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v4
         with: { node-version: "${{ env.NODE_VERSION }}" }
       - name: Build A (workspace path)
         run: |
