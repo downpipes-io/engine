@@ -152,11 +152,11 @@ function parseAttributes(st: ParseState, requireLeadingWs: boolean): { ok: true;
     const name = readName(st);
     if (name === null) return { ok: false, reason: "malformed attribute name" };
     skipWhitespace(st);
-    if (st.text.charCodeAt(st.pos) !== 0x3d) return { ok: false, reason: `expected '=' after attribute name '${name}'` };
+    if (st.text.charCodeAt(st.pos) !== 0x3d /* = */) return { ok: false, reason: `expected '=' after attribute name '${name}'` };
     st.pos++; // consume '='
     skipWhitespace(st);
     const q = st.text.charCodeAt(st.pos);
-    if (q !== 0x22 && q !== 0x27) {
+    if (q !== 0x22 /* " */ && q !== 0x27 /* ' */) {
       return { ok: false, reason: `attribute value for '${name}' must be quoted (unquoted values are rejected)` };
     }
     st.pos++; // consume the opening quote
@@ -167,7 +167,7 @@ function parseAttributes(st: ParseState, requireLeadingWs: boolean): { ok: true;
       if (st.pos >= st.text.length) return { ok: false, reason: `unterminated attribute value for '${name}'` };
       const vc = st.text.charCodeAt(st.pos);
       if (vc === q) break;
-      if (vc === 0x3c) return { ok: false, reason: `'<' is not allowed in an attribute value ('${name}')` };
+      if (vc === 0x3c /* < */) return { ok: false, reason: `'<' is not allowed in an attribute value ('${name}')` };
       // A literal control byte typed straight into the value (no entity encoding at all, so validateEntityRefs
       // below never sees it) is equally a WFC: Legal Character violation - reject it here.
       if (isDisallowedControlCodePoint(vc)) return { ok: false, reason: `attribute '${name}': disallowed control character in value` };
@@ -247,7 +247,7 @@ function parseElement(
   depth: number,
 ): { ok: true; el: XmlElement } | { ok: false; reason: string } {
   if (depth > st.maxDepth) return { ok: false, reason: "maximum element nesting depth exceeded" };
-  if (st.text.charCodeAt(st.pos) !== 0x3c) return { ok: false, reason: "expected '<' to start an element" };
+  if (st.text.charCodeAt(st.pos) !== 0x3c /* < */) return { ok: false, reason: "expected '<' to start an element" };
   st.pos++; // consume '<'
 
   const name = readName(st);
@@ -269,13 +269,13 @@ function parseElement(
 
   // After attributes we are at ">" or "/>".
   const c = st.text.charCodeAt(st.pos);
-  if (c === 0x2f) {
+  if (c === 0x2f /* / */) {
     // Self-closing "/>": no children.
-    if (st.text.charCodeAt(st.pos + 1) !== 0x3e) return { ok: false, reason: `expected '/>' to self-close element '${name}'` };
+    if (st.text.charCodeAt(st.pos + 1) !== 0x3e /* > */) return { ok: false, reason: `expected '/>' to self-close element '${name}'` };
     st.pos += 2;
     return { ok: true, el: { type: "element", name, attrs, children: [] } };
   }
-  if (c !== 0x3e) return { ok: false, reason: `expected '>' or '/>' after the attributes of '${name}'` };
+  if (c !== 0x3e /* > */) return { ok: false, reason: `expected '>' or '/>' after the attributes of '${name}'` };
   st.pos++; // consume '>'
 
   // Parse children until the matching close tag.
@@ -306,13 +306,13 @@ function parseElement(
   for (;;) {
     if (st.pos >= st.text.length) return { ok: false, reason: `unexpected end of input inside element '${name}' (unclosed tag)` };
     const ch = st.text.charCodeAt(st.pos);
-    if (ch === 0x3c) {
+    if (ch === 0x3c /* < */) {
       // Some markup. Distinguish: close tag "</", comment "<!--", CDATA "<![CDATA[", a "<!" that is anything
       // else (rejected - DOCTYPE was already gated, so any other "<!" here is malformed), a PI "<?" (rejected -
       // only the leading XML declaration is allowed, and that cannot appear inside an element), or a child
       // element "<name".
       const n1 = st.text.charCodeAt(st.pos + 1);
-      if (n1 === 0x2f) {
+      if (n1 === 0x2f /* / */) {
         // Close tag: flush pending text, then match the name and consume "</name S? >".
         const ft = flushText();
         if (!ft.ok) return ft;
@@ -321,11 +321,11 @@ function parseElement(
         if (closeName === null) return { ok: false, reason: "malformed close tag" };
         if (closeName !== name) return { ok: false, reason: `mismatched tags: <${name}> closed by </${closeName}>` };
         skipWhitespace(st);
-        if (st.text.charCodeAt(st.pos) !== 0x3e) return { ok: false, reason: `expected '>' to end close tag </${name}>` };
+        if (st.text.charCodeAt(st.pos) !== 0x3e /* > */) return { ok: false, reason: `expected '>' to end close tag </${name}>` };
         st.pos++; // consume '>'
         return { ok: true, el: { type: "element", name, attrs, children } };
       }
-      if (n1 === 0x21) {
+      if (n1 === 0x21 /* ! */) {
         // "<!..." : comment "<!--", CDATA "<![CDATA[", or something malformed (DOCTYPE already gated globally).
         if (st.text.startsWith("<!--", st.pos)) {
           const ft = flushText();
@@ -362,7 +362,7 @@ function parseElement(
         }
         return { ok: false, reason: "unsupported '<!' construct (only comments and CDATA are allowed; DOCTYPE/DTD are banned)" };
       }
-      if (n1 === 0x3f) {
+      if (n1 === 0x3f /* ? */) {
         return { ok: false, reason: "processing instructions are not allowed (only the leading XML declaration)" };
       }
       // Otherwise it is a child element. Flush pending text, recurse.
@@ -492,7 +492,7 @@ export function parseXml(input: string | Uint8Array, limits?: ParseLimits): Pars
 
   // The document element MUST be present now.
   if (st.pos >= st.text.length) return fail("no document element");
-  if (st.text.charCodeAt(st.pos) !== 0x3c) return fail("expected the document element, found character data at the top level");
+  if (st.text.charCodeAt(st.pos) !== 0x3c /* < */) return fail("expected the document element, found character data at the top level");
   // Guard the specific top-level markup kinds that are not a start tag.
   if (st.text.startsWith("</", st.pos)) return fail("unexpected close tag at the top level");
   if (st.text.startsWith("<!", st.pos)) return fail("unexpected '<!' at the top level (DOCTYPE/DTD are banned; comments are handled separately)");
@@ -512,7 +512,7 @@ export function parseXml(input: string | Uint8Array, limits?: ParseLimits): Pars
   if (!m2.ok) return fail(m2.reason);
   if (st.pos < st.text.length) {
     // Something other than whitespace/comment remains. If it is another "<" element, name the vector.
-    if (st.text.charCodeAt(st.pos) === 0x3c) {
+    if (st.text.charCodeAt(st.pos) === 0x3c /* < */) {
       // The reason below explicitly says "XML-Signature-Wrapping vector", but the coarse classifier's
       // anchored `^samlresponse ` prefix rule (which fires on the WRAPPING reason this is folded into
       // upstream) files it under `malformed`. So the sharpest attack signal the parser can raise is

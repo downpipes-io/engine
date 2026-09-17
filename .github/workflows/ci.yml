@@ -78,7 +78,10 @@ env:
   # engine checkout's origin/main to its pin, for a stated and sound reason, and that makes every
   # HEAD..origin/main guard inside that checkout compute 0 whatever the pin is. A guard that cannot tell those
   # two zeroes apart is decoration, so every line these gates print carries the sha beside the number.
-  DOWNPIPES_REQUIRE_SIBLING_FRESHNESS: "1"
+  # The only sibling this public workflow checks out is the downpipe reader, pinned to a release tag on
+  # purpose, so its lag against its own main is unknown by construction and the requirement below can
+  # never be met here. It stays on in the private workflow, which checks out default branches.
+  DOWNPIPES_REQUIRE_SIBLING_FRESHNESS: "0"
 
 jobs:
   typecheck:
@@ -149,8 +152,8 @@ jobs:
         with:
           repository: downpipes-io/downpipe
           path: downpipe
-          # downpipe is now public (flipped); this checkout is anonymous and pinned to the current release tag rather than dropped, so the cross-implementation validators against the Go reference still run in the public export
-          ref: v0.3.0
+          # downpipe is now public (flipped); this checkout is anonymous and pinned to the current public release tag (v0.3.1 is the first tag on the recreated public repository; v0.3.0 exists only in the private archive) rather than dropped, so the cross-implementation validators against the Go reference still run in the public export
+          ref: v0.3.1
           persist-credentials: false
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
         with: { node-version: "${{ env.NODE_VERSION }}" }
@@ -166,6 +169,9 @@ jobs:
         working-directory: engine
         env:
           REQUIRE_DOWNPIPE: "1"
+          # The downpipe checkout above is pinned to a release tag on purpose, so it is behind its own
+          # main whenever the reader has moved on; the doc validators grade against the pinned tag.
+          DOWNPIPES_ALLOW_STALE_SIBLINGS: "downpipe"
       - name: cf-config safety guards are load-bearing (curated mutation test)
         # Each guard carrying a safety claim is REMOVED in turn and the gate that should notice is run.
         # A guard whose removal changes nothing is a gap in the evidence, and three such gaps were found
@@ -335,8 +341,8 @@ jobs:
         with:
           repository: downpipes-io/downpipe
           path: downpipe
-          # downpipe is now public (flipped); this checkout is anonymous and pinned to the current release tag rather than dropped, so the cross-implementation validators against the Go reference still run in the public export
-          ref: v0.3.0
+          # downpipe is now public (flipped); this checkout is anonymous and pinned to the current public release tag (v0.3.1 is the first tag on the recreated public repository; v0.3.0 exists only in the private archive) rather than dropped, so the cross-implementation validators against the Go reference still run in the public export
+          ref: v0.3.1
           persist-credentials: false
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
         with: { node-version: "${{ env.NODE_VERSION }}" }
@@ -352,6 +358,9 @@ jobs:
         working-directory: engine
         env:
           REQUIRE_DOWNPIPE: "1"
+          # The downpipe checkout above is pinned to a release tag on purpose, so it is behind its own
+          # main whenever the reader has moved on; the doc validators grade against the pinned tag.
+          DOWNPIPES_ALLOW_STALE_SIBLINGS: "downpipe"
 
   build:
     name: Bundle
@@ -740,8 +749,8 @@ jobs:
         with:
           repository: downpipes-io/downpipe
           path: downpipe
-          # downpipe is now public (flipped); this checkout is anonymous and pinned to the current release tag rather than dropped, so the cross-implementation validators against the Go reference still run in the public export
-          ref: v0.3.0
+          # downpipe is now public (flipped); this checkout is anonymous and pinned to the current public release tag (v0.3.1 is the first tag on the recreated public repository; v0.3.0 exists only in the private archive) rather than dropped, so the cross-implementation validators against the Go reference still run in the public export
+          ref: v0.3.1
           persist-credentials: false
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
         with: { node-version: "${{ env.NODE_VERSION }}" }

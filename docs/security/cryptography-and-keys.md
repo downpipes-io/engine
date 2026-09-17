@@ -431,7 +431,7 @@ selects behaviour by the version it reads.
 > document previously quoted all six of the labels above as `downpipe/1.0 <purpose>`, which no
 > implementation has ever used: both the engine (`engine/src/format/version.ts:50-66`) and the
 > Go reference (`downpipe/internal/spec/spec.go:46-70`) have read `downpipe/0.1.0 <purpose>`
-> since the semver cutover of. The`downpipe/1.0` spelling is the PRE-cutover
+> since the semver cutover of. The `downpipe/1.0` spelling is the PRE-cutover
 > identity, and it is still live in one place: the engine artefact the update channel currently
 > recommends. Anyone working from a released artefact rather than from this document should read
 > the version out of the archive's own manifest and use that exact string.

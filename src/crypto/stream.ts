@@ -9,9 +9,9 @@ import { aesGcmOpen, aesGcmSeal } from "./primitives.ts";
 // a 12-byte nonce of three reserved zero bytes, an 8-byte big-endian chunk counter (uint64
 // from 0), and a 1-byte last-chunk flag.
 
-// STREAM_MAX_CHUNK_INDEX is the highest chunk index whose nonce the 8-byte counter field can hold: past it
-// the encoding wraps and re-uses an earlier chunk's nonce under the same key. It is the exact ceiling the Go
-// reference pins (internal/crypto/stream.go:28, streamMaxChunkIndex = math.MaxUint64).
+/** The highest chunk index whose nonce the 8-byte counter field can hold: past it the encoding wraps and
+ * re-uses an earlier chunk's nonce under the same key. It is the exact ceiling the Go reference pins
+ * (internal/crypto/stream.go:28, streamMaxChunkIndex = math.MaxUint64). */
 export const STREAM_MAX_CHUNK_INDEX = 0xffff_ffff_ffff_ffffn;
 
 /**
