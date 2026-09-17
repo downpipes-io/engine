@@ -8,9 +8,8 @@ reference's conformance vectors.
 ## Contributor Licence Agreement
 
 Pull requests are accepted only from contributors who have signed the
-[Contributor Licence Agreement](CLA.md). The CLA Assistant bot checks this automatically on your
-first pull request and posts a comment with a sign-off link if you have not signed yet; signing
-takes one comment and you only do it once.
+[Contributor Licence Agreement](CLA.md). State that you accept it in the description of your first
+pull request; the maintainer records the acceptance and you only do it once.
 
 ## Non-negotiables
 
