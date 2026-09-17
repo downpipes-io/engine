@@ -149,8 +149,8 @@ jobs:
         with:
           repository: downpipes-io/downpipe
           path: downpipe
-          # downpipe is now public (flipped); this checkout is anonymous and pinned to the current release tag rather than dropped, so the cross-implementation validators against the Go reference still run in the public export
-          ref: v0.3.0
+          # downpipe is now public (flipped); this checkout is anonymous and pinned to the current public release tag (v0.3.1 is the first tag on the recreated public repository; v0.3.0 exists only in the private archive) rather than dropped, so the cross-implementation validators against the Go reference still run in the public export
+          ref: v0.3.1
           persist-credentials: false
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
         with: { node-version: "${{ env.NODE_VERSION }}" }
@@ -335,8 +335,8 @@ jobs:
         with:
           repository: downpipes-io/downpipe
           path: downpipe
-          # downpipe is now public (flipped); this checkout is anonymous and pinned to the current release tag rather than dropped, so the cross-implementation validators against the Go reference still run in the public export
-          ref: v0.3.0
+          # downpipe is now public (flipped); this checkout is anonymous and pinned to the current public release tag (v0.3.1 is the first tag on the recreated public repository; v0.3.0 exists only in the private archive) rather than dropped, so the cross-implementation validators against the Go reference still run in the public export
+          ref: v0.3.1
           persist-credentials: false
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
         with: { node-version: "${{ env.NODE_VERSION }}" }
@@ -740,8 +740,8 @@ jobs:
         with:
           repository: downpipes-io/downpipe
           path: downpipe
-          # downpipe is now public (flipped); this checkout is anonymous and pinned to the current release tag rather than dropped, so the cross-implementation validators against the Go reference still run in the public export
-          ref: v0.3.0
+          # downpipe is now public (flipped); this checkout is anonymous and pinned to the current public release tag (v0.3.1 is the first tag on the recreated public repository; v0.3.0 exists only in the private archive) rather than dropped, so the cross-implementation validators against the Go reference still run in the public export
+          ref: v0.3.1
           persist-credentials: false
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
         with: { node-version: "${{ env.NODE_VERSION }}" }
