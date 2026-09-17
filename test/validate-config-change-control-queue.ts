@@ -136,7 +136,7 @@ export async function runQueue(ctx: Ctx, shared: Shared): Promise<void> {
     const proposeEvt = (await readLog("action=config-change-propose")).events.find((e) => (e.target as { id?: string }).id === shared.queuedDownpipeId);
     const approveEvt = (await readLog("action=config-change-approve")).events.find((e) => (e.target as { id?: string }).id === shared.queuedDownpipeId);
     ok("a config-change-propose event attributes the maker", proposeEvt?.actorEmail === OPERATOR);
-    ok("a config-change-approve event attributes the checker (actor + approverEmail)", approveEvt?.actorEmail === OPERATOR2 && (approveEvt?.target as { approverEmail?: string }).approverEmail === OPERATOR2);
+    ok("a config-change-approve event attributes the checker (actor + approverEmail)", approveEvt?.actorEmail === OPERATOR2 && (approveEvt!.target as { approverEmail?: string }).approverEmail === OPERATOR2);
     ok("maker and checker are distinct across the propose/approve events", proposeEvt?.actorEmail !== approveEvt?.actorEmail);
     // (The downpipe-create native audit event is emitted by the ROUTER on the inline path, not by the DO
     // addDownpipe the replay calls, so the queued downpipe write's attribution to the maker is carried by

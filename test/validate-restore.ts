@@ -1092,7 +1092,7 @@ async function proofBlindRestoreTestStreaming(fx: Fixture): Promise<void> {
       bufferedCalls++;
       return origBuffered.call(this, rec);
     };
-    let result;
+    let result: Awaited<ReturnType<typeof runBlindRestoreTest>>;
     try {
       result = await runBlindRestoreTest(bvtEnv, { runId: RUN_BVT });
     } finally {

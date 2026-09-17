@@ -151,6 +151,7 @@ async function main(): Promise<void> {
   ok("sign/verify: the WRONG signer fails verification", !(await verifySealedControlPlaneSignature(sealedBg, sig, verifierFrom(otherSigner))));
   const tamperedHeader = { ...sealedBg, configVersion: sealedBg.configVersion + 1 };
   ok("sign/verify: a tampered header fails verification (signature covers the whole object)", !(await verifySealedControlPlaneSignature(tamperedHeader, sig, verifier)));
+  // biome-ignore lint/suspicious/noSelfCompare: deliberate stability probe, two independent serialisation calls expected to be byte-identical
   ok("sign/verify: the canonical bytes are stable (re-serialise equals)", b64urlEncode(serialiseSealedControlPlaneExport(sealedBg)) === b64urlEncode(serialiseSealedControlPlaneExport(sealedBg)));
 
   console.log("control-plane-seal: no-custody guard + shape gate");

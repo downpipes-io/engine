@@ -292,7 +292,7 @@ async function main(): Promise<void> {
     // The roster.
     const dp = (bundle.downpipes as Array<Record<string, unknown>>)[0];
     const disc = dp?.cfConfigDiscovery as Record<string, unknown>;
-    ok("the cf-config unavailability CLASS rides (a 403 scope gap, not a Cloudflare blip)", (disc?.unavailableByClass as Record<string, number>)?.["403"] === 12 && (disc?.truncated as string[])[0] === "dns");
+    ok("the cf-config unavailability CLASS rides (a 403 scope gap, not a Cloudflare blip)", (disc?.unavailableByClass as Record<string, number>)?.["403"] === 12 && (disc!.truncated as string[])[0] === "dns");
     ok("secretsRestorability rides: 3 bound secrets, none restorable in-account", (bundle.secretsRestorability as { bound: number; unwired: number })?.bound === 3 && (bundle.secretsRestorability as { unwired: number }).unwired === 3);
   }
 

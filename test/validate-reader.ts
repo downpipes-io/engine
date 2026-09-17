@@ -42,7 +42,7 @@ import { readFile, readdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
-import { openRun, attestKeyless, type ObjectStore, type KeylessAttestation } from "../src/format/reader.ts";
+import { openRun, attestKeyless, type ObjectStore, type KeylessAttestation, type Run } from "../src/format/reader.ts";
 import { parseIdentity, parseVerifier } from "../src/crypto/keys.ts";
 import { identityFingerprint, recipientFingerprint, recipientSetHash } from "../src/crypto/capsule.ts";
 import type { HybridRecipientPrivate, HybridRecipientPublic } from "../src/crypto/kem.ts";
@@ -275,7 +275,7 @@ async function assertPositive(label: string, dir: string, expect: VectorExpect):
   const runId = expect.runId ?? DEFAULT_RUN_ID;
   const opts = buildOpts(expect.options ?? null);
 
-  let run;
+  let run: Run;
   try {
     run = await openRun(store, runId, identity, verifier, opts);
   } catch (e) {
@@ -342,7 +342,7 @@ async function assertNegativeRejected(label: string, dir: string, expect: Vector
   }
 
   // phase === restore: the run must open, then the first failing record's restore throws.
-  let run;
+  let run: Run;
   try {
     run = await openRun(store, runId, identity, verifier, opts);
   } catch (e) {

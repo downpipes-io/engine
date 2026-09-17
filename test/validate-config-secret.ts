@@ -101,6 +101,7 @@ flipped[0] = flipped[0]! ^ 0xff;
 await throwsAsync("a tampered ciphertext is rejected (GCM tag)", async () => unwrapConfigSecret(KEY, { ...env, ct: b64urlEncode(flipped) }));
 const KEY2 = crypto.getRandomValues(new Uint8Array(32));
 await throwsAsync("the wrong key is rejected", async () => unwrapConfigSecret(KEY2, env));
+// biome-ignore lint/suspicious/noSelfCompare: deliberate distinctness probe, two independent calls each with a fresh random nonce
 ok("two wraps of the same secret differ (random nonce)", (await wrapConfigSecret(KEY, SECRET)).iv !== (await wrapConfigSecret(KEY, SECRET)).iv);
 
 console.log("config-secret: end-to-end through fetchDestConfig (the run path's read)");

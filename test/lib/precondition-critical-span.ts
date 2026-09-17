@@ -75,7 +75,6 @@ export function scanSpan(strippedSrc: string, method: string, from: string, to: 
     offset = strippedSrc.indexOf(stripNonCode(after));
     if (offset < 0) return { found: false, findings: [] };
   }
-  strippedSrc = strippedSrc;
   // THE MARKERS ARE STRIPPED THE SAME WAY THE SOURCE IS. Both markers here contain a template literal
   // (`dp:${id}`), and the stripper removes literal bodies, so a raw marker cannot match stripped source and
   // the span would silently not be FOUND. That failure mode is the reason `found` is reported separately and

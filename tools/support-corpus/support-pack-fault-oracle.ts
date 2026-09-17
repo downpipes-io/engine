@@ -92,7 +92,9 @@ function normalise(v: unknown): unknown {
 function leaves(v: unknown, path: string, out: Map<string, string>): void {
   if (Array.isArray(v)) {
     out.set(`${path}.length`, String(v.length));
-    v.forEach((e, i) => leaves(e, `${path}[${i}]`, out));
+    v.forEach((e, i) => {
+      leaves(e, `${path}[${i}]`, out);
+    });
     return;
   }
   if (typeof v === "object" && v !== null) {

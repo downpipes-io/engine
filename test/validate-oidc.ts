@@ -138,6 +138,7 @@ console.log("OIDC flow engine\n");
   ok("mintPkce method is S256", p.method === "S256");
   const expectChallenge = b64url(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(p.verifier))));
   ok("mintPkce challenge == base64url(SHA-256(verifier))", p.challenge === expectChallenge);
+  // biome-ignore lint/suspicious/noSelfCompare: deliberate distinctness probe, two independent calls each minting a fresh random token
   ok("mintOpaque returns distinct >=128-bit tokens", mintOpaque() !== mintOpaque() && mintOpaque().length >= 22);
 }
 

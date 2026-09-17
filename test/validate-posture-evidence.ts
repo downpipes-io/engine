@@ -1326,7 +1326,7 @@ await (async () => {
   const projected = (await fetchAuthSignals(sched.stub, midday)) as Record<string, Record<string, unknown>>;
   const row = projected["session-revoked-email-epoch"];
   ok("the signal reaches the pack with its count", row?.count === 3);
-  ok("...and its 14-slot day ring", Array.isArray(row?.days) && (row?.days as number[]).length === AUTH_SIGNAL_DAY_SLOTS);
+  ok("...and its 14-slot day ring", Array.isArray(row?.days) && (row!.days as number[]).length === AUTH_SIGNAL_DAY_SLOTS);
   ok("...and today / last7dToDate, derived so a reader need not sum the ring", row?.today === 3 && row?.last7dToDate === 3);
   ok("...and firstAt ('since when?')", typeof row?.firstAt === "string");
   ok("no identity, IP or e-mail is representable in the row", scanForSentinels(row).length === 0);
@@ -1348,7 +1348,7 @@ await (async () => {
   });
   const nightRow = ((await fetchAuthSignals(s2.stub, build0030)) as Record<string, Record<string, unknown>>)["session-revoked-email-epoch"];
 
-  ok("the 90-minute-old burst really is in the ring, one slot back", (nightRow?.days as number[])[1] === 300 && (nightRow?.days as number[])[0] === 0);
+  ok("the 90-minute-old burst really is in the ring, one slot back", (nightRow!.days as number[])[1] === 300 && (nightRow!.days as number[])[0] === 0);
   ok("`today` says what it means: 0 SO FAR in the current UTC day (it no longer claims a rolling 24 hours)", nightRow?.today === 0);
   ok("`hoursIntoDay` tells the reader HOW SHORT that window is (30 minutes in, so 0 whole hours)", nightRow?.hoursIntoDay === 0);
   ok("the rolling day is now given as BOUNDS the ring can actually support: at least 0, at most 300", nightRow?.last24hLower === 0 && nightRow?.last24hUpper === 300);
@@ -1373,7 +1373,7 @@ await (async () => {
 
   ok("a LIVE burst reads today=3 (it happened in this UTC day)", live?.today === 3 && live?.last7dToDate === 3);
   ok("the SAME burst, read 30 days later, reads today=0 and last7dToDate=0 -- it is OVER", dead?.today === 0 && dead?.last7dToDate === 0 && dead?.last24hUpper === 0);
-  ok("...and its whole ring has aged to zero, rather than lying", (dead?.days as number[]).every((n) => n === 0));
+  ok("...and its whole ring has aged to zero, rather than lying", (dead!.days as number[]).every((n) => n === 0));
   ok("...while count and lastAt PRESERVE the history (10,000 of these, last seen a month ago)", dead?.count === 3 && dead?.lastAt === live?.lastAt);
   ok("DISCRIMINATION: the live burst and the dead burst are no longer the same row", JSON.stringify(live) !== JSON.stringify(dead));
 
@@ -1413,7 +1413,7 @@ await (async () => {
   const burstRow = ((await fetchAuthSignals(burstDo.stub)) as Record<string, Record<string, unknown>>)["session-verify-failed"];
   const tabRow = ((await fetchAuthSignals(tabDo.stub)) as Record<string, Record<string, unknown>>)["session-verify-failed"];
   ok("the lockout is COUNTED, not sampled: 600 rejected verifies inside one minute read as 600", burstRow?.count === 600 && burstRow?.today === 600);
-  ok("...and the ring carries them in today's slot", (burstRow?.days as number[])[0] === 600 && burstRow?.last24hLower === 600);
+  ok("...and the ring carries them in today's slot", (burstRow!.days as number[])[0] === 600 && burstRow?.last24hLower === 600);
   ok("one stale tab still reads exactly one", tabRow?.count === 1 && tabRow?.today === 1);
   ok("DISCRIMINATION: the burst and the stale tab are no longer the SAME ROW (they were byte-identical, stamps included)", burstRow?.today !== tabRow?.today);
   ok("...and the burst no longer reads SMALLER than a harmless trickle", (burstRow?.today as number) > 10);
@@ -1445,7 +1445,7 @@ await (async () => {
   await verifyBad(trickleDo, 10); // ten idle tabs, one rejected verify each
   const trickleRow = ((await fetchAuthSignals(trickleDo.stub)) as Record<string, Record<string, unknown>>)["session-verify-failed"];
   ok("the lockout SURVIVES an isolate eviction: the deferred tail is bounded, not unbounded", (restartedRow?.count as number) >= 575);
-  ok("...and today carries it, from a NEW isolate that never saw the burst", (restartedRow?.today as number) >= 575 && ((restartedRow?.days as number[])[0] as number) >= 575);
+  ok("...and today carries it, from a NEW isolate that never saw the burst", (restartedRow?.today as number) >= 575 && ((restartedRow!.days as number[])[0] as number) >= 575);
   ok("DISCRIMINATION across a restart: the evicted burst is not the one-stale-tab row", restartedRow?.today !== tabRow?.today);
   ok("...and it no longer reads TEN TIMES SMALLER than ten harmless idle tabs", (restartedRow?.today as number) > (trickleRow?.today as number));
   ok("the restarted row still carries no identity, token or e-mail", scanForSentinels(restartedRow).length === 0);

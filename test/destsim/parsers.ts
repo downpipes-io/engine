@@ -435,6 +435,7 @@ export function parseCef(raw: string | Buffer, opts?: { contentType?: string }):
 // ============================================================================================================
 
 const LEEF_ATTR_ORDER = ["devTime", "cat", "sev", "usrName", "src", "action", "outcome", "authSubject", "authMethod", "targetKind", "targetId", "targetName", "seq", "prevHash", "eventHash"];
+// biome-ignore lint/suspicious/noControlCharactersInRegex: intentional protocol bytes (LEEF unsafe-attribute-value control range 0x00-0x1f)
 const LEEF_UNSAFE_RE = /[\x00-\x1f=^|]/;
 
 export interface ParsedLeefEvent extends ParsedWireEvent {

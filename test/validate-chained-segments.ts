@@ -29,7 +29,7 @@ import {
 import { sealRecordToDest } from "../src/seal/record.ts";
 import { MerkleFrontier } from "../src/format/frontier.ts";
 import { loadSigner, verifierFrom } from "../src/keys-env.ts";
-import { openRun, type ObjectStore } from "../src/format/reader.ts";
+import { openRun, type ObjectStore, type Run } from "../src/format/reader.ts";
 import { parseIdentity } from "../src/crypto/keys.ts";
 import { deriveCAK, deriveMK, deriveNameMACKey } from "../src/crypto/derive.ts";
 import { decodeULID } from "../src/format/ulid.ts";
@@ -373,7 +373,7 @@ async function main(): Promise<void> {
     await assembleArchive({ dest, master, signer, recipients, sealed });
     const store = new MapStore(dest.map);
     const identity = parseIdentity(breakGlass.identity);
-    let run;
+    let run: Run;
     try {
       run = await openRun(store, RUN_ID, identity, verifier, {});
       ok("the chained archive opens (signature, shard hash, record hashes, merkle root)", true);

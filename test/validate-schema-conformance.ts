@@ -203,7 +203,7 @@ let positiveVectors = 0;
 if (validateRootManifest && validateRunlogEntry) {
   for (const name of readdirSync(VECTORS_DIR).sort()) {
     const vectorDir = join(VECTORS_DIR, name);
-    let st;
+    let st: ReturnType<typeof statSync>;
     try {
       st = statSync(vectorDir);
     } catch {

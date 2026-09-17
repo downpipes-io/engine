@@ -249,7 +249,7 @@ async function main(): Promise<void> {
     } as unknown as Env;
 
     const cap = captureErrors();
-    let result;
+  let result: Awaited<ReturnType<typeof runDrill>>;
     try {
       result = await runDrill(env, RUN_ID);
     } finally {
@@ -296,7 +296,7 @@ async function main(): Promise<void> {
     } as unknown as Env;
 
     const cap = captureErrors();
-    let result;
+  let result: Awaited<ReturnType<typeof runDrill>>;
     try {
       result = await runDrill(env, RUN_ID);
     } finally {
@@ -352,7 +352,7 @@ async function main(): Promise<void> {
     } as unknown as Env;
 
     const cap = captureErrors();
-    let result;
+  let result: Awaited<ReturnType<typeof runRestore>>;
     try {
       result = await runRestore(env, { runId: RUN_ID });
     } finally {
