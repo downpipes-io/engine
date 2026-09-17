@@ -1,0 +1,13 @@
+{
+  "mode": "positive",
+  "runId": "01ARZ3NDEKTSV4RRFFQ69G5FB0",
+  "records": [
+    {
+      "name": "object-a",
+      "valueB64": "cmVjb3ZlciBtZSB3aXRob3V0IENsb3VkZmxhcmUgYW5kIHdpdGhvdXQgdGhlIHZlbmRvcg"
+    }
+  ],
+  "options": {
+    "minRunlogIndex": 1
+  }
+}

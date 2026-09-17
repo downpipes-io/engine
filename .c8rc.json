@@ -1,0 +1,22 @@
+{
+  "//": "Coverage gate for the engine. The bespoke node validators under test/ (npm run validate) are the engine's real test surface; this instruments them with c8 (V8 coverage maps cleanly through Node's type-stripping). The workerd vitest-pool suite is a runtime smoke test and is not the coverage source.",
+  "//thresholds": "RATCHET, NOT THE TARGET. These floors sit just under the measured figures so the gate blocks a REGRESSION from today's level. They are deliberately not the 90 per cent project standard, and the history matters: this job was added while GitHub Actions was disabled at the repository level (20 June to 26 July 2026), so it never ran green even once, and 946 commits landed behind it. On 26 July 2026 a full clean local run (321 validators, 21,463 assertions, zero failures, Node 22) measured 60.30 statements, 32.37 functions, 86.77 branches. That was checked for a configuration artefact before being believed: only 7 of 389 files never load at all, they are all type-only modules, and they account for 1.4 per cent of statements, so the shortfall is real and diffuse rather than a discovery bug. The distribution peaks at 50 to 59 per cent, only 44 of 389 files reach 90, and the fifteen worst files hold just 16 per cent of the gap, so there is no small set of files to fix. Reaching 90 means writing tests across roughly 345 files. RAISE THESE as that work lands; never lower them.",
+  "//known-variance": "The same suite measures differently on the runner (74.6 statements, 17,546 branches) than locally (60.30, 7,723). Both are far below 90, so it does not change the decision, but a branch denominator differing by more than twice means the two environments instrument a different file set, and that is unexplained. Worth resolving before these floors are tightened, or a raise will flap.",
+  "//excluded": "src/sched/scheduler-do.ts (10,034 lines) and src/admin/router.ts (3,002 lines) are carved out pending the P3 decomposition: testing them to 90 now would be obsoleted by the split. Type-only modules (env.d.ts, types.ts, *-types.ts) are carved out because they hold no executable statement, so counting them only dilutes the figure; they were 1,874 uncovered statements of pure noise.",
+  "include": ["src/**/*.ts"],
+  "exclude": [
+    "src/sched/scheduler-do.ts",
+    "src/admin/router.ts",
+    "src/env.d.ts",
+    "src/**/types.ts",
+    "src/**/*-types.ts"
+  ],
+  "all": true,
+  "reporter": ["text-summary", "json-summary"],
+  "reports-dir": "coverage/c8",
+  "check-coverage": true,
+  "lines": 59,
+  "statements": 59,
+  "functions": 31,
+  "branches": 85
+}

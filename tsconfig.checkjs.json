@@ -1,0 +1,6 @@
+{
+  "//": "The workspace config with checkJs ON. tsconfig.workspace.json already sets allowJs, so tsc READS the 39 .mjs files under test/, scripts/ and tools/ and, with checkJs unset, checks none of them: an include list that includes nothing. This config is read only by scripts/typecheck-scope-gate.mjs, which ratchets the resulting diagnostic count rather than demanding zero.",
+  "extends": "./tsconfig.workspace.json",
+  "compilerOptions": { "checkJs": true },
+  "include": ["src", "test", "scripts", "tools"]
+}

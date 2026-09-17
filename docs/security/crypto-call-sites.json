@@ -1,0 +1,832 @@
+[
+  {
+    "file": "scripts/build-release.mjs",
+    "kind": "algorithm",
+    "detail": "SHA-256"
+  },
+  {
+    "file": "scripts/build-release.mjs",
+    "kind": "import",
+    "detail": "node:crypto"
+  },
+  {
+    "file": "scripts/dependency-advisory-gate.mjs",
+    "kind": "algorithm",
+    "detail": "SHA-256"
+  },
+  {
+    "file": "scripts/dependency-advisory-gate.mjs",
+    "kind": "import",
+    "detail": "node:crypto"
+  },
+  {
+    "file": "scripts/gen-sealed-export-fixture.mjs",
+    "kind": "random",
+    "detail": "getRandomValues"
+  },
+  {
+    "file": "scripts/generate-keys.ts",
+    "kind": "algorithm",
+    "detail": "Ed25519"
+  },
+  {
+    "file": "scripts/generate-keys.ts",
+    "kind": "algorithm",
+    "detail": "ML-DSA-87"
+  },
+  {
+    "file": "scripts/generate-keys.ts",
+    "kind": "algorithm",
+    "detail": "ML-KEM-1024"
+  },
+  {
+    "file": "scripts/generate-keys.ts",
+    "kind": "algorithm",
+    "detail": "X25519"
+  },
+  {
+    "file": "scripts/generate-keys.ts",
+    "kind": "import",
+    "detail": "@noble/curves/ed25519.js"
+  },
+  {
+    "file": "scripts/generate-keys.ts",
+    "kind": "import",
+    "detail": "@noble/post-quantum/ml-dsa.js"
+  },
+  {
+    "file": "scripts/generate-keys.ts",
+    "kind": "import",
+    "detail": "@noble/post-quantum/ml-kem.js"
+  },
+  {
+    "file": "scripts/generate-keys.ts",
+    "kind": "import",
+    "detail": "node:crypto"
+  },
+  {
+    "file": "scripts/generate-keys.ts",
+    "kind": "random",
+    "detail": "getRandomValues"
+  },
+  {
+    "file": "scripts/guard-mutation-harness.mjs",
+    "kind": "algorithm",
+    "detail": "SHA-256"
+  },
+  {
+    "file": "scripts/guard-mutation-harness.mjs",
+    "kind": "import",
+    "detail": "node:crypto"
+  },
+  {
+    "file": "src/admin/access.ts",
+    "kind": "algorithm",
+    "detail": "RSASSA-PKCS1-v1_5"
+  },
+  {
+    "file": "src/admin/access.ts",
+    "kind": "algorithm",
+    "detail": "SHA-256"
+  },
+  {
+    "file": "src/admin/access.ts",
+    "kind": "subtle",
+    "detail": "importKey"
+  },
+  {
+    "file": "src/admin/access.ts",
+    "kind": "subtle",
+    "detail": "verify"
+  },
+  {
+    "file": "src/admin/auth.ts",
+    "kind": "algorithm",
+    "detail": "SHA-256"
+  },
+  {
+    "file": "src/admin/auth.ts",
+    "kind": "subtle",
+    "detail": "digest"
+  },
+  {
+    "file": "src/admin/cf-assets-deploy.ts",
+    "kind": "algorithm",
+    "detail": "BLAKE3"
+  },
+  {
+    "file": "src/admin/cf-assets-deploy.ts",
+    "kind": "import",
+    "detail": "@noble/hashes/blake3.js"
+  },
+  {
+    "file": "src/admin/config-history.ts",
+    "kind": "algorithm",
+    "detail": "HMAC"
+  },
+  {
+    "file": "src/admin/config-history.ts",
+    "kind": "algorithm",
+    "detail": "SHA-256"
+  },
+  {
+    "file": "src/admin/config-history.ts",
+    "kind": "subtle",
+    "detail": "importKey"
+  },
+  {
+    "file": "src/admin/config-history.ts",
+    "kind": "subtle",
+    "detail": "sign"
+  },
+  {
+    "file": "src/admin/config-secret.ts",
+    "kind": "random",
+    "detail": "getRandomValues"
+  },
+  {
+    "file": "src/admin/control-plane-seal.ts",
+    "kind": "random",
+    "detail": "getRandomValues"
+  },
+  {
+    "file": "src/admin/control-plane.ts",
+    "kind": "algorithm",
+    "detail": "SHA-384"
+  },
+  {
+    "file": "src/admin/control-plane.ts",
+    "kind": "subtle",
+    "detail": "digest"
+  },
+  {
+    "file": "src/admin/oidc-verify.ts",
+    "kind": "algorithm",
+    "detail": "ECDSA-P-256"
+  },
+  {
+    "file": "src/admin/oidc-verify.ts",
+    "kind": "algorithm",
+    "detail": "RSASSA-PKCS1-v1_5"
+  },
+  {
+    "file": "src/admin/oidc-verify.ts",
+    "kind": "algorithm",
+    "detail": "SHA-256"
+  },
+  {
+    "file": "src/admin/oidc-verify.ts",
+    "kind": "subtle",
+    "detail": "digest"
+  },
+  {
+    "file": "src/admin/oidc-verify.ts",
+    "kind": "subtle",
+    "detail": "importKey"
+  },
+  {
+    "file": "src/admin/oidc-verify.ts",
+    "kind": "subtle",
+    "detail": "verify"
+  },
+  {
+    "file": "src/admin/oidc.ts",
+    "kind": "algorithm",
+    "detail": "SHA-256"
+  },
+  {
+    "file": "src/admin/oidc.ts",
+    "kind": "random",
+    "detail": "getRandomValues"
+  },
+  {
+    "file": "src/admin/oidc.ts",
+    "kind": "subtle",
+    "detail": "digest"
+  },
+  {
+    "file": "src/admin/passkey-cose.ts",
+    "kind": "algorithm",
+    "detail": "ECDSA-P-256"
+  },
+  {
+    "file": "src/admin/passkey-cose.ts",
+    "kind": "algorithm",
+    "detail": "RSASSA-PKCS1-v1_5"
+  },
+  {
+    "file": "src/admin/passkey-cose.ts",
+    "kind": "algorithm",
+    "detail": "SHA-256"
+  },
+  {
+    "file": "src/admin/passkey-cose.ts",
+    "kind": "subtle",
+    "detail": "importKey"
+  },
+  {
+    "file": "src/admin/passkey-cose.ts",
+    "kind": "subtle",
+    "detail": "verify"
+  },
+  {
+    "file": "src/admin/passkey.ts",
+    "kind": "algorithm",
+    "detail": "SHA-256"
+  },
+  {
+    "file": "src/admin/passkey.ts",
+    "kind": "random",
+    "detail": "getRandomValues"
+  },
+  {
+    "file": "src/admin/passkey.ts",
+    "kind": "random",
+    "detail": "randomUUID"
+  },
+  {
+    "file": "src/admin/passkey.ts",
+    "kind": "subtle",
+    "detail": "digest"
+  },
+  {
+    "file": "src/admin/recovery.ts",
+    "kind": "algorithm",
+    "detail": "HMAC"
+  },
+  {
+    "file": "src/admin/recovery.ts",
+    "kind": "algorithm",
+    "detail": "SHA-256"
+  },
+  {
+    "file": "src/admin/recovery.ts",
+    "kind": "random",
+    "detail": "getRandomValues"
+  },
+  {
+    "file": "src/admin/recovery.ts",
+    "kind": "subtle",
+    "detail": "importKey"
+  },
+  {
+    "file": "src/admin/recovery.ts",
+    "kind": "subtle",
+    "detail": "sign"
+  },
+  {
+    "file": "src/admin/restore-sinks.ts",
+    "kind": "algorithm",
+    "detail": "SHA-384"
+  },
+  {
+    "file": "src/admin/restore-sinks.ts",
+    "kind": "import",
+    "detail": "@noble/hashes/sha2.js"
+  },
+  {
+    "file": "src/admin/router-attest.ts",
+    "kind": "random",
+    "detail": "getRandomValues"
+  },
+  {
+    "file": "src/admin/saml/dsig-helpers.ts",
+    "kind": "algorithm",
+    "detail": "ECDSA-P-256"
+  },
+  {
+    "file": "src/admin/saml/dsig-helpers.ts",
+    "kind": "algorithm",
+    "detail": "ECDSA-P-384"
+  },
+  {
+    "file": "src/admin/saml/dsig-helpers.ts",
+    "kind": "algorithm",
+    "detail": "RSASSA-PKCS1-v1_5"
+  },
+  {
+    "file": "src/admin/saml/dsig-helpers.ts",
+    "kind": "algorithm",
+    "detail": "SHA-256"
+  },
+  {
+    "file": "src/admin/saml/dsig-helpers.ts",
+    "kind": "algorithm",
+    "detail": "SHA-384"
+  },
+  {
+    "file": "src/admin/saml/dsig-helpers.ts",
+    "kind": "algorithm",
+    "detail": "SHA-512"
+  },
+  {
+    "file": "src/admin/saml/dsig-helpers.ts",
+    "kind": "subtle",
+    "detail": "importKey"
+  },
+  {
+    "file": "src/admin/saml/dsig-helpers.ts",
+    "kind": "subtle",
+    "detail": "verify"
+  },
+  {
+    "file": "src/admin/saml/dsig.ts",
+    "kind": "subtle",
+    "detail": "digest"
+  },
+  {
+    "file": "src/admin/session.ts",
+    "kind": "algorithm",
+    "detail": "HMAC"
+  },
+  {
+    "file": "src/admin/session.ts",
+    "kind": "algorithm",
+    "detail": "SHA-256"
+  },
+  {
+    "file": "src/admin/session.ts",
+    "kind": "random",
+    "detail": "getRandomValues"
+  },
+  {
+    "file": "src/admin/session.ts",
+    "kind": "subtle",
+    "detail": "importKey"
+  },
+  {
+    "file": "src/admin/session.ts",
+    "kind": "subtle",
+    "detail": "sign"
+  },
+  {
+    "file": "src/admin/support-ingest.ts",
+    "kind": "random",
+    "detail": "getRandomValues"
+  },
+  {
+    "file": "src/admin/support.ts",
+    "kind": "random",
+    "detail": "getRandomValues"
+  },
+  {
+    "file": "src/admin/update-gate.ts",
+    "kind": "random",
+    "detail": "randomUUID"
+  },
+  {
+    "file": "src/attest/challenge.ts",
+    "kind": "random",
+    "detail": "getRandomValues"
+  },
+  {
+    "file": "src/canary/cycle.ts",
+    "kind": "random",
+    "detail": "getRandomValues"
+  },
+  {
+    "file": "src/cron/control-plane-pass.ts",
+    "kind": "random",
+    "detail": "getRandomValues"
+  },
+  {
+    "file": "src/crypto/bytes.ts",
+    "kind": "algorithm",
+    "detail": "SHA-256"
+  },
+  {
+    "file": "src/crypto/bytes.ts",
+    "kind": "subtle",
+    "detail": "digest"
+  },
+  {
+    "file": "src/crypto/bytes.ts",
+    "kind": "subtle",
+    "detail": "timingSafeEqual"
+  },
+  {
+    "file": "src/crypto/pq.ts",
+    "kind": "algorithm",
+    "detail": "ML-DSA-87"
+  },
+  {
+    "file": "src/crypto/pq.ts",
+    "kind": "algorithm",
+    "detail": "ML-KEM-1024"
+  },
+  {
+    "file": "src/crypto/pq.ts",
+    "kind": "import",
+    "detail": "@noble/post-quantum/ml-dsa.js"
+  },
+  {
+    "file": "src/crypto/pq.ts",
+    "kind": "import",
+    "detail": "@noble/post-quantum/ml-kem.js"
+  },
+  {
+    "file": "src/crypto/primitives.ts",
+    "kind": "algorithm",
+    "detail": "AES-GCM"
+  },
+  {
+    "file": "src/crypto/primitives.ts",
+    "kind": "algorithm",
+    "detail": "HKDF"
+  },
+  {
+    "file": "src/crypto/primitives.ts",
+    "kind": "algorithm",
+    "detail": "HMAC"
+  },
+  {
+    "file": "src/crypto/primitives.ts",
+    "kind": "algorithm",
+    "detail": "SHA-384"
+  },
+  {
+    "file": "src/crypto/primitives.ts",
+    "kind": "subtle",
+    "detail": "decrypt"
+  },
+  {
+    "file": "src/crypto/primitives.ts",
+    "kind": "subtle",
+    "detail": "deriveBits"
+  },
+  {
+    "file": "src/crypto/primitives.ts",
+    "kind": "subtle",
+    "detail": "digest"
+  },
+  {
+    "file": "src/crypto/primitives.ts",
+    "kind": "subtle",
+    "detail": "encrypt"
+  },
+  {
+    "file": "src/crypto/primitives.ts",
+    "kind": "subtle",
+    "detail": "importKey"
+  },
+  {
+    "file": "src/crypto/primitives.ts",
+    "kind": "subtle",
+    "detail": "sign"
+  },
+  {
+    "file": "src/crypto/sign.ts",
+    "kind": "algorithm",
+    "detail": "Ed25519"
+  },
+  {
+    "file": "src/crypto/sign.ts",
+    "kind": "subtle",
+    "detail": "importKey"
+  },
+  {
+    "file": "src/crypto/sign.ts",
+    "kind": "subtle",
+    "detail": "sign"
+  },
+  {
+    "file": "src/crypto/sign.ts",
+    "kind": "subtle",
+    "detail": "verify"
+  },
+  {
+    "file": "src/crypto/streamseal.ts",
+    "kind": "algorithm",
+    "detail": "SHA-384"
+  },
+  {
+    "file": "src/crypto/streamseal.ts",
+    "kind": "import",
+    "detail": "@noble/hashes/hmac.js"
+  },
+  {
+    "file": "src/crypto/streamseal.ts",
+    "kind": "import",
+    "detail": "@noble/hashes/sha2.js"
+  },
+  {
+    "file": "src/crypto/x25519.ts",
+    "kind": "algorithm",
+    "detail": "X25519"
+  },
+  {
+    "file": "src/crypto/x25519.ts",
+    "kind": "import",
+    "detail": "@noble/curves/ed25519.js"
+  },
+  {
+    "file": "src/dest/azure-sharedkey.ts",
+    "kind": "algorithm",
+    "detail": "HMAC"
+  },
+  {
+    "file": "src/dest/azure-sharedkey.ts",
+    "kind": "algorithm",
+    "detail": "SHA-256"
+  },
+  {
+    "file": "src/dest/azure-sharedkey.ts",
+    "kind": "subtle",
+    "detail": "importKey"
+  },
+  {
+    "file": "src/dest/azure-sharedkey.ts",
+    "kind": "subtle",
+    "detail": "sign"
+  },
+  {
+    "file": "src/dest/sigv4.ts",
+    "kind": "algorithm",
+    "detail": "HMAC"
+  },
+  {
+    "file": "src/dest/sigv4.ts",
+    "kind": "algorithm",
+    "detail": "SHA-256"
+  },
+  {
+    "file": "src/dest/sigv4.ts",
+    "kind": "subtle",
+    "detail": "importKey"
+  },
+  {
+    "file": "src/dest/sigv4.ts",
+    "kind": "subtle",
+    "detail": "sign"
+  },
+  {
+    "file": "src/format/reader.ts",
+    "kind": "algorithm",
+    "detail": "SHA-384"
+  },
+  {
+    "file": "src/format/reader.ts",
+    "kind": "import",
+    "detail": "@noble/hashes/sha2.js"
+  },
+  {
+    "file": "src/index.ts",
+    "kind": "random",
+    "detail": "randomUUID"
+  },
+  {
+    "file": "src/keys-env.ts",
+    "kind": "algorithm",
+    "detail": "Ed25519"
+  },
+  {
+    "file": "src/keys-env.ts",
+    "kind": "algorithm",
+    "detail": "ML-DSA-87"
+  },
+  {
+    "file": "src/keys-env.ts",
+    "kind": "import",
+    "detail": "@noble/curves/ed25519.js"
+  },
+  {
+    "file": "src/keys-env.ts",
+    "kind": "import",
+    "detail": "@noble/post-quantum/ml-dsa.js"
+  },
+  {
+    "file": "src/keys-env.ts",
+    "kind": "subtle",
+    "detail": "importKey"
+  },
+  {
+    "file": "src/sched/scheduler-do-dest-config.ts",
+    "kind": "random",
+    "detail": "randomUUID"
+  },
+  {
+    "file": "src/sched/scheduler-do-idp-saml.ts",
+    "kind": "random",
+    "detail": "getRandomValues"
+  },
+  {
+    "file": "src/sched/scheduler-do-otlp-push.ts",
+    "kind": "random",
+    "detail": "randomUUID"
+  },
+  {
+    "file": "src/sched/scheduler-do-recovery.ts",
+    "kind": "random",
+    "detail": "getRandomValues"
+  },
+  {
+    "file": "src/sched/scheduler-do-scheduling.ts",
+    "kind": "random",
+    "detail": "randomUUID"
+  },
+  {
+    "file": "src/sched/scheduler-do-session.ts",
+    "kind": "random",
+    "detail": "getRandomValues"
+  },
+  {
+    "file": "src/sched/scheduler-do-siem-push.ts",
+    "kind": "random",
+    "detail": "randomUUID"
+  },
+  {
+    "file": "src/sched/scheduler-do-stepup.ts",
+    "kind": "random",
+    "detail": "getRandomValues"
+  },
+  {
+    "file": "src/sched/scheduler-do.ts",
+    "kind": "random",
+    "detail": "randomUUID"
+  },
+  {
+    "file": "src/sched/scheduler-helpers.ts",
+    "kind": "random",
+    "detail": "getRandomValues"
+  },
+  {
+    "file": "src/seal/checkpoint.ts",
+    "kind": "algorithm",
+    "detail": "AES-GCM"
+  },
+  {
+    "file": "src/seal/checkpoint.ts",
+    "kind": "random",
+    "detail": "getRandomValues"
+  },
+  {
+    "file": "src/seal/checkpoint.ts",
+    "kind": "subtle",
+    "detail": "decrypt"
+  },
+  {
+    "file": "src/seal/checkpoint.ts",
+    "kind": "subtle",
+    "detail": "encrypt"
+  },
+  {
+    "file": "src/seal/checkpoint.ts",
+    "kind": "subtle",
+    "detail": "importKey"
+  },
+  {
+    "file": "src/seal/fanout.ts",
+    "kind": "random",
+    "detail": "getRandomValues"
+  },
+  {
+    "file": "src/seal/pipeline.ts",
+    "kind": "random",
+    "detail": "getRandomValues"
+  },
+  {
+    "file": "src/seal/record.ts",
+    "kind": "algorithm",
+    "detail": "SHA-384"
+  },
+  {
+    "file": "src/seal/record.ts",
+    "kind": "import",
+    "detail": "@noble/hashes/sha2.js"
+  },
+  {
+    "file": "src/seal/retry.ts",
+    "kind": "random",
+    "detail": "getRandomValues"
+  },
+  {
+    "file": "src/seal/runstate.ts",
+    "kind": "random",
+    "detail": "getRandomValues"
+  },
+  {
+    "file": "src/seal/slice.ts",
+    "kind": "algorithm",
+    "detail": "SHA-384"
+  },
+  {
+    "file": "src/seal/slice.ts",
+    "kind": "random",
+    "detail": "getRandomValues"
+  },
+  {
+    "file": "src/seal/slice.ts",
+    "kind": "subtle",
+    "detail": "digest"
+  },
+  {
+    "file": "src/seal/verify-at-seal.ts",
+    "kind": "random",
+    "detail": "getRandomValues"
+  },
+  {
+    "file": "src/sources/cf-config-shared.ts",
+    "kind": "random",
+    "detail": "randomUUID"
+  },
+  {
+    "file": "src/sources/cf-config-writer-fingerprint.ts",
+    "kind": "algorithm",
+    "detail": "SHA-256"
+  },
+  {
+    "file": "src/sources/cf-config-writer-fingerprint.ts",
+    "kind": "subtle",
+    "detail": "digest"
+  },
+  {
+    "file": "tools/emit-real-support-bundle.ts",
+    "kind": "random",
+    "detail": "getRandomValues"
+  },
+  {
+    "file": "tools/generate-support-keypair.ts",
+    "kind": "algorithm",
+    "detail": "ML-KEM-1024"
+  },
+  {
+    "file": "tools/generate-support-keypair.ts",
+    "kind": "algorithm",
+    "detail": "X25519"
+  },
+  {
+    "file": "tools/generate-support-keypair.ts",
+    "kind": "import",
+    "detail": "@noble/curves/ed25519.js"
+  },
+  {
+    "file": "tools/generate-support-keypair.ts",
+    "kind": "import",
+    "detail": "@noble/post-quantum/ml-kem.js"
+  },
+  {
+    "file": "tools/generate-support-keypair.ts",
+    "kind": "import",
+    "detail": "node:crypto"
+  },
+  {
+    "file": "tools/generate-support-keypair.ts",
+    "kind": "random",
+    "detail": "getRandomValues"
+  },
+  {
+    "file": "tools/publish-channel.mjs",
+    "kind": "algorithm",
+    "detail": "SHA-256"
+  },
+  {
+    "file": "tools/publish-channel.mjs",
+    "kind": "import",
+    "detail": "node:crypto"
+  },
+  {
+    "file": "tools/publish-channel.mjs",
+    "kind": "random",
+    "detail": "getRandomValues"
+  },
+  {
+    "file": "tools/support-corpus/harness.ts",
+    "kind": "algorithm",
+    "detail": "ML-KEM-1024"
+  },
+  {
+    "file": "tools/support-corpus/harness.ts",
+    "kind": "algorithm",
+    "detail": "X25519"
+  },
+  {
+    "file": "tools/support-corpus/harness.ts",
+    "kind": "import",
+    "detail": "@noble/curves/ed25519.js"
+  },
+  {
+    "file": "tools/support-corpus/harness.ts",
+    "kind": "import",
+    "detail": "@noble/post-quantum/ml-kem.js"
+  },
+  {
+    "file": "tools/support-corpus/harness.ts",
+    "kind": "import",
+    "detail": "@noble/post-quantum/utils.js"
+  },
+  {
+    "file": "tools/support-corpus/harness.ts",
+    "kind": "random",
+    "detail": "getRandomValues"
+  },
+  {
+    "file": "tools/support-corpus/scenarios-domains.ts",
+    "kind": "random",
+    "detail": "getRandomValues"
+  },
+  {
+    "file": "tools/support-corpus/scenarios-healthy-variants.ts",
+    "kind": "random",
+    "detail": "getRandomValues"
+  }
+]

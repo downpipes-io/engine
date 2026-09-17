@@ -1,0 +1,12 @@
+{
+  "//": "Pinned bare-void-call count for src/admin's router.ts + router-*.ts spokes + scim.ts (void-waituntil-gate.mjs). Ratchet DOWN as more sites are fixed; the gate refuses any increase. Re-pin only with --write-baseline after a genuine fix, never to silence a new addition.",
+  "filesScanned": 34,
+  "count": 25,
+  "bySignal": {
+    "recordAuthSignalEdge": 11,
+    "bumpAdminCounter": 5,
+    "recordAttachHealth": 2,
+    "noteUpdateDegradations": 5,
+    "noteUpdateGuardRefusal": 2
+  }
+}

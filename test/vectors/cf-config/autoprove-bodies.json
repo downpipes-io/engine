@@ -1,0 +1,651 @@
+{
+  "access-custom-pages": {
+    "body": {
+      "custom_html": "dp-v60491",
+      "name": "dp-v60491",
+      "type": "identity_denied"
+    },
+    "path": "/accounts/{}/access/custom_pages",
+    "why": null
+  },
+  "access-tags": {
+    "body": {
+      "name": "dp-roundtrip-tag"
+    },
+    "path": "/accounts/{}/access/tags"
+  },
+  "account-custom-page-assets": {
+    "body": {
+      "description": "dp-roundtrip",
+      "name": "dp_roundtrip_asset",
+      "url": "https://example.com/"
+    },
+    "path": "/accounts/{}/custom_pages/assets",
+    "why": null
+  },
+  "account-endpoint-healthchecks": {
+    "body": {
+      "check_type": "icmp",
+      "endpoint": "203.0.113.1",
+      "name": "dp-roundtrip-hc"
+    },
+    "path": "/accounts/{}/diagnostics/endpoint-healthchecks",
+    "why": "Body corrected 2026-07-28 from Cloudflare's OWN published schema (components.schemas.magic-transit_endpoint_health_check): the required fields are check_type and endpoint, and check_type is an enum whose only member is icmp. The previous body sent target and type, which are not fields of this endpoint at all, so all six shapes tried across two sittings were guessing at the wrong names. The schema was vendored in this repo the whole time and nobody read it. With the schema-shaped body the endpoint STILL answers a bare 1002 Invalid request naming no field. That no longer implicates our body, which is what changed: the schema is magic-transit and this account has no Magic Transit. Recorded as unknown rather than as an entitlement, because Cloudflare has not said so and this campaign has twice turned an assumed entitlement into a defect of ours."
+  },
+  "account-logs-explorer-datasets": {
+    "body": {
+      "dataset": "dp-v60491"
+    },
+    "path": "/accounts/{}/logs/explorer/datasets",
+    "why": null
+  },
+  "account-rule-list-items": {
+    "body": {
+      "kind": "ip",
+      "name": "dp-v60491"
+    },
+    "path": "/accounts/{}/rules/lists",
+    "why": null
+  },
+  "advanced-dns-protection-rules": {
+    "body": {
+      "burst_sensitivity": "dp-v60491",
+      "mode": "dp-v60491",
+      "name": "dp-v60491",
+      "profile_sensitivity": "dp-v60491",
+      "rate_sensitivity": "dp-v60491",
+      "scope": "dp-v60491"
+    },
+    "path": "/accounts/{}/magic/advanced_dns_protection/configs/dns_protection/rules",
+    "why": null
+  },
+  "advanced-tcp-protection-allowlist": {
+    "body": {
+      "comment": "dp-v60491",
+      "enabled": false,
+      "prefix": "dp-v60491"
+    },
+    "path": "/accounts/{}/magic/advanced_tcp_protection/configs/allowlist",
+    "why": null
+  },
+  "advanced-tcp-protection-prefixes": {
+    "body": {
+      "comment": "dp-v60491",
+      "excluded": false,
+      "prefix": "dp-v60491"
+    },
+    "path": "/accounts/{}/magic/advanced_tcp_protection/configs/prefixes",
+    "why": null
+  },
+  "advanced-tcp-protection-syn-filters": {
+    "body": {
+      "expression": "http.host eq \"example.invalid\"",
+      "mode": "dp-v60491"
+    },
+    "path": "/accounts/{}/magic/advanced_tcp_protection/configs/syn_protection/filters",
+    "why": null
+  },
+  "advanced-tcp-protection-tcp-flow-filters": {
+    "body": {
+      "expression": "http.host eq \"example.invalid\"",
+      "mode": "dp-v60491"
+    },
+    "path": "/accounts/{}/magic/advanced_tcp_protection/configs/tcp_flow_protection/filters",
+    "why": null
+  },
+  "ai-gateway-gateways": {
+    "body": {
+      "cache_invalidate_on_update": false,
+      "cache_ttl": 0,
+      "collect_logs": false,
+      "id": "dp-roundtrip-gw",
+      "rate_limiting_interval": 0,
+      "rate_limiting_limit": 0,
+      "rate_limiting_technique": "fixed"
+    },
+    "path": "/accounts/{}/ai-gateway/gateways"
+  },
+  "ai-search-namespaces": {
+    "body": {
+      "name": "dp-v60491",
+      "description": "dp-roundtrip probe namespace"
+    },
+    "path": "/accounts/{}/ai-search/namespaces",
+    "why": null
+  },
+  "cloudforce-one-rules": {
+    "body": {
+      "content": "dp-v60491",
+      "name": "dp-v60491",
+      "path": "dp-v60491"
+    },
+    "path": "/accounts/{}/cloudforce-one/rules",
+    "why": null
+  },
+  "cni-cnis": {
+    "body": {
+      "account": "dp-v60491",
+      "interconnect": "dp-v60491",
+      "magic": {
+        "conduit_name": "dp-v60491",
+        "description": "dp-v60491",
+        "mtu": 1
+      }
+    },
+    "path": "/accounts/{}/cni/cnis",
+    "why": null
+  },
+  "connectivity-services": {
+    "body": null,
+    "path": "/accounts/{}/connectivity/directory/services",
+    "why": "schema declares no required fields"
+  },
+  "deployment-groups": {
+    "body": {
+      "name": "dp-v60491",
+      "version_config": [
+        {
+          "target_environment": "dp-v60491",
+          "version": "dp-v60491"
+        }
+      ]
+    },
+    "path": "/accounts/{}/devices/deployment-groups",
+    "why": null
+  },
+  "device-ip-profiles": {
+    "body": {
+      "description": "dp-roundtrip",
+      "match": "identity.email == \"dp@example.com\"",
+      "name": "dp-roundtrip-ipp",
+      "precedence": 100
+    },
+    "path": "/accounts/{}/devices/ip-profiles",
+    "why": "subnet_id is resolved at RUN TIME from the account's own zerotrust subnets. It used to be a literal, which meant this surface could only prove on the one account that subnet belonged to and refused everywhere else with 'subnet_id must be valid uuid', a refusal that reads like a defect. An account-specific identifier in a shared vector is not a body, it is a note about one machine.",
+    "resolve": {
+      "subnet_id": {
+        "path": "/accounts/{}/zerotrust/subnets",
+        "field": "id"
+      }
+    }
+  },
+  "device-managed-networks": {
+    "body": {
+      "config": {
+        "tls_sockaddr": "203.0.113.7:443"
+      },
+      "name": "dp-roundtrip-net",
+      "type": "tls"
+    },
+    "path": "/accounts/{}/devices/networks"
+  },
+  "device-policy-default": {
+    "body": null,
+    "path": "/accounts/{}/devices/policy",
+    "why": "NO CREATE, deliberately. This surface is a SINGLETON: the registry reads one object from /accounts/{}/devices/policy and writes it with writeSingleObject PATCH, and it is already proven by test/live-cf-singleton-prove.ts. A POST to the same path does not create the thing this surface represents, it creates a SECOND device settings policy beside the default, which the surface would never capture and a restore would never put back. The synthesised body also filled `match` with a random string, and Cloudflare answered 'invalid wirefilter expression'; supplying a valid expression would have made the create succeed and proved the wrong thing, leaving a stray policy on the account. Reported as CREATE-REFUSED it looked like work owed, which is why this is recorded rather than simply removed."
+  },
+  "device-posture-rules": {
+    "body": {
+      "name": "dp-v60491",
+      "type": "file"
+    },
+    "path": "/accounts/{}/devices/posture",
+    "why": null
+  },
+  "dex-rules": {
+    "body": {
+      "match": "dp-v60491",
+      "name": "dp-v60491"
+    },
+    "path": "/accounts/{}/dex/rules",
+    "why": null
+  },
+  "dex-tests": {
+    "body": {
+      "data": {
+        "host": "dp-v60491",
+        "kind": "http"
+      },
+      "enabled": false,
+      "interval": "dp-v60491",
+      "name": "dp-v60491"
+    },
+    "path": "/accounts/{}/dex/devices/dex_tests",
+    "why": null
+  },
+  "dlp-custom-prompt-topics": {
+    "body": {
+      "enabled": false,
+      "name": "dp-v60491",
+      "topic": "dp-v60491"
+    },
+    "path": "/accounts/{}/dlp/custom_prompt_topics",
+    "why": null
+  },
+  "dlp-data-classes": {
+    "body": {
+      "name": "dp-roundtrip-dataclass",
+      "expression": "http.host eq \"dp-probe.invalid\"",
+      "data_tags": [],
+      "sensitivity_levels": [
+        {
+          "group_id": "00000000-0000-4000-8000-000000000001",
+          "level_id": "00000000-0000-4000-8000-000000000002"
+        }
+      ]
+    },
+    "path": "/accounts/{}/dlp/data_classes",
+    "why": "The body is now WELL FORMED and the refusal is Forbidden, an entitlement, which is the true reason. It previously carried synthesised placeholders where UUIDs belong, so Cloudflare refused it at JSON parsing and the recorded reason was OUR malformed request, which never reached the entitlement check. The group ids are deliberately well-formed UUIDs that do not exist: real ones cannot be obtained, because the account holds no sensitivity groups and creating one is itself Forbidden. Two required fields were found by asking (the endpoint named `data_tags` and `sensitivity_levels` in turn) rather than guessed."
+  },
+  "dlp-data-tag-categories": {
+    "body": {
+      "name": "dp-v60491"
+    },
+    "path": "/accounts/{}/dlp/data_tag_categories",
+    "why": null
+  },
+  "dlp-email-rules": {
+    "body": {
+      "name": "dp-roundtrip-emailrule",
+      "enabled": false,
+      "action": {
+        "action": "Block"
+      },
+      "conditions": [
+        {
+          "operator": "InList",
+          "selector": "Recipients",
+          "value": "dp-roundtrip"
+        }
+      ]
+    },
+    "path": "/accounts/{}/dlp/email/rules",
+    "why": "`action` is an internally tagged enum: {\"action\": \"Block\"}, not the bare string the synthesised body carried. Cloudflare named the type in its refusal (expected internally tagged enum EmailRuleAction) but not the tag, so the shape was found by trying the plausible tags. Unlike its DLP siblings this surface is NOT Forbidden on a paid account, so the old body was recording OUR malformed request as the reason when the surface was creatable all along."
+  },
+  "dlp-entries": {
+    "body": {
+      "enabled": false,
+      "name": "dp-v60491",
+      "pattern": {
+        "regex": "dp-v60491"
+      }
+    },
+    "path": "/accounts/{}/dlp/entries",
+    "why": null
+  },
+  "dlp-profiles-custom": {
+    "body": {
+      "name": "dp-roundtrip-profile",
+      "description": "dp roundtrip",
+      "allowed_match_count": 1,
+      "entries": [
+        {
+          "enabled": false,
+          "name": "dp-entry",
+          "pattern": {
+            "regex": "dp-[0-9]{4}"
+          }
+        }
+      ]
+    },
+    "path": "/accounts/{}/dlp/profiles/custom",
+    "why": "Body corrected 2026-07-28 from Cloudflare's published schema. The previous body wrapped the profile in a `profiles` array, and the schema says the request body IS the profile object: required `name`, with entries/description/allowed_match_count alongside it. So the recorded 3314 Forbidden was reached with a body that would have failed schema validation anyway, which is the confounding this campaign has been caught by twice. DLP is a paid Zero Trust product and the corrected body is still refused, so the entitlement reading stands, but it now stands on evidence rather than on a request that never got that far."
+  },
+  "dlp-sensitivity-groups": {
+    "body": {
+      "name": "dp-v60491"
+    },
+    "path": "/accounts/{}/dlp/sensitivity_groups",
+    "why": null
+  },
+  "dns-firewall": {
+    "body": null,
+    "path": "/accounts/{}/dns_firewall",
+    "why": "schema declares no required fields"
+  },
+  "email-security-allow-policies": {
+    "body": {
+      "created_at": {},
+      "id": {},
+      "last_modified": {}
+    },
+    "path": "/accounts/{}/email-security/settings/allow_policies",
+    "why": null
+  },
+  "email-security-block-senders": {
+    "body": null,
+    "path": "/accounts/{}/email-security/settings/block_senders",
+    "why": "schema declares no required fields"
+  },
+  "email-security-impersonation-registry": {
+    "body": null,
+    "path": "/accounts/{}/email-security/settings/impersonation_registry",
+    "why": "schema declares no required fields"
+  },
+  "email-security-sending-domain-restrictions": {
+    "body": null,
+    "path": "/accounts/{}/email-security/settings/sending_domain_restrictions",
+    "why": "schema declares no required fields"
+  },
+  "email-security-trusted-domains": {
+    "body": null,
+    "path": "/accounts/{}/email-security/settings/trusted_domains",
+    "why": "schema declares no required fields"
+  },
+  "email-security-url-ignore-patterns": {
+    "body": {
+      "pattern": "dp-v60491"
+    },
+    "path": "/accounts/{}/email-security/settings/url_ignore_patterns",
+    "why": null
+  },
+  "filters": {
+    "body": [
+      {
+        "description": "dp roundtrip",
+        "expression": "http.host eq \"dp-probe.invalid\"",
+        "paused": true
+      }
+    ],
+    "note": "Filters POST takes an ARRAY and returns an array. The autoprove driver posts the body as-is, so an array body is correct here.",
+    "path": "/zones/{}/filters"
+  },
+  "firewall-rules": {
+    "body": {
+      "action": {},
+      "filter": {}
+    },
+    "path": "/zones/{}/firewall/rules",
+    "why": null
+  },
+  "gateway-lists": {
+    "body": {
+      "description": "dp roundtrip",
+      "items": [
+        {
+          "value": "dp-probe.invalid"
+        }
+      ],
+      "name": "dp-roundtrip-list",
+      "type": "DOMAIN"
+    },
+    "path": "/accounts/{}/gateway/lists"
+  },
+  "gateway-locations": {
+    "body": {
+      "name": "dp-v60491"
+    },
+    "path": "/accounts/{}/gateway/locations",
+    "why": null
+  },
+  "gateway-pac-files": {
+    "body": {
+      "contents": "dp-v60491",
+      "name": "dp-v60491"
+    },
+    "path": "/accounts/{}/gateway/pacfiles",
+    "why": null
+  },
+  "gateway-proxy-endpoints": {
+    "body": {
+      "ips": [
+        "203.0.113.0/24"
+      ],
+      "name": "dp-roundtrip-endpoint"
+    },
+    "path": "/accounts/{}/gateway/proxy_endpoints"
+  },
+  "healthchecks": {
+    "body": {
+      "address": "dp-v60491",
+      "name": "dp-v60491"
+    },
+    "path": "/zones/{}/healthchecks",
+    "why": null
+  },
+  "images-variants": {
+    "body": {
+      "id": "dp-v60491",
+      "options": {
+        "fit": "scale-down",
+        "height": 1,
+        "metadata": "keep",
+        "width": 1
+      }
+    },
+    "path": "/accounts/{}/images/v1/variants",
+    "why": null
+  },
+  "kv-namespaces-config": {
+    "body": {
+      "title": "dp-v60491"
+    },
+    "path": "/accounts/{}/storage/kv/namespaces",
+    "why": null
+  },
+  "leaked-credential-detections": {
+    "path": "/zones/{}/leaked-credential-checks/detections",
+    "body": {
+      "username": "lookup_json_string(http.request.body.raw, \"dp_user\")",
+      "password": "lookup_json_string(http.request.body.raw, \"dp_pass\")"
+    },
+    "why": "Field names confirmed by Cloudflare: posting an empty body answers 'detection expressions are missing'. Creating is quota-zero ('1 out of 0') on both a Free and a Pro zone, so custom detections are Business or Enterprise. The body is committed anyway: on an entitled account this surface proves itself with no further work, which is the point of keeping a correct body next to an entitlement reason."
+  },
+  "logs-explorer-datasets": {
+    "body": {
+      "dataset": "dp-v60491"
+    },
+    "path": "/zones/{}/logs/explorer/datasets",
+    "why": null
+  },
+  "magic-bgp-filter-profiles": {
+    "body": {
+      "match_action": "allow",
+      "name": "dp-roundtrip-bgp",
+      "targets": [
+        "203.0.113.0/24"
+      ]
+    },
+    "path": "/accounts/{}/magic/bgp/filter_profiles",
+    "why": null
+  },
+  "magic-cloud-onramps": {
+    "body": {
+      "cloud_type": "AWS",
+      "dynamic_routing": false,
+      "install_routes_in_cloud": false,
+      "install_routes_in_magic_wan": false,
+      "name": "dp-v60491",
+      "type": "OnrampTypeSingle"
+    },
+    "path": "/accounts/{}/magic/cloud/onramps",
+    "why": null
+  },
+  "mnm-rules": {
+    "body": {
+      "duration": "1m0s",
+      "name": "dp-roundtrip-mnm",
+      "packet_threshold": 10000,
+      "prefixes": [
+        "203.0.113.0/24"
+      ]
+    },
+    "path": "/accounts/{}/mnm/rules",
+    "why": null,
+    "prereq": {
+      "path": "/accounts/{}/mnm/config",
+      "body": {
+        "name": "dp-autoprove-mnm",
+        "default_sampling": 10000,
+        "router_ips": []
+      }
+    }
+  },
+  "observability-saved-queries": {
+    "body": {
+      "description": "dp-v60491",
+      "name": "dp-v60491",
+      "parameters": {}
+    },
+    "path": "/accounts/{}/workers/observability/queries",
+    "why": null
+  },
+  "page-shield-policies": {
+    "body": {
+      "action": "allow",
+      "description": "dp-roundtrip",
+      "enabled": false,
+      "expression": "http.host eq \"example.com\"",
+      "value": "script-src 'self'"
+    },
+    "path": "/zones/{}/page_shield/policies"
+  },
+  "pipelines-streams": {
+    "body": {
+      "name": "dp-v60491"
+    },
+    "path": "/accounts/{}/pipelines/v1/streams",
+    "why": null
+  },
+  "r2-bucket-config": {
+    "body": {
+      "name": "dp-v60491"
+    },
+    "path": "/accounts/{}/r2/buckets",
+    "why": null
+  },
+  "rate-limits": {
+    "body": {
+      "action": {
+        "mode": "simulate",
+        "timeout": 60
+      },
+      "description": "dp roundtrip",
+      "disabled": true,
+      "match": {
+        "request": {
+          "url": "dp-probe.invalid/*"
+        }
+      },
+      "period": 60,
+      "threshold": 1000
+    },
+    "path": "/zones/{}/rate_limits"
+  },
+  "regional-hostnames": {
+    "body": {
+      "hostname": "dp-roundtrip.example.com",
+      "region_key": "eu"
+    },
+    "path": "/zones/{}/addressing/regional_hostnames"
+  },
+  "secondary-dns-acls": {
+    "body": {
+      "ip_range": "203.0.113.0/24",
+      "name": "dp-roundtrip-acl"
+    },
+    "path": "/accounts/{}/secondary_dns/acls"
+  },
+  "smart-shield-healthchecks": {
+    "body": {
+      "address": "dp-v60491",
+      "name": "dp-v60491"
+    },
+    "path": "/zones/{}/smart_shield/healthchecks",
+    "why": null
+  },
+  "spectrum-apps": {
+    "body": {
+      "dns": {
+        "name": "dp-roundtrip.onlytims.shop",
+        "type": "CNAME"
+      },
+      "origin_direct": [
+        "tcp://203.0.113.7:22"
+      ],
+      "protocol": "tcp/22"
+    },
+    "path": "/zones/{}/spectrum/apps",
+    "why": "'The requested protocol is not available.' on both a Free and a Pro zone. Spectrum is an Enterprise product and the protocol the body asks for is not offered on either plan, so this is an entitlement stated as a protocol."
+  },
+  "teamnet-virtual-networks": {
+    "body": {
+      "comment": "dp roundtrip",
+      "name": "dp-roundtrip-vnet"
+    },
+    "path": "/accounts/{}/teamnet/virtual_networks"
+  },
+  "turnstile": {
+    "body": {
+      "domains": [
+        "v60491.example.invalid"
+      ],
+      "mode": "non-interactive",
+      "name": "dp-v60491"
+    },
+    "path": "/accounts/{}/challenges/widgets",
+    "why": null
+  },
+  "ua-rules": {
+    "body": {
+      "configuration": {
+        "target": "ua",
+        "value": "dp-roundtrip-probe"
+      },
+      "description": "dp roundtrip",
+      "mode": "block",
+      "paused": true
+    },
+    "path": "/zones/{}/firewall/ua_rules"
+  },
+  "vuln-scanner-target-environments": {
+    "body": {
+      "name": "dp-v60491",
+      "target": "dp-v60491"
+    },
+    "path": "/accounts/{}/vuln_scanner/target_environments",
+    "why": null
+  },
+  "waiting-rooms": {
+    "body": {
+      "host": "example.com",
+      "name": "dp-roundtrip-wr",
+      "new_users_per_minute": 200,
+      "total_active_users": 300
+    },
+    "path": "/zones/{}/waiting_rooms"
+  },
+  "web3-hostnames": {
+    "body": {
+      "description": "dp-roundtrip",
+      "name": "dp-roundtrip.example.com",
+      "target": "ipfs"
+    },
+    "path": "/zones/{}/web3/hostnames"
+  },
+  "zone-custom-page-assets": {
+    "body": {
+      "description": "dp-roundtrip",
+      "name": "dp_roundtrip_asset",
+      "url": "https://example.com/"
+    },
+    "path": "/zones/{}/custom_pages/assets",
+    "why": null
+  },
+  "zone-lockdowns": {
+    "body": {
+      "configurations": [
+        {
+          "target": "ip",
+          "value": "203.0.113.7"
+        }
+      ],
+      "description": "dp roundtrip",
+      "paused": true,
+      "urls": [
+        "dp-probe.invalid/locked"
+      ]
+    },
+    "path": "/zones/{}/firewall/lockdowns"
+  }
+}

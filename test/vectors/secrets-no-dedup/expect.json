@@ -1,0 +1,14 @@
+{
+  "mode": "positive",
+  "records": [
+    {
+      "name": "secret-a",
+      "valueB64": "c3VwZXItc2VjcmV0LWFwaS10b2tlbg"
+    },
+    {
+      "name": "secret-b",
+      "valueB64": "c3VwZXItc2VjcmV0LWFwaS10b2tlbg"
+    }
+  ],
+  "segCount": 2
+}

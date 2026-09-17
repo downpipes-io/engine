@@ -1,0 +1,5 @@
+{
+ "schema": "cf-restore-proofs/1",
+ "note": "Appended by a live prover, never by hand. See test/lib/cf-restore-proofs.ts for what banks a row and what refuses one. It ships EMPTY on purpose: no cf-config restore proof in this tree has ever been banked, and a seeded row would be the first thing to rot.",
+ "rows": []
+}

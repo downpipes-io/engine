@@ -1,0 +1,13 @@
+{
+  "_comment": "Allow-list for test/validate-cf-config-drift.ts Section 2 (the optional Cloudflare OpenAPI cross-check). Registry endpoints listed here are KNOWN to be absent from Cloudflare's published OpenAPI for a legitimate reason (beta/undocumented/deliberately-omitted) and are subtracted from the candidate-drift report. Add an endpoint here ONLY after confirming it is a genuine Cloudflare-side omission, not real drift. Format: \"METHOD /normalised/path\" with every path parameter written as {}.",
+  "endpoints": [
+    "GET /accounts/{}/browser-extension/config",
+    "GET /accounts/{}/data-security/posture/webhooks",
+    "GET /accounts/{}/email/sending/suppressions",
+    "GET /accounts/{}/load_balancers",
+    "GET /accounts/{}/one/applications",
+    "GET /accounts/{}/one/integrations",
+    "GET /accounts/{}/workers/observability/metricsexport"
+  ],
+  "_evidence": "Every endpoint below was probed against the LIVE Cloudflare API on 2026-07-28 with an account-scoped token and answered HTTP 200, so each exists and serves data while being absent from the published OpenAPI. That probe is the ONLY basis on which an entry belongs here. A 404 would be genuine drift and the registry path would be fixed instead; a 403 would prove nothing either way, because an entitlement refusal is returned by real and renamed paths alike."
+}

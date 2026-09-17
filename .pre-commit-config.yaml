@@ -1,0 +1,9 @@
+# Local pre-commit hooks. Install with `pipx install pre-commit && pre-commit install`.
+# The gitleaks hook mirrors the blocking secret-scan CI job so a secret is caught before it
+# ever leaves the developer machine. It reads the same allowlist at .gitleaks.toml.
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+        args: ["--config", ".gitleaks.toml"]

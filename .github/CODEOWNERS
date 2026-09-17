@@ -1,0 +1,8 @@
+# Code owners for this repository.
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Default owner for everything.
+* @tim-maelstrom
+
+# CI, supply-chain and security configuration always require owner review.
+/.github/ @tim-maelstrom

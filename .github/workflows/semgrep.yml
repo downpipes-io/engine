@@ -1,0 +1,99 @@
+# Static analysis (SAST) with Semgrep, advisory. It surfaces findings on every push and pull
+# request to main, weekly on a schedule, and publishes SARIF. It does NOT block merge: findings
+# (semgrep exit 1) leave the job green, and there is no `semgrep` job in the ci-success needs list.
+#
+# WHAT IS NOT ADVISORY is whether the scan RAN. `|| true` on the scan flattened two entirely
+# different outcomes into one green step: semgrep FOUND something (exit 1), and semgrep DID NOT RUN
+# (exit 2 and above, an unfetchable rule registry, an invalid config, a crash). The second is a
+# vacuous pass, a scan that never happened reporting exactly like a clean tree. The exit code is now
+# read and branched on deliberately.
+#
+# AND WHETHER ANYONE CAN READ THE RESULT. Measured on this repo: semgrep worked (256
+# rules over 533 files, 11 findings) and the SARIF landed nowhere. The upload to code scanning needs
+# GitHub Advanced Security, which is off on this private repo, so it failed with "Resource not
+# accessible by integration" on a step marked continue-on-error, the job read success, and the run's
+# artifacts were total_count = 0. The SARIF died with the runner every time. console, control-plane
+# and website all carry the artefact fallback below; engine was the one left without it.
+#
+# ENABLING CODE SECURITY ON A PRIVATE REPOSITORY IS AN OWNER SETTING and is not attempted here. When
+# it is on, dropping continue-on-error from the upload step restores the Security tab with no other
+# edit, and the artefact step can stay either way.
+#
+# DEFERRED FOLLOW-UP: once the baseline is triaged, promote it to a hard gate by branching on rc 1 as
+# well and adding a `semgrep` job to the ci-success needs list. Do NOT make it blocking before
+# triage, or it reds CI on un-triaged findings.
+name: Semgrep
+
+on:
+  # No push trigger: 64 push runs in ten days of September, each about 3 billed minutes,
+  # re-scanning main for what the pull request run and the weekly schedule already cover.
+  pull_request:
+    branches: [main]
+    paths-ignore: ["**.md", "LICENSE*", ".gitignore"]
+  schedule:
+    # Mondays at 06:30 UTC.
+    - cron: "30 6 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+jobs:
+  semgrep:
+    name: Semgrep SAST (advisory)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      # Upload SARIF to the code-scanning dashboard for triage.
+      security-events: write
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with: { egress-policy: audit }
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with: { persist-credentials: false }
+      # The scan is NOT wrapped in `|| true`. A patch circulated for this repo kept `|| true` and then
+      # captured `rc=$?` on the next line, which makes rc unconditionally 0 and the fatal branch below
+      # dead code, so the fix would have read as though it worked while changing nothing. Check it for
+      # yourself: `(exit 7) || true; echo $?` prints 0, `(exit 7); echo $?` prints 7.
+      - name: Semgrep scan (rules p/default + p/secrets), write SARIF
+        run: |
+          pipx install semgrep==1.167.0
+          set +e
+          semgrep scan --config p/default --config p/secrets --metrics off --sarif --output semgrep.sarif
+          rc=$?
+          set -e
+          if [ "$rc" -ge 2 ]; then
+            echo "::error::semgrep exited $rc, which means the SCAN failed rather than found something. A run that did not scan must not report green."
+            exit "$rc"
+          fi
+          if [ ! -s semgrep.sarif ]; then
+            echo "::error::semgrep exited $rc but wrote no SARIF, so there is nothing to publish and nothing was proven."
+            exit 1
+          fi
+          echo "semgrep exited $rc (0 = clean, 1 = findings, both advisory here) and wrote $(wc -c < semgrep.sarif) bytes of SARIF"
+      - name: Upload SARIF to code scanning (advisory; needs Advanced Security)
+        uses: github/codeql-action/upload-sarif@dd903d2e4f5405488e5ef1422510ee31c8b32357 # v3
+        if: always()
+        continue-on-error: true
+        with:
+          sarif_file: semgrep.sarif
+          # Without a category this upload can collide in the code-scanning UI with the one
+          # scorecard.yml publishes from the same repository.
+          category: semgrep
+      # The findings stay reachable without the Security tab: downloadable from the run. This is the
+      # route that needs no Advanced Security and no settings change, and without it a green run had
+      # reported nothing at all.
+      - name: Upload SARIF as an artefact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: semgrep-sarif
+          path: semgrep.sarif
+          if-no-files-found: warn
+          retention-days: 14

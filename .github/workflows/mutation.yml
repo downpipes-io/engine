@@ -1,0 +1,37 @@
+# Mutation testing (StrykerJS) over the crypto/format byte and serialisation modules. A full
+# mutation run is slow (about 8 minutes locally, longer on a CI runner), so this is a SCHEDULED
+# gating job rather than a per-pull-request gate: it runs weekly and on demand, and FAILS when the
+# mutation score drops below the stryker.config.json break threshold (75 per cent; measured 79.95
+# per cent). That keeps the crypto mutation gate enforced without adding minutes to
+# every pull request. The break threshold is the project standard of 90 per cent (high 95). The
+# score measured 79.95 per cent, BELOW 90, so this scheduled run fails until the
+# surviving crypto/format mutants are killed to raise the score to the standard.
+name: Mutation
+
+on:
+  schedule:
+    - cron: "37 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "22"
+
+jobs:
+  mutation:
+    name: StrykerJS (crypto/format, fails below break threshold)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with: { egress-policy: audit }
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
+        with: { node-version: "${{ env.NODE_VERSION }}" }
+      - run: npm ci
+      - name: stryker run (fails below the break threshold)
+        run: npm run test:mutation

@@ -1,0 +1,119 @@
+# THE RED-MAIN TRIPWIRE. It opens an issue the first time main goes red, and closes it when main goes green.
+#
+# The reasoning, the two failure modes it is designed against, and the one cost it accepts are all in
+# .github/tripwire/red-main-tripwire.mjs, next to the code that implements them. The short version: this
+# harness repo's main was red for 38 consecutive runs /04 and what found it was a scheduled
+# sweep by a pass looking at something else, so the thirty-eighth red was the one that got noticed. The
+# measurement is named against harness rather than "this repo" because this file is copied unchanged into
+# every repo, and a claim that travels must stay true in the repo it lands in.
+#
+# WHY workflow_run RATHER THAN A JOB IN ci.yml, and this is the property the whole shape rests on: a check
+# that lives inside the chain it grades shares that chain's fate. The moment the chain is red, the gate
+# grading the chain is silent, which is exactly what 38 runs demonstrated. This workflow is triggered by the
+# CI run's COMPLETION rather than by its success, so a red main cannot mask it. It also cannot be masked by
+# a red main in the other direction: it runs no npm install, imports nothing from this repo's source, and
+# depends on no gate, so nothing in the chain can break it.
+#
+# WHY NOT A SCHEDULE. Four repos in this workspace already run `schedule:`, so the missing capability was
+# never periodic execution. A poll answers "is main red now". The question worth paying for is "when did
+# main STOP being green", which only a transition can answer, and a poll fires on the thirty-eighth red as
+# readily as the first without being able to tell them apart. This fires seconds after the event, needs no
+# cron, and costs one short job per CI run.
+#
+# NO OTHER WORKFLOW IN THIS WORKSPACE USED workflow_run before this one, so the mechanism was confirmed on a
+# real run rather than taken from the documentation. See the workspace's internal handoff notes on the
+# tripwire-and-gate split.
+#
+# THE ONE LINE THAT CHANGES PER REPO is `workflows:` below. It must name the triggering workflow by its
+# `name:`, not by its filename. Everything else in this file and in the script beside it is repo-independent.
+#
+# House style: Australian English, no em dashes, no rule-of-three, precise claims, no AI attribution.
+
+name: Red-main tripwire
+
+# NEVER PUT A SQUARE BRACKET IN THE IGNORE REASON BELOW, HERE OR IN ANY OTHER WORKFLOW IN THIS REPO.
+# zizmor 1.20.0 stops honouring the whole ignore if the reason text contains one, without saying so: the
+# finding comes straight back and the comment still reads as though it suppressed it. It was bisected on a
+# minimal workflow, and reasons containing a colon, an apostrophe, a full stop or a comma all
+# suppress correctly, so the square bracket is the only character known to break it. It was found on the docs
+# copy of this file, where a reason wrote the trigger fence as the branches key with the branch name in
+# brackets and left `Security Audit` red while looking correct.
+#
+# THIS REPO DOES NOT RUN zizmor TODAY, so nothing here is currently suppressed by the comment below and the
+# trap cannot bite yet. It is recorded here because this is where the next ignore in this repo is most likely
+# to be written, and because the two ignores in the docs repo's release.yml are bracket-free by luck.
+on: # zizmor: ignore[dangerous-triggers] the escalation this rule exists to catch is closed in this file. The trigger is fenced to the main branch, so a fork pull request never reaches it. The checkout states ref main rather than the ref that triggered the run, and persist-credentials is false, so no untrusted code is fetched and none is executed. The only write the token is granted is issues, and the triggering run's payload arrives as an env var rather than interpolated into a shell.
+  workflow_run:
+    # The `name:` of .github/workflows/ci.yml. A filename here matches nothing and the tripwire simply never
+    # runs, which is the one failure this file cannot report on itself.
+    #
+    # THIS LIST IS ONE NAME, AND THAT IS A DELIBERATE LIMIT RATHER THAN AN OVERSIGHT. Four workflows can run
+    # on a push to main in this repo, CI, Reproducibility check, Scorecard and Semgrep, so a red main is not
+    # the same claim as a red CI, and this tripwire only ever makes the second one. Counted rather than
+    # assumed, from the runs API at a full sha rather than from the files alone: the push of
+    # 6a338a0ca77376d35a8cd134873e21065f551749 started runs of exactly those four. Reproducibility check is
+    # filtered to src, scripts/build-release.mjs, package.json, package-lock.json, wrangler.toml and its own
+    # workflow file, so it runs on some pushes to main and not others, and Scorecard carries an `if` on
+    # `github.event.repository.private == false` so it concludes skipped on every push while this repo is
+    # private. A filtered workflow still reddens main on the pushes it does run, so both are listed. It says
+    # so in the issue body and in its step summary, because the failure worth guarding against is a reader
+    # taking its silence for main being green.
+    #
+    # Release and Mutation are NOT in that count and the reason is checked rather than assumed: release.yml
+    # is fenced to `tags: ["v*"]` and mutation.yml has only a schedule and a manual dispatch, so neither can
+    # start on a push to main. Both were absent from the runs list at the sha above, which is the same answer
+    # arrived at from the API rather than from the files.
+    #
+    # WIDENING THIS LIST WITHOUT FIRST GIVING EACH WATCHED WORKFLOW ITS OWN ISSUE WOULD MAKE THE INSTRUMENT
+    # WORSE, not better. The tripwire keeps ONE issue per repo, found by a marker, so a second watched
+    # workflow concluding success takes the `close` branch of decide() against an issue the first one opened.
+    # At one commit with CI green and Semgrep red the outcome then depends on which run finishes
+    # first, and in one of the two orders main is reported green while a gate is red. That is the exact
+    # blindness this file exists to remove, arrived at by a race. It is not an argument, it is a fixture:
+    # ORDER_FIXTURES in .github/tripwire/red-main-tripwire.mjs runs the two orders and asserts they disagree.
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+
+# Serialise, and never cancel. Two CI runs completing within seconds of each other would otherwise both read
+# "no open issue" and both open one, which is the noise failure arriving by a race rather than by design.
+# cancel-in-progress must stay false: a cancelled tripwire is a red main nobody was told about.
+concurrency:
+  group: red-main-tripwire
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+
+jobs:
+  tripwire:
+    name: Grade the run that just finished
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
+          disable-sudo: true
+      # fetch-depth 1 is enough. The commit range in the issue body comes from the compare API rather than
+      # from this checkout, so the tripwire works even when the shas it names are no longer reachable here.
+      # `ref: main` IS STATED RATHER THAN LEFT TO THE DEFAULT. On a workflow_run event actions/checkout
+      # already defaults to the default branch rather than to the ref that triggered it, so this changes no
+      # behaviour, but it is the property the zizmor suppression above rests on and a reader should be able
+      # to confirm it from this file instead of from checkout's documentation. The code this job executes is
+      # therefore always main's, never the graded run's.
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with: { ref: main, persist-credentials: false, fetch-depth: 1 }
+      # No setup-node and no npm ci ON PURPOSE. The runner image ships a node new enough for this script,
+      # which imports nothing outside node: builtins, and every dependency this workflow does not take is a
+      # way it cannot be broken by the repo it is watching.
+      - name: Open or close the red-main issue
+        run: node .github/tripwire/red-main-tripwire.mjs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # The whole triggering run, passed as JSON rather than as a dozen separate expressions, so the
+          # script reads one shape and the fixtures can be written against that same shape.
+          TRIPWIRE_RUN_JSON: ${{ toJSON(github.event.workflow_run) }}

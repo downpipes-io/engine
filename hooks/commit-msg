@@ -1,0 +1,20 @@
+#!/bin/sh
+# Repo-tracked hook, wired up via `git config core.hooksPath hooks` (see package.json's "prepare"
+# script, which sets that automatically on `npm install`/`npm ci`).
+#
+# Reject a commit message carrying automated-tool attribution: a co-authorship trailer, a
+# "generated with/by" note, a sign-off trailer that names a bot rather than a person, or a line
+# describing the commit as the output of a code assistant. Every commit message should read as the
+# work it is, with no note of what wrote it.
+#
+# WHY THIS EXISTS. Every repo under downpipes/ once carried this guard only at .git/hooks/commit-msg,
+# which is untracked local state: a fresh clone or worktree never gets it, and .git/hooks/ is ignored
+# entirely once core.hooksPath points elsewhere (as it does here, for pre-push). Measured:
+# five of seven repos had set core.hooksPath to wire up pre-push, and every one of those five silently
+# stopped running commit-msg, because git only ever consults one hooks directory. The guard was present
+# in two repos and effective in one. This file is the fix: track the guard in the same directory that
+# pre-push already lives in, so wiring one hook cannot switch another one off.
+if grep -iEq '^co-authored-by:|generated (with|by)\b|^signed-off-by:.*(\[bot\]|\bbot\b|\bassistant\b|\bai\b)|\b(ai|code|language[- ]model)[- ]assistant\b|\bwritten by (an? )?(ai|bot|assistant)\b|🤖' "$1"; then
+  echo "commit-msg hook: automated-tool attribution in the message; rewrite it" >&2
+  exit 1
+fi

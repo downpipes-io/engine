@@ -1,0 +1,276 @@
+{
+  "$schema_note": "Recorded house-style debt. counts are EXACT and are per OCCURRENCE, as the units field declares: more fails as a regression, fewer fails as an unbanked cleanup, and an entry the tree no longer supports fails with the reason named. See the header of scripts/writing-rules-source.mjs.",
+  "units": {
+    "em-dash": "occurrence",
+    "en-dash": "occurrence",
+    "claim": "occurrence",
+    "banned-word": "occurrence"
+  },
+  "generated_against": "246 hit(s) across 48 file(s)",
+  "entries": {
+    ".gitignore": {
+      "counts": {
+        "em-dash": 2
+      },
+      "why": "Pre-existing when lint:prose took the whole tracked tree as its subject. Debt to rewrite, not an exemption."
+    },
+    "scripts/demo-reset.sh": {
+      "counts": {
+        "em-dash": 5
+      },
+      "why": "Pre-existing when lint:prose took the whole tracked tree as its subject. Debt to rewrite, not an exemption."
+    },
+    "scripts/deploy.sh": {
+      "counts": {
+        "em-dash": 3
+      },
+      "why": "Pre-existing when lint:prose took the whole tracked tree as its subject. Debt to rewrite, not an exemption."
+    },
+    "scripts/generate-keys.ts": {
+      "counts": {
+        "em-dash": 1
+      },
+      "why": "Pre-existing when lint:prose took the whole tracked tree as its subject. Debt to rewrite, not an exemption."
+    },
+    "scripts/stamp-build-id.mjs": {
+      "counts": {
+        "em-dash": 8
+      },
+      "why": "Pre-existing when lint:prose took the whole tracked tree as its subject. Debt to rewrite, not an exemption."
+    },
+    "scripts/sync-bindings.mjs": {
+      "counts": {
+        "em-dash": 1
+      },
+      "why": "Pre-existing when lint:prose took the whole tracked tree as its subject. Debt to rewrite, not an exemption."
+    },
+    "test/runtime/runtime.scheduler-do.test.mjs": {
+      "counts": {
+        "em-dash": 10
+      },
+      "why": "Pre-existing when lint:prose took the whole tracked tree as its subject. Debt to rewrite, not an exemption."
+    },
+    "test/validate-access.ts": {
+      "counts": {
+        "em-dash": 1
+      },
+      "why": "Pre-existing when lint:prose took the whole tracked tree as its subject. Debt to rewrite, not an exemption."
+    },
+    "test/validate-cf-config-discovery.ts": {
+      "counts": {
+        "em-dash": 5
+      },
+      "why": "Pre-existing when lint:prose took the whole tracked tree as its subject. Debt to rewrite, not an exemption."
+    },
+    "test/validate-cmp-compound-faults.ts": {
+      "counts": {
+        "em-dash": 12
+      },
+      "why": "Pre-existing when lint:prose took the whole tracked tree as its subject. Debt to rewrite, not an exemption."
+    },
+    "test/validate-config-change-control-harness.ts": {
+      "counts": {
+        "em-dash": 2
+      },
+      "why": "Pre-existing when lint:prose took the whole tracked tree as its subject. Debt to rewrite, not an exemption."
+    },
+    "test/validate-control-plane-autoheal.ts": {
+      "counts": {
+        "em-dash": 1
+      },
+      "why": "Pre-existing when lint:prose took the whole tracked tree as its subject. Debt to rewrite, not an exemption."
+    },
+    "test/validate-control-plane.ts": {
+      "counts": {
+        "em-dash": 2
+      },
+      "why": "Pre-existing when lint:prose took the whole tracked tree as its subject. Debt to rewrite, not an exemption."
+    },
+    "test/validate-cov-sched-scheduler-do-idp.ts": {
+      "counts": {
+        "em-dash": 1
+      },
+      "why": "Pre-existing when lint:prose took the whole tracked tree as its subject. Debt to rewrite, not an exemption."
+    },
+    "test/validate-cov-sched-scheduler-do-restore-approval.ts": {
+      "counts": {
+        "em-dash": 9
+      },
+      "why": "Pre-existing when lint:prose took the whole tracked tree as its subject. Debt to rewrite, not an exemption."
+    },
+    "test/validate-cov-sched-scheduler-do-routing.ts": {
+      "counts": {
+        "em-dash": 5
+      },
+      "why": "Pre-existing when lint:prose took the whole tracked tree as its subject. Debt to rewrite, not an exemption."
+    },
+    "test/validate-drill.ts": {
+      "counts": {
+        "em-dash": 1
+      },
+      "why": "Pre-existing when lint:prose took the whole tracked tree as its subject. Debt to rewrite, not an exemption."
+    },
+    "test/validate-expiry.ts": {
+      "counts": {
+        "em-dash": 2
+      },
+      "why": "Pre-existing when lint:prose took the whole tracked tree as its subject. Debt to rewrite, not an exemption."
+    },
+    "test/validate-heal-dests.ts": {
+      "counts": {
+        "em-dash": 2
+      },
+      "why": "Pre-existing when lint:prose took the whole tracked tree as its subject. Debt to rewrite, not an exemption."
+    },
+    "test/validate-idp-rollover-lockout.ts": {
+      "counts": {
+        "em-dash": 8
+      },
+      "why": "Pre-existing when lint:prose took the whole tracked tree as its subject. Debt to rewrite, not an exemption."
+    },
+    "test/validate-owner-action-dualcontrol-do-executed.ts": {
+      "counts": {
+        "em-dash": 1
+      },
+      "why": "Pre-existing when lint:prose took the whole tracked tree as its subject. Debt to rewrite, not an exemption."
+    },
+    "test/validate-owner-action-dualcontrol-harness.ts": {
+      "counts": {
+        "em-dash": 2
+      },
+      "why": "Pre-existing when lint:prose took the whole tracked tree as its subject. Debt to rewrite, not an exemption."
+    },
+    "test/validate-owner-action-dualcontrol-internals.ts": {
+      "counts": {
+        "em-dash": 1
+      },
+      "why": "Pre-existing when lint:prose took the whole tracked tree as its subject. Debt to rewrite, not an exemption."
+    },
+    "test/validate-owner-action-dualcontrol-redaction.ts": {
+      "counts": {
+        "em-dash": 3
+      },
+      "why": "Pre-existing when lint:prose took the whole tracked tree as its subject. Debt to rewrite, not an exemption."
+    },
+    "test/validate-owner-action-dualcontrol-router-executed.ts": {
+      "counts": {
+        "em-dash": 3
+      },
+      "why": "Pre-existing when lint:prose took the whole tracked tree as its subject. Debt to rewrite, not an exemption."
+    },
+    "test/validate-pipeline-runlog.ts": {
+      "counts": {
+        "em-dash": 2
+      },
+      "why": "Pre-existing when lint:prose took the whole tracked tree as its subject. Debt to rewrite, not an exemption."
+    },
+    "test/validate-restore-integrity-class.ts": {
+      "counts": {
+        "em-dash": 1
+      },
+      "why": "Pre-existing when lint:prose took the whole tracked tree as its subject. Debt to rewrite, not an exemption."
+    },
+    "test/validate-runlog-contention.ts": {
+      "counts": {
+        "em-dash": 1
+      },
+      "why": "Pre-existing when lint:prose took the whole tracked tree as its subject. Debt to rewrite, not an exemption."
+    },
+    "test/validate-scheduled-tests.ts": {
+      "counts": {
+        "em-dash": 1
+      },
+      "why": "Pre-existing when lint:prose took the whole tracked tree as its subject. Debt to rewrite, not an exemption."
+    },
+    "test/validate-sso-failure-class.ts": {
+      "counts": {
+        "em-dash": 7
+      },
+      "why": "Pre-existing when lint:prose took the whole tracked tree as its subject. Debt to rewrite, not an exemption."
+    },
+    "test/validate-support.ts": {
+      "counts": {
+        "em-dash": 30
+      },
+      "why": "Pre-existing when lint:prose took the whole tracked tree as its subject. Debt to rewrite, not an exemption."
+    },
+    "test/validate-verify-at-seal.ts": {
+      "counts": {
+        "em-dash": 4
+      },
+      "why": "Pre-existing when lint:prose took the whole tracked tree as its subject. Debt to rewrite, not an exemption."
+    },
+    "test/validate-worker-cron.ts": {
+      "counts": {
+        "em-dash": 1
+      },
+      "why": "Pre-existing when lint:prose took the whole tracked tree as its subject. Debt to rewrite, not an exemption."
+    },
+    "test/vectors/README.md": {
+      "counts": {
+        "em-dash": 3
+      },
+      "why": "Pre-existing when lint:prose took the whole tracked tree as its subject. Debt to rewrite, not an exemption."
+    },
+    "tools/emit-real-support-bundle.ts": {
+      "counts": {
+        "em-dash": 1
+      },
+      "why": "Pre-existing when lint:prose took the whole tracked tree as its subject. Debt to rewrite, not an exemption."
+    },
+    "tools/open-support-bundle.ts": {
+      "counts": {
+        "em-dash": 1
+      },
+      "why": "Pre-existing when lint:prose took the whole tracked tree as its subject. Debt to rewrite, not an exemption."
+    },
+    "tools/publish-channel.mjs": {
+      "counts": {
+        "em-dash": 22
+      },
+      "why": "Pre-existing when lint:prose took the whole tracked tree as its subject. Debt to rewrite, not an exemption."
+    },
+    "tools/support-corpus/scenarios-domains-b.ts": {
+      "counts": {
+        "em-dash": 3
+      },
+      "why": "Pre-existing when lint:prose took the whole tracked tree as its subject. Debt to rewrite, not an exemption."
+    },
+    "tools/support-corpus/scenarios-domains.ts": {
+      "counts": {
+        "em-dash": 20
+      },
+      "why": "Pre-existing when lint:prose took the whole tracked tree as its subject. Debt to rewrite, not an exemption."
+    },
+    "tools/support-corpus/scenarios-fixround.ts": {
+      "counts": {
+        "em-dash": 4
+      },
+      "why": "Pre-existing when lint:prose took the whole tracked tree as its subject. Debt to rewrite, not an exemption."
+    },
+    "tools/support-corpus/scenarios-healthy-variants.ts": {
+      "counts": {
+        "em-dash": 14
+      },
+      "why": "Pre-existing when lint:prose took the whole tracked tree as its subject. Debt to rewrite, not an exemption."
+    },
+    "tools/support-corpus/scenarios-multi.ts": {
+      "counts": {
+        "em-dash": 6
+      },
+      "why": "Pre-existing when lint:prose took the whole tracked tree as its subject. Debt to rewrite, not an exemption."
+    },
+    "wrangler.dev.toml": {
+      "counts": {
+        "em-dash": 3
+      },
+      "why": "Pre-existing when lint:prose took the whole tracked tree as its subject. Debt to rewrite, not an exemption."
+    },
+    "wrangler.toml": {
+      "counts": {
+        "em-dash": 7
+      },
+      "why": "Pre-existing when lint:prose took the whole tracked tree as its subject. Debt to rewrite, not an exemption."
+    }
+  }
+}

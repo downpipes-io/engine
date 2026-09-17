@@ -1,0 +1,49 @@
+# downpipes-io/engine
+
+> The in-account Cloudflare Worker that backs up Workers KV, R2, Secrets Store, D1 and
+> Cloudflare configuration, plus Workers script code and settings, Stream and Images
+> inventories and the Artifact Registry inventory, to the frozen downpipe/0.1.0 archive format,
+> on a schedule, into the customer's own destination bucket. It is the WRITER half of the
+> platform. The offline downpipe Go CLI (a separate repository) is the independent READER and
+> the recover-forever moat.
+
+No custody: the engine runs entirely in the customer's own Cloudflare account, never sends
+data or a Cloudflare token to the vendor, and holds only public recipient keys plus the signer.
+The run master is wrapped to a mandatory offline break-glass key the engine can never unwrap,
+so a compromise of the live account cannot read past archives.
+
+Licence: Elastic License v2 (source-available). The downpipe reader is MIT so recovery is
+never gated on the vendor. The wire-format identifier downpipe/0.1.0 is frozen and never renamed.
+
+## Architecture
+
+- Entry: src/index.ts (Worker fetch + scheduled handlers). GET /ready is an unauthenticated
+  readiness probe; the /admin/* surface is authenticated and reached over a service binding
+  from the console.
+- Durable Objects: SchedulerDO (schedules, run lock, runlog index) and RunSealDO (per-downpipe
+  sliced seal continuation for large environments).
+- Crypto and format: src/crypto/* (hybrid X25519 plus ML-KEM-1024, ML-DSA-87 signing, AES-256-GCM)
+  and src/format/* (the downpipe/0.1.0 container, canonical JSON, ULID, Merkle frontier, reader).
+
+## Recovery path
+
+Recovery never needs the vendor or Cloudflare. The offline downpipe CLI verifies the signed
+chain and freshness, then restores every record, given the archive plus the break-glass identity
+and the pinned signer public key. See SPEC.md and RECOVER.md in the downpipe repository.
+
+## Tests
+
+- npm run validate: the bespoke cross-implementation validators (the engine writer reproduced
+  against the Go reference vectors, byte for byte). This is the authoritative suite.
+- npm run test:runtime: the SchedulerDO concurrency invariants in a real workerd isolate (Miniflare).
+- npm run test:vitest: a starter vitest-pool-workers suite exercising the Worker fetch entrypoint
+  in real workerd.
+- npm run test:property: fast-check property tests over the crypto byte helpers and canonical JSON.
+- make demo (or DOWNPIPE_REPO=../downpipe npm run demo): the end-to-end writer to reader demo.
+
+## Pointers
+
+- README.md: capabilities, coverage scope, and the no-custody posture.
+- SECURITY.md: disclosure policy and the operational-key risk model.
+- docs/DEMO.md: the writer to reader demo, with prerequisites and numbered steps.
+- docs/OPERATIONS.md: deployment, large environments, and the licence/update activation ceremony.

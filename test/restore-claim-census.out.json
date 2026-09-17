@@ -1,0 +1,1316 @@
+{
+  "derivedAt": "2026-08-08T13:58:26.891Z",
+  "total": 66,
+  "cfConfigExcluded": 7,
+  "inScope": 59,
+  "proven": 33,
+  "results": [
+    {
+      "id": "reason:not the selected record",
+      "kind": "reason",
+      "file": "src/admin/restore-plan.ts",
+      "line": 60,
+      "core": "not the selected record",
+      "cfConfig": false,
+      "types": [
+        "kv",
+        "r2",
+        "d1",
+        "secrets",
+        "workers",
+        "stream",
+        "images"
+      ],
+      "provers": [
+        "validate-restore.ts"
+      ],
+      "proven": true,
+      "killedBy": [
+        "validate-restore.ts"
+      ],
+      "why": ""
+    },
+    {
+      "id": "reason:excluded by selector",
+      "kind": "reason",
+      "file": "src/admin/restore-plan.ts",
+      "line": 60,
+      "core": "excluded by selector",
+      "cfConfig": false,
+      "types": [
+        "kv",
+        "r2",
+        "d1",
+        "secrets",
+        "workers",
+        "stream",
+        "images"
+      ],
+      "provers": [
+        "validate-restore-fault-evidence.ts"
+      ],
+      "proven": false,
+      "killedBy": [],
+      "why": "every candidate validator stayed green with the promise mutated"
+    },
+    {
+      "id": "reason:restore out of band",
+      "kind": "reason",
+      "file": "src/admin/restore-plan.ts",
+      "line": 78,
+      "core": "restore out of band",
+      "cfConfig": false,
+      "types": [
+        "kv",
+        "r2",
+        "d1",
+        "secrets",
+        "workers",
+        "stream",
+        "images"
+      ],
+      "provers": [
+        "validate-restore-promises-by-type.ts",
+        "validate-restore.ts",
+        "validate-secrets-restore.ts"
+      ],
+      "proven": true,
+      "killedBy": [
+        "validate-restore.ts",
+        "validate-secrets-restore.ts"
+      ],
+      "why": ""
+    },
+    {
+      "id": "guidance:write-only values (secrets / certificate key",
+      "kind": "guidance",
+      "file": "src/admin/restore-plan.ts",
+      "line": 114,
+      "core": "write-only values (secrets / certificate keys), re-provision them; the snapshot holds the rest",
+      "cfConfig": false,
+      "types": [
+        "secrets"
+      ],
+      "provers": [],
+      "proven": false,
+      "killedBy": [],
+      "why": "no validator carries this literal at all"
+    },
+    {
+      "id": "guidance:re-create in dependency order (Access / load",
+      "kind": "guidance",
+      "file": "src/admin/restore-plan.ts",
+      "line": 116,
+      "core": "re-create in dependency order (Access / load balancers) from the snapshot",
+      "cfConfig": false,
+      "types": [
+        "kv",
+        "r2",
+        "d1",
+        "secrets",
+        "workers",
+        "stream",
+        "images"
+      ],
+      "provers": [
+        "validate-restore.ts"
+      ],
+      "proven": true,
+      "killedBy": [
+        "validate-restore.ts"
+      ],
+      "why": ""
+    },
+    {
+      "id": "guidance:this surface can re-apply in-console but is ",
+      "kind": "guidance",
+      "file": "src/admin/restore-plan.ts",
+      "line": 118,
+      "core": "this surface can re-apply in-console but is outside the approved surface list for this restore; widen the request and have it approved again, or replay it via the Cloudflare API from the verified snapshot",
+      "cfConfig": false,
+      "types": [
+        "kv",
+        "r2",
+        "d1",
+        "secrets",
+        "workers",
+        "stream",
+        "images"
+      ],
+      "provers": [
+        "validate-cf-config-write-generated.ts"
+      ],
+      "proven": true,
+      "killedBy": [
+        "validate-cf-config-write-generated.ts"
+      ],
+      "why": ""
+    },
+    {
+      "id": "guidance:supply an edit-scoped Cloudflare token under",
+      "kind": "guidance",
+      "file": "src/admin/restore-plan.ts",
+      "line": 120,
+      "core": "supply an edit-scoped Cloudflare token under Restore to re-apply this surface in-console, or replay it via the Cloudflare API from the verified snapshot",
+      "cfConfig": false,
+      "types": [
+        "kv",
+        "r2",
+        "d1",
+        "secrets",
+        "workers",
+        "stream",
+        "images"
+      ],
+      "provers": [
+        "validate-restore-promises-by-type.ts",
+        "validate-restore.ts"
+      ],
+      "proven": true,
+      "killedBy": [
+        "validate-restore.ts"
+      ],
+      "why": ""
+    },
+    {
+      "id": "guidance:replay via the Cloudflare API from the verif",
+      "kind": "guidance",
+      "file": "src/admin/restore-plan.ts",
+      "line": 121,
+      "core": "replay via the Cloudflare API from the verified snapshot",
+      "cfConfig": false,
+      "types": [
+        "kv",
+        "r2",
+        "d1",
+        "secrets",
+        "workers",
+        "stream",
+        "images"
+      ],
+      "provers": [
+        "validate-restore.ts"
+      ],
+      "proven": true,
+      "killedBy": [
+        "validate-restore.ts"
+      ],
+      "why": ""
+    },
+    {
+      "id": "reason:-byte in-account re-upload limit; re-upload ",
+      "kind": "reason",
+      "file": "src/admin/restore-plan.ts",
+      "line": 153,
+      "core": "-byte in-account re-upload limit; re-upload from the verified bytes (the backup captured it in full)",
+      "cfConfig": false,
+      "types": [
+        "kv",
+        "r2",
+        "d1",
+        "secrets",
+        "workers",
+        "stream",
+        "images"
+      ],
+      "provers": [
+        "validate-restore.ts"
+      ],
+      "proven": true,
+      "killedBy": [
+        "validate-restore.ts"
+      ],
+      "why": ""
+    },
+    {
+      "id": "reason:the captured value is an incompleteness mark",
+      "kind": "reason",
+      "file": "src/admin/restore-plan.ts",
+      "line": 306,
+      "core": "the captured value is an incompleteness marker (the object vanished or was skipped at capture), not real bytes; nothing to restore",
+      "cfConfig": false,
+      "types": [
+        "r2"
+      ],
+      "provers": [
+        "validate-restore-fault-evidence.ts",
+        "validate-restore.ts"
+      ],
+      "proven": true,
+      "killedBy": [
+        "validate-restore.ts"
+      ],
+      "why": ""
+    },
+    {
+      "id": "reason:D1 dump would not replay: malformed backup b",
+      "kind": "reason",
+      "file": "src/admin/restore-plan.ts",
+      "line": 315,
+      "core": "D1 dump would not replay: malformed backup body",
+      "cfConfig": false,
+      "types": [
+        "d1"
+      ],
+      "provers": [
+        "validate-restore.ts"
+      ],
+      "proven": true,
+      "killedBy": [
+        "validate-restore.ts"
+      ],
+      "why": ""
+    },
+    {
+      "id": "reason:media file, the captured value was a marker ",
+      "kind": "reason",
+      "file": "src/admin/restore-plan.ts",
+      "line": 350,
+      "core": "media file, the captured value was a marker (capture had failed), not file bytes",
+      "cfConfig": false,
+      "types": [
+        "stream",
+        "images"
+      ],
+      "provers": [
+        "validate-restore.ts"
+      ],
+      "proven": true,
+      "killedBy": [
+        "validate-restore.ts"
+      ],
+      "why": ""
+    },
+    {
+      "id": "reason:the object was written but could not be read",
+      "kind": "reason",
+      "file": "src/admin/restore-apply.ts",
+      "line": 179,
+      "core": "the object was written but could not be read back to verify; recover it offline with the downpipe CLI",
+      "cfConfig": false,
+      "types": [
+        "r2"
+      ],
+      "provers": [
+        "validate-d1-restore.ts",
+        "validate-restore-fault-evidence.ts",
+        "validate-seal-dest-gap-evidence.ts"
+      ],
+      "proven": false,
+      "killedBy": [],
+      "why": "every candidate validator stayed green with the promise mutated"
+    },
+    {
+      "id": "cls:readback-failed",
+      "kind": "cls",
+      "file": "src/admin/restore-apply.ts",
+      "line": 179,
+      "core": "readback-failed",
+      "cfConfig": false,
+      "types": [
+        "kv",
+        "r2",
+        "d1",
+        "secrets",
+        "workers",
+        "stream",
+        "images"
+      ],
+      "provers": [
+        "validate-restore-fault-evidence.ts",
+        "validate-support-posture-gaps-2.ts"
+      ],
+      "proven": false,
+      "killedBy": [],
+      "why": "every candidate validator stayed green with the promise mutated"
+    },
+    {
+      "id": "via:streamed-readback",
+      "kind": "via",
+      "file": "src/admin/restore-apply.ts",
+      "line": 180,
+      "core": "streamed-readback",
+      "cfConfig": false,
+      "types": [
+        "kv",
+        "r2",
+        "d1",
+        "secrets",
+        "workers",
+        "stream",
+        "images"
+      ],
+      "provers": [
+        "validate-restore-readback.ts",
+        "validate-restore.ts"
+      ],
+      "proven": true,
+      "killedBy": [
+        "validate-restore-readback.ts",
+        "validate-restore.ts"
+      ],
+      "why": ""
+    },
+    {
+      "id": "reason:the object was written but failed post-write",
+      "kind": "reason",
+      "file": "src/admin/restore-apply.ts",
+      "line": 189,
+      "core": "the object was written but failed post-write readback verification; recover it offline with the downpipe CLI",
+      "cfConfig": false,
+      "types": [
+        "r2"
+      ],
+      "provers": [
+        "validate-d1-restore.ts",
+        "validate-restore-fault-evidence.ts",
+        "validate-seal-dest-gap-evidence.ts"
+      ],
+      "proven": false,
+      "killedBy": [],
+      "why": "every candidate validator stayed green with the promise mutated"
+    },
+    {
+      "id": "reason:the captured value is an incompleteness mark",
+      "kind": "reason",
+      "file": "src/admin/restore-apply.ts",
+      "line": 218,
+      "core": "the captured value is an incompleteness marker (the object vanished or was skipped at capture), not real bytes; nothing written",
+      "cfConfig": false,
+      "types": [
+        "r2"
+      ],
+      "provers": [
+        "validate-restore-fault-evidence.ts",
+        "validate-restore.ts"
+      ],
+      "proven": false,
+      "killedBy": [],
+      "why": "every candidate validator stayed green with the promise mutated"
+    },
+    {
+      "id": "guidance:partial restore: the target D1 may be incons",
+      "kind": "guidance",
+      "file": "src/admin/restore-apply.ts",
+      "line": 249,
+      "core": "partial restore: the target D1 may be inconsistent; drop it and retry into a fresh database",
+      "cfConfig": false,
+      "types": [
+        "d1"
+      ],
+      "provers": [
+        "validate-restore-fault-evidence.ts",
+        "validate-restore.ts"
+      ],
+      "proven": true,
+      "killedBy": [
+        "validate-restore.ts"
+      ],
+      "why": ""
+    },
+    {
+      "id": "via:buffered-no-readback",
+      "kind": "via",
+      "file": "src/admin/restore-apply.ts",
+      "line": 272,
+      "core": "buffered-no-readback",
+      "cfConfig": false,
+      "types": [
+        "kv",
+        "r2",
+        "d1",
+        "secrets",
+        "workers",
+        "stream",
+        "images"
+      ],
+      "provers": [
+        "validate-restore-promises-by-type.ts",
+        "validate-restore-readback.ts",
+        "validate-restore.ts"
+      ],
+      "proven": true,
+      "killedBy": [
+        "validate-restore-promises-by-type.ts",
+        "validate-restore-readback.ts",
+        "validate-restore.ts"
+      ],
+      "why": ""
+    },
+    {
+      "id": "via:buffered-readback",
+      "kind": "via",
+      "file": "src/admin/restore-apply.ts",
+      "line": 280,
+      "core": "buffered-readback",
+      "cfConfig": false,
+      "types": [
+        "kv",
+        "r2",
+        "d1",
+        "secrets",
+        "workers",
+        "stream",
+        "images"
+      ],
+      "provers": [
+        "validate-freshness-replica-fallback.ts",
+        "validate-restore-promises-by-type.ts",
+        "validate-restore-readback.ts",
+        "validate-restore.ts"
+      ],
+      "proven": true,
+      "killedBy": [
+        "validate-restore-promises-by-type.ts",
+        "validate-restore-readback.ts",
+        "validate-restore.ts"
+      ],
+      "why": ""
+    },
+    {
+      "id": "reason:zone-scoped surface(s) would be written ther",
+      "kind": "reason",
+      "file": "src/admin/restore-apply.ts",
+      "line": 387,
+      "core": "zone-scoped surface(s) would be written there. Re-send with confirmDifferentZoneId set to the target zone id to proceed deliberately",
+      "cfConfig": false,
+      "types": [
+        "kv",
+        "r2",
+        "d1",
+        "secrets",
+        "workers",
+        "stream",
+        "images"
+      ],
+      "provers": [],
+      "proven": false,
+      "killedBy": [],
+      "why": "no validator carries this literal at all"
+    },
+    {
+      "id": "reason:integrity check failed",
+      "kind": "reason",
+      "file": "src/admin/restore-apply.ts",
+      "line": 406,
+      "core": "integrity check failed",
+      "cfConfig": false,
+      "types": [
+        "kv",
+        "r2",
+        "d1",
+        "secrets",
+        "workers",
+        "stream",
+        "images"
+      ],
+      "provers": [
+        "validate-admin-fault-evidence.ts",
+        "validate-container-version-gate.ts",
+        "validate-dest-fault-verify-at-seal.ts",
+        "validate-drill-window-precedence.ts",
+        "validate-drill.ts",
+        "validate-errlog.ts",
+        "validate-reader.ts",
+        "validate-restorability.ts",
+        "validate-restore-integrity-class.ts",
+        "validate-restore.ts",
+        "validate-router-sources.ts"
+      ],
+      "proven": true,
+      "killedBy": [
+        "validate-restore.ts"
+      ],
+      "why": ""
+    },
+    {
+      "id": "guidance:the image was uploaded but failed post-uploa",
+      "kind": "guidance",
+      "file": "src/admin/restore-apply.ts",
+      "line": 528,
+      "core": "the image was uploaded but failed post-upload readback verification; recover it offline with the downpipe CLI",
+      "cfConfig": false,
+      "types": [
+        "images"
+      ],
+      "provers": [
+        "validate-d1-restore.ts",
+        "validate-restore-fault-evidence.ts",
+        "validate-seal-dest-gap-evidence.ts"
+      ],
+      "proven": false,
+      "killedBy": [],
+      "why": "every candidate validator stayed green with the promise mutated"
+    },
+    {
+      "id": "guidance:the video was uploaded but its restored uid ",
+      "kind": "guidance",
+      "file": "src/admin/restore-apply.ts",
+      "line": 529,
+      "core": "the video was uploaded but its restored uid could not be confirmed; verify it in Cloudflare Stream or recover it offline with the downpipe CLI",
+      "cfConfig": false,
+      "types": [
+        "stream"
+      ],
+      "provers": [
+        "validate-restore-fault-evidence.ts",
+        "validate-seal-dest-gap-evidence.ts"
+      ],
+      "proven": false,
+      "killedBy": [],
+      "why": "every candidate validator stayed green with the promise mutated"
+    },
+    {
+      "id": "cls:media-upload",
+      "kind": "cls",
+      "file": "src/admin/restore-apply.ts",
+      "line": 530,
+      "core": "media-upload",
+      "cfConfig": false,
+      "types": [
+        "stream",
+        "images"
+      ],
+      "provers": [
+        "validate-support-posture-gaps-2.ts"
+      ],
+      "proven": false,
+      "killedBy": [],
+      "why": "every candidate validator stayed green with the promise mutated"
+    },
+    {
+      "id": "reason:media re-upload failed:",
+      "kind": "reason",
+      "file": "src/admin/restore-apply.ts",
+      "line": 546,
+      "core": "media re-upload failed:",
+      "cfConfig": false,
+      "types": [
+        "stream",
+        "images"
+      ],
+      "provers": [],
+      "proven": false,
+      "killedBy": [],
+      "why": "no validator carries this literal at all"
+    },
+    {
+      "id": "guidance:; recover the full run offline with the down",
+      "kind": "guidance",
+      "file": "src/admin/restore-sinks.ts",
+      "line": 158,
+      "core": "; recover the full run offline with the downpipe CLI (it runs on your machine with no Worker limits), or run a bounded in-account restore with maxRecords <=",
+      "cfConfig": false,
+      "types": [
+        "kv",
+        "r2",
+        "d1",
+        "secrets",
+        "workers",
+        "stream",
+        "images"
+      ],
+      "provers": [
+        "validate-d1-restore.ts",
+        "validate-restore-fault-evidence.ts",
+        "validate-seal-dest-gap-evidence.ts"
+      ],
+      "proven": false,
+      "killedBy": [],
+      "why": "every candidate validator stayed green with the promise mutated"
+    },
+    {
+      "id": "guidance:record(s) beyond maxRecords were not restore",
+      "kind": "guidance",
+      "file": "src/admin/restore-sinks.ts",
+      "line": 268,
+      "core": "record(s) beyond maxRecords were not restored; re-run with a higher maxRecords or recover the full run offline",
+      "cfConfig": false,
+      "types": [
+        "kv",
+        "r2",
+        "d1",
+        "secrets",
+        "workers",
+        "stream",
+        "images"
+      ],
+      "provers": [
+        "validate-d1-restore.ts",
+        "validate-restore.ts"
+      ],
+      "proven": true,
+      "killedBy": [
+        "validate-restore.ts"
+      ],
+      "why": ""
+    },
+    {
+      "id": "guidance:re-create the bindings + secrets from the ve",
+      "kind": "guidance",
+      "file": "src/admin/restore-sinks.ts",
+      "line": 300,
+      "core": "re-create the bindings + secrets from the verified settings snapshot (secret VALUES were never captured, the checklist lists their names/types to re-provision)",
+      "cfConfig": false,
+      "types": [
+        "secrets"
+      ],
+      "provers": [
+        "validate-restore-promises-by-type.ts",
+        "validate-workers-source.ts"
+      ],
+      "proven": true,
+      "killedBy": [
+        "validate-restore-promises-by-type.ts",
+        "validate-workers-source.ts"
+      ],
+      "why": ""
+    },
+    {
+      "id": "guidance:a version inventory only, informational; re-",
+      "kind": "guidance",
+      "file": "src/admin/restore-sinks.ts",
+      "line": 302,
+      "core": "a version inventory only, informational; re-deploy from the script content record",
+      "cfConfig": false,
+      "types": [
+        "kv",
+        "r2",
+        "d1",
+        "secrets",
+        "workers",
+        "stream",
+        "images"
+      ],
+      "provers": [
+        "validate-restore-promises-by-type.ts"
+      ],
+      "proven": true,
+      "killedBy": [
+        "validate-restore-promises-by-type.ts"
+      ],
+      "why": ""
+    },
+    {
+      "id": "guidance:re-create the cron triggers from the verifie",
+      "kind": "guidance",
+      "file": "src/admin/restore-sinks.ts",
+      "line": 304,
+      "core": "re-create the cron triggers from the verified schedules snapshot (each entry's cron expression), so the re-deployed Worker keeps its schedule",
+      "cfConfig": false,
+      "types": [
+        "kv",
+        "r2",
+        "d1",
+        "secrets",
+        "workers",
+        "stream",
+        "images"
+      ],
+      "provers": [
+        "validate-restore-promises-by-type.ts",
+        "validate-workers-source.ts"
+      ],
+      "proven": true,
+      "killedBy": [
+        "validate-restore-promises-by-type.ts",
+        "validate-workers-source.ts"
+      ],
+      "why": ""
+    },
+    {
+      "id": "guidance:re-deploy the script code from the verified ",
+      "kind": "guidance",
+      "file": "src/admin/restore-sinks.ts",
+      "line": 305,
+      "core": "re-deploy the script code from the verified content snapshot (wrangler deploy / the Workers API), then apply its settings record",
+      "cfConfig": false,
+      "types": [
+        "kv",
+        "r2",
+        "d1",
+        "secrets",
+        "workers",
+        "stream",
+        "images"
+      ],
+      "provers": [
+        "validate-restore-promises-by-type.ts",
+        "validate-restore.ts",
+        "validate-workers-source.ts"
+      ],
+      "proven": true,
+      "killedBy": [
+        "validate-restore-promises-by-type.ts",
+        "validate-restore.ts",
+        "validate-workers-source.ts"
+      ],
+      "why": ""
+    },
+    {
+      "id": "guidance:Workers script,",
+      "kind": "guidance",
+      "file": "src/admin/restore-sinks.ts",
+      "line": 306,
+      "core": "Workers script,",
+      "cfConfig": false,
+      "types": [
+        "workers"
+      ],
+      "provers": [],
+      "proven": false,
+      "killedBy": [],
+      "why": "no validator carries this literal at all"
+    },
+    {
+      "id": "guidance:Artifact Registry blob, re-push the reposito",
+      "kind": "guidance",
+      "file": "src/admin/restore-sinks.ts",
+      "line": 315,
+      "core": "Artifact Registry blob, re-push the repository via git (the verified blob is surfaced); a git push is not a REST upload, so it is not auto-restored",
+      "cfConfig": false,
+      "types": [
+        "artifacts"
+      ],
+      "provers": [
+        "validate-restore-promises-by-type.ts",
+        "validate-restore.ts"
+      ],
+      "proven": true,
+      "killedBy": [
+        "validate-restore-promises-by-type.ts",
+        "validate-restore.ts"
+      ],
+      "why": ""
+    },
+    {
+      "id": "guidance:Artifact Registry inventory, re-create the n",
+      "kind": "guidance",
+      "file": "src/admin/restore-sinks.ts",
+      "line": 316,
+      "core": "Artifact Registry inventory, re-create the namespace/repository from the verified snapshot, then git push",
+      "cfConfig": false,
+      "types": [
+        "artifacts"
+      ],
+      "provers": [
+        "validate-restore-promises-by-type.ts",
+        "validate-restore.ts"
+      ],
+      "proven": true,
+      "killedBy": [
+        "validate-restore-promises-by-type.ts",
+        "validate-restore.ts"
+      ],
+      "why": ""
+    },
+    {
+      "id": "guidance:media file, captured but not re-uploaded (th",
+      "kind": "guidance",
+      "file": "src/admin/restore-sinks.ts",
+      "line": 322,
+      "core": "media file, captured but not re-uploaded (the value was a capture marker, not file bytes)",
+      "cfConfig": false,
+      "types": [
+        "stream",
+        "images"
+      ],
+      "provers": [
+        "validate-restore.ts"
+      ],
+      "proven": true,
+      "killedBy": [
+        "validate-restore.ts"
+      ],
+      "why": ""
+    },
+    {
+      "id": "guidance:file, supply an edit-scoped Cloudflare token",
+      "kind": "guidance",
+      "file": "src/admin/restore-sinks.ts",
+      "line": 323,
+      "core": "file, supply an edit-scoped Cloudflare token under Restore to re-upload it in-account (images keep their id; a video gets a new uid), or re-upload from the verified bytes",
+      "cfConfig": false,
+      "types": [
+        "stream"
+      ],
+      "provers": [
+        "validate-restore-promises-by-type.ts",
+        "validate-restore.ts"
+      ],
+      "proven": true,
+      "killedBy": [
+        "validate-restore-promises-by-type.ts"
+      ],
+      "why": ""
+    },
+    {
+      "id": "guidance:inventory/metadata, informational; re-create",
+      "kind": "guidance",
+      "file": "src/admin/restore-sinks.ts",
+      "line": 326,
+      "core": "inventory/metadata, informational; re-create from the verified snapshot",
+      "cfConfig": false,
+      "types": [
+        "kv",
+        "r2",
+        "d1",
+        "secrets",
+        "workers",
+        "stream",
+        "images"
+      ],
+      "provers": [],
+      "proven": false,
+      "killedBy": [],
+      "why": "no validator carries this literal at all"
+    },
+    {
+      "id": "refusal:unsupported sink for sourceType",
+      "kind": "refusal",
+      "file": "src/admin/restore-sinks.ts",
+      "line": 343,
+      "core": "unsupported sink for sourceType",
+      "cfConfig": false,
+      "types": [
+        "kv",
+        "r2",
+        "d1",
+        "secrets",
+        "workers",
+        "stream",
+        "images"
+      ],
+      "provers": [
+        "validate-workers-source.ts"
+      ],
+      "proven": true,
+      "killedBy": [
+        "validate-workers-source.ts"
+      ],
+      "why": ""
+    },
+    {
+      "id": "refusal:is not present in the environment",
+      "kind": "refusal",
+      "file": "src/admin/restore-sinks.ts",
+      "line": 350,
+      "core": "is not present in the environment",
+      "cfConfig": false,
+      "types": [
+        "kv",
+        "r2",
+        "d1",
+        "secrets",
+        "workers",
+        "stream",
+        "images"
+      ],
+      "provers": [
+        "validate-seal-config-pressure.ts",
+        "validate-worker-adapter.ts"
+      ],
+      "proven": false,
+      "killedBy": [],
+      "why": "every candidate validator stayed green with the promise mutated"
+    },
+    {
+      "id": "reason:record failed its integrity check",
+      "kind": "reason",
+      "file": "src/admin/restore-verify.ts",
+      "line": 117,
+      "core": "record failed its integrity check",
+      "cfConfig": false,
+      "types": [
+        "kv",
+        "r2",
+        "d1",
+        "secrets",
+        "workers",
+        "stream",
+        "images"
+      ],
+      "provers": [
+        "validate-sched-pipeline-evidence.ts"
+      ],
+      "proven": false,
+      "killedBy": [],
+      "why": "every candidate validator stayed green with the promise mutated"
+    },
+    {
+      "id": "refusal:KV does not support streamed values; KV valu",
+      "kind": "refusal",
+      "file": "src/dest/restore-sink.ts",
+      "line": 152,
+      "core": "KV does not support streamed values; KV values are bounded",
+      "cfConfig": false,
+      "types": [
+        "kv"
+      ],
+      "provers": [],
+      "proven": false,
+      "killedBy": [],
+      "why": "no validator carries this literal at all"
+    },
+    {
+      "id": "refusal:is too large for the in-account path; recove",
+      "kind": "refusal",
+      "file": "src/dest/restore-sink.ts",
+      "line": 204,
+      "core": "is too large for the in-account path; recover it offline with the downpipe CLI (it is chained across segments and fully recoverable there)",
+      "cfConfig": false,
+      "types": [
+        "kv",
+        "r2",
+        "d1",
+        "secrets",
+        "workers",
+        "stream",
+        "images"
+      ],
+      "provers": [
+        "validate-restore-fault-evidence.ts",
+        "validate-seal-dest-gap-evidence.ts"
+      ],
+      "proven": false,
+      "killedBy": [],
+      "why": "every candidate validator stayed green with the promise mutated"
+    },
+    {
+      "id": "refusal:was absent on read-back (the bucket accepted",
+      "kind": "refusal",
+      "file": "src/dest/restore-sink.ts",
+      "line": 246,
+      "core": "was absent on read-back (the bucket accepted the write and does not hold it)",
+      "cfConfig": false,
+      "types": [
+        "r2"
+      ],
+      "provers": [
+        "validate-seal-dest-gap-evidence.ts"
+      ],
+      "proven": false,
+      "killedBy": [],
+      "why": "every candidate validator stayed green with the promise mutated"
+    },
+    {
+      "id": "refusal:carried no body on read-back (the store retu",
+      "kind": "refusal",
+      "file": "src/dest/restore-sink.ts",
+      "line": 247,
+      "core": "carried no body on read-back (the store returned a bodyless object)",
+      "cfConfig": false,
+      "types": [
+        "r2"
+      ],
+      "provers": [
+        "validate-seal-dest-gap-evidence.ts"
+      ],
+      "proven": false,
+      "killedBy": [],
+      "why": "every candidate validator stayed green with the promise mutated"
+    },
+    {
+      "id": "refusal:no restore sink bound for secret",
+      "kind": "refusal",
+      "file": "src/dest/restore-sink.ts",
+      "line": 313,
+      "core": "no restore sink bound for secret",
+      "cfConfig": false,
+      "types": [
+        "secrets"
+      ],
+      "provers": [],
+      "proven": false,
+      "killedBy": [],
+      "why": "no validator carries this literal at all"
+    },
+    {
+      "id": "refusal:has no runtime write path; restore it out of",
+      "kind": "refusal",
+      "file": "src/dest/restore-sink.ts",
+      "line": 316,
+      "core": "has no runtime write path; restore it out of band (Secrets Store bindings are read-only at runtime)",
+      "cfConfig": false,
+      "types": [
+        "secrets"
+      ],
+      "provers": [
+        "validate-seal-dest-gap-evidence.ts",
+        "validate-secrets-restore.ts"
+      ],
+      "proven": true,
+      "killedBy": [
+        "validate-secrets-restore.ts"
+      ],
+      "why": ""
+    },
+    {
+      "id": "refusal:secrets are restored whole, not streamed",
+      "kind": "refusal",
+      "file": "src/dest/restore-sink.ts",
+      "line": 324,
+      "core": "secrets are restored whole, not streamed",
+      "cfConfig": false,
+      "types": [
+        "secrets"
+      ],
+      "provers": [
+        "validate-secrets-restore.ts"
+      ],
+      "proven": true,
+      "killedBy": [
+        "validate-secrets-restore.ts"
+      ],
+      "why": ""
+    },
+    {
+      "id": "refusal:target-not-empty",
+      "kind": "refusal",
+      "file": "src/dest/restore-sink.ts",
+      "line": 517,
+      "core": "target-not-empty",
+      "cfConfig": false,
+      "types": [
+        "kv",
+        "r2",
+        "d1",
+        "secrets",
+        "workers",
+        "stream",
+        "images"
+      ],
+      "provers": [
+        "validate-seal-dest-gap-evidence.ts",
+        "validate-support-round5.ts"
+      ],
+      "proven": true,
+      "killedBy": [
+        "validate-support-round5.ts"
+      ],
+      "why": ""
+    },
+    {
+      "id": "refusal:D1 backups are restored whole, not streamed",
+      "kind": "refusal",
+      "file": "src/dest/restore-sink.ts",
+      "line": 574,
+      "core": "D1 backups are restored whole, not streamed",
+      "cfConfig": false,
+      "types": [
+        "d1"
+      ],
+      "provers": [
+        "validate-secrets-restore.ts"
+      ],
+      "proven": false,
+      "killedBy": [],
+      "why": "every candidate validator stayed green with the promise mutated"
+    },
+    {
+      "id": "via:media-image-readback",
+      "kind": "via",
+      "file": "src/admin/media-restore.ts",
+      "line": 55,
+      "core": "media-image-readback",
+      "cfConfig": false,
+      "types": [
+        "images"
+      ],
+      "provers": [
+        "validate-media-restore-readback.ts",
+        "validate-media-restore.ts",
+        "validate-restore-cross-account.ts",
+        "validate-restore-promises-by-type.ts",
+        "validate-restore.ts"
+      ],
+      "proven": true,
+      "killedBy": [
+        "validate-media-restore.ts"
+      ],
+      "why": ""
+    },
+    {
+      "id": "fault-class:over-size-cap",
+      "kind": "fault-class",
+      "file": "src/admin/media-restore.ts",
+      "line": 81,
+      "core": "over-size-cap",
+      "cfConfig": false,
+      "types": [
+        "kv",
+        "r2",
+        "d1",
+        "secrets",
+        "workers",
+        "stream",
+        "images"
+      ],
+      "provers": [
+        "validate-admin-idp-fault-evidence.ts"
+      ],
+      "proven": true,
+      "killedBy": [
+        "validate-admin-idp-fault-evidence.ts"
+      ],
+      "why": ""
+    },
+    {
+      "id": "fault-class:conflict-different-bytes",
+      "kind": "fault-class",
+      "file": "src/admin/media-restore.ts",
+      "line": 82,
+      "core": "conflict-different-bytes",
+      "cfConfig": false,
+      "types": [
+        "kv",
+        "r2",
+        "d1",
+        "secrets",
+        "workers",
+        "stream",
+        "images"
+      ],
+      "provers": [
+        "validate-admin-idp-fault-evidence.ts"
+      ],
+      "proven": true,
+      "killedBy": [
+        "validate-admin-idp-fault-evidence.ts"
+      ],
+      "why": ""
+    },
+    {
+      "id": "fault-class:conflict-unreadable",
+      "kind": "fault-class",
+      "file": "src/admin/media-restore.ts",
+      "line": 83,
+      "core": "conflict-unreadable",
+      "cfConfig": false,
+      "types": [
+        "kv",
+        "r2",
+        "d1",
+        "secrets",
+        "workers",
+        "stream",
+        "images"
+      ],
+      "provers": [
+        "validate-admin-idp-fault-evidence.ts"
+      ],
+      "proven": true,
+      "killedBy": [
+        "validate-admin-idp-fault-evidence.ts"
+      ],
+      "why": ""
+    },
+    {
+      "id": "fault-class:upload-failed",
+      "kind": "fault-class",
+      "file": "src/admin/media-restore.ts",
+      "line": 84,
+      "core": "upload-failed",
+      "cfConfig": false,
+      "types": [
+        "kv",
+        "r2",
+        "d1",
+        "secrets",
+        "workers",
+        "stream",
+        "images"
+      ],
+      "provers": [
+        "validate-admin-idp-fault-evidence.ts",
+        "validate-update-reason-redaction.ts"
+      ],
+      "proven": false,
+      "killedBy": [],
+      "why": "every candidate validator stayed green with the promise mutated"
+    },
+    {
+      "id": "fault-class:readback-unreadable",
+      "kind": "fault-class",
+      "file": "src/admin/media-restore.ts",
+      "line": 85,
+      "core": "readback-unreadable",
+      "cfConfig": false,
+      "types": [
+        "kv",
+        "r2",
+        "d1",
+        "secrets",
+        "workers",
+        "stream",
+        "images"
+      ],
+      "provers": [],
+      "proven": false,
+      "killedBy": [],
+      "why": "no validator carries this literal at all"
+    },
+    {
+      "id": "fault-class:readback-mismatch",
+      "kind": "fault-class",
+      "file": "src/admin/media-restore.ts",
+      "line": 86,
+      "core": "readback-mismatch",
+      "cfConfig": false,
+      "types": [
+        "kv",
+        "r2",
+        "d1",
+        "secrets",
+        "workers",
+        "stream",
+        "images"
+      ],
+      "provers": [
+        "validate-restore-fault-evidence.ts",
+        "validate-support.ts"
+      ],
+      "proven": false,
+      "killedBy": [],
+      "why": "every candidate validator stayed green with the promise mutated"
+    },
+    {
+      "id": "refusal:video exceeds the 200 MB direct-upload limit",
+      "kind": "refusal",
+      "file": "src/admin/media-restore.ts",
+      "line": 281,
+      "core": "video exceeds the 200 MB direct-upload limit; use the resumable (tus) path",
+      "cfConfig": false,
+      "types": [
+        "stream"
+      ],
+      "provers": [],
+      "proven": false,
+      "killedBy": [],
+      "why": "no validator carries this literal at all"
+    },
+    {
+      "id": "via:media-stream-exists",
+      "kind": "via",
+      "file": "src/admin/media-restore.ts",
+      "line": 305,
+      "core": "media-stream-exists",
+      "cfConfig": false,
+      "types": [
+        "stream"
+      ],
+      "provers": [
+        "validate-media-restore-readback.ts",
+        "validate-media-restore.ts",
+        "validate-restore-cross-account.ts",
+        "validate-restore-promises-by-type.ts",
+        "validate-restore.ts"
+      ],
+      "proven": true,
+      "killedBy": [
+        "validate-media-restore.ts"
+      ],
+      "why": ""
+    }
+  ]
+}

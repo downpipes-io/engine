@@ -1,0 +1,24 @@
+{
+  "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "_comment": "StrykerJS mutation-testing config (guardrails B7-3). GATING via the scheduled .github/workflows/mutation.yml (weekly + on demand): a run below thresholds.break fails. Project standard: break 90, high 95. Measured score 79.95% on 2026-06-22 (294 killed + 9 timeout of 379; 76 survived), which is BELOW the 90 break, so the gate fails until the surviving crypto/format mutants are killed to raise the score to the standard. Scoped tightly to the crypto and format byte/serialisation modules where mutation testing earns its cost. The command runner re-uses the existing fast/deterministic suites as the mutation oracle (the property tests plus the targeted crypto/format validators), so no extra test wiring is needed. Run with: npm run test:mutation",
+  "packageManager": "npm",
+  "testRunner": "command",
+  "commandRunner": {
+    "command": "node test/property/property-crypto-format.ts && node test/property/property-primitives.ts && node test/validate-crypto.ts && node test/validate-canonnum.ts && node test/validate-format-prims.ts && node test/validate-reader.ts && node test/validate-ulid.ts && node test/validate-bytes.ts"
+  },
+  "mutate": [
+    "src/crypto/bytes.ts",
+    "src/crypto/derive.ts",
+    "src/crypto/primitives.ts",
+    "src/format/canonjson.ts",
+    "src/format/canonnum.ts",
+    "src/format/ulid.ts"
+  ],
+  "ignorePatterns": ["dpstate-engine", ".worktrees", ".stryker-tmp", "coverage", "*.log"],
+  "reporters": ["clear-text", "progress", "html"],
+  "htmlReporter": { "fileName": "coverage/mutation/index.html" },
+  "thresholds": { "high": 95, "low": 90, "break": 90 },
+  "timeoutMS": 60000,
+  "concurrency": 2,
+  "tempDirName": ".stryker-tmp"
+}

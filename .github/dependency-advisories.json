@@ -1,0 +1,48 @@
+{
+  "$comment": [
+    "Every npm advisory this repository's trees carry, with the reason each one is still here.",
+    "scripts/dependency-advisory-gate.mjs reads this file and compares it against what `npm audit` reports",
+    "now, in both directions: an advisory that is not listed fails, and a listing the tree no longer",
+    "carries also fails. So this list cannot grow quietly and it cannot rot.",
+    "",
+    "The gate is copied byte for byte into every repository that has one and checks its own body against a",
+    "declared sha256 on every run. This file is the only place a repository says anything about itself, so",
+    "an edit belongs here rather than in the gate.",
+    "",
+    "THE PRODUCTION TREE IS NOT LISTED HERE AND CANNOT BE. There is no acknowledgement path for it at any",
+    "severity, and the gate refuses an entry below that turns up in the production tree."
+  ],
+  "trees": [
+    "."
+  ],
+  "productionTreeRule": "The production dependencies here are @noble/curves and @noble/post-quantum and nothing else. They are bundled into the Worker that reads a customer's Cloudflare configuration and writes the encrypted archive, so an advisory against them is an advisory against the integrity of every backup this engine takes and against the key handling around it. There is no wording that would make that acceptable, so no field is provided for writing one.",
+  "acknowledgedBuildTreeAdvisories": {
+    "$comment": [
+      "EMPTY, and that is a result rather than a default. On 2026-08-08 every tree in this repository was",
+      "taken to zero npm advisories by npm `overrides` that move a transitive package inside its own major",
+      "and leave wrangler, miniflare, workerd and @cloudflare/vitest-pool-workers untouched, so the worker",
+      "runtime the tests and the deploy use did not change. `npm audit fix --force` proposes a different",
+      "trade, a major bump of @cloudflare/vitest-pool-workers onto a miniflare 5 prerelease, and that was",
+      "refused: taking a prerelease worker runtime to close a build-tree advisory is a worse trade than",
+      "carrying it, and it would run the test pool on a different runtime from the deploy.",
+      "",
+      "An entry here needs a package, a severity that matches what npm reports today, the version that",
+      "fixes it, whether a fix is REACHABLE from here, and a reason a reader can check. An entry whose fix",
+      "is reachable additionally needs a reviewBy date, and the gate FAILS once that date passes. That is",
+      "the difference between recording a decision and burying one. Before writing one, try an override:",
+      "that is what emptied this list, and `npm audit fix` does not try it."
+    ]
+  },
+  "notCovered": {
+    "$comment": [
+      "What this repository's dependency channel does NOT see, named so that a green run is not read as",
+      "more than it is. This block is required: the gate fails if it is missing or if an entry carries no",
+      "reason, and it prints in full on every run whatever the verdict."
+    ],
+    "github-security-api-channels": "Code scanning and secret scanning are off at the repository setting, measured against the API on 2026-08-08 rather than assumed: code-scanning/analyses answers 403 'Code Security must be enabled for this repository' and secret-scanning/alerts answers 404 'Secret scanning is disabled on this repository'. Both are paid features on a private repository and are the owner's call. Dependabot alerts answer 200 to a personal access token and are NOT read by this gate. The job it runs in is scoped to `contents: read`, which cannot reach dependabot/alerts at all: that endpoint needs the vulnerability-alerts grant. So reading them from here is a permissions decision rather than a line of code, and it is worth making: on 2026-08-08 a Dependabot alert naming a manifest_path was the only thing pointing at a second lockfile in the harness repository that no check in that repository audited.",
+    "non-npm-ecosystems": "npm audit reads package-lock.json, so it cannot see the GitHub Actions pins in .github/workflows, which Dependabot does watch. An advisory against a pinned action reaches this repository through a Dependabot pull request and through nothing else. The sibling website repository's website/scripts/security-posture-gate.mjs closes this by cross-checking the Dependabot alert list against what npm audit saw; that cross-check is deliberately not duplicated here, because it needs a credential decision in the job rather than a line of code.",
+    "the-wider-website-gate": "This gate answers one question, npm advisories in every lockfile in this repository, and it is copied byte for byte into console, engine, control-plane, docs and harness. The website repository does NOT carry a copy: its website/scripts/security-posture-gate.mjs already answers a strictly wider question over the same npm channel plus GitHub's code scanning, secret scanning, dependency review and Dependabot APIs, and a second gate beside it would be two instruments grading one channel. That is the one deliberate divergence in this family and it is written down here rather than left to be discovered.",
+    "licences": "Nothing here checks a dependency's licence. This gate reads severities. Licence review belongs to the dependency-review action, which needs GitHub Advanced Security on a private repository and does not run.",
+    "copy-parity-residue": "Each copy of the gate checks its own body against the declared digest, so a pass that edits one copy reddens that repository's CI on that push and two copies that both pass are the same bytes. What that does NOT catch is a pass that edits the body AND reissues the digest in one repository only: that copy is self-consistent and the family has silently forked. The residue is real, it is the same residue control-plane/scripts/sibling-freshness-copy-gate.mjs uses a cross-repository arm for, and it is smaller than the failure it replaces, which was nobody checking at all."
+  }
+}
