@@ -24,7 +24,7 @@ import type { XmlAttr } from "./xml-node.ts";
 export function isNameStartChar(cp: number): boolean {
   // ":" is permitted in a qualified name (prefix separator); "_" too. Letters A-Z a-z. Code points >= 0x80 are
   // allowed (covers Unicode letters used in some IdPs' attribute names without a full table).
-  if (cp === 0x5f || cp === 0x3a) return true;
+  if (cp === 0x5f /* _ */ || cp === 0x3a /* : */) return true;
   if (cp >= 0x41 && cp <= 0x5a) return true; // A-Z
   if (cp >= 0x61 && cp <= 0x7a) return true; // a-z
   if (cp >= 0x80) return true;
@@ -34,7 +34,7 @@ export function isNameStartChar(cp: number): boolean {
 export function isNameChar(cp: number): boolean {
   if (isNameStartChar(cp)) return true;
   if (cp >= 0x30 && cp <= 0x39) return true; // 0-9
-  if (cp === 0x2d || cp === 0x2e) return true;
+  if (cp === 0x2d /* - */ || cp === 0x2e /* . */) return true;
   return false;
 }
 
@@ -108,7 +108,7 @@ export function validateEntityRefs(raw: string): { ok: true } | { ok: false; rea
   let i = 0;
   while (i < raw.length) {
     const ch = raw.charCodeAt(i);
-    if (ch !== 0x26) {
+    if (ch !== 0x26 /* & */) {
       i++;
       continue;
     }

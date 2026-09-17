@@ -78,7 +78,10 @@ env:
   # engine checkout's origin/main to its pin, for a stated and sound reason, and that makes every
   # HEAD..origin/main guard inside that checkout compute 0 whatever the pin is. A guard that cannot tell those
   # two zeroes apart is decoration, so every line these gates print carries the sha beside the number.
-  DOWNPIPES_REQUIRE_SIBLING_FRESHNESS: "1"
+  # The only sibling this public workflow checks out is the downpipe reader, pinned to a release tag on
+  # purpose, so its lag against its own main is unknown by construction and the requirement below can
+  # never be met here. It stays on in the private workflow, which checks out default branches.
+  DOWNPIPES_REQUIRE_SIBLING_FRESHNESS: "0"
 
 jobs:
   typecheck:
@@ -166,7 +169,6 @@ jobs:
         working-directory: engine
         env:
           REQUIRE_DOWNPIPE: "1"
-          DOWNPIPES_REQUIRE_SIBLING_FRESHNESS: ""
           # The downpipe checkout above is pinned to a release tag on purpose, so it is behind its own
           # main whenever the reader has moved on; the doc validators grade against the pinned tag.
           DOWNPIPES_ALLOW_STALE_SIBLINGS: "downpipe"
@@ -356,7 +358,6 @@ jobs:
         working-directory: engine
         env:
           REQUIRE_DOWNPIPE: "1"
-          DOWNPIPES_REQUIRE_SIBLING_FRESHNESS: ""
           # The downpipe checkout above is pinned to a release tag on purpose, so it is behind its own
           # main whenever the reader has moved on; the doc validators grade against the pinned tag.
           DOWNPIPES_ALLOW_STALE_SIBLINGS: "downpipe"
