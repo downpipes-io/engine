@@ -33,7 +33,7 @@ import { x25519, ed25519 } from "@noble/curves/ed25519.js";
 import { mlkemKeygen, mldsaKeygen } from "../src/crypto/pq.ts";
 import { buildArchive, type RecipientEntry, type Signer, type WriteRecord } from "../src/format/writer.ts";
 import { loadSigner, verifierFrom } from "../src/keys-env.ts";
-import { openRun, type ObjectStore } from "../src/format/reader.ts";
+import { openRun, type ObjectStore, type Run } from "../src/format/reader.ts";
 import { parseIdentity } from "../src/crypto/keys.ts";
 import { KVSource } from "../src/sources/kv.ts";
 import { R2Source } from "../src/sources/r2.ts";
@@ -325,7 +325,7 @@ async function emitAndVerify(signer: Signer, verifier: { ed: Uint8Array; mldsa: 
   // every shard hash and every record hash. If the descriptors had perturbed the signed bytes
   // in a way the reader did not expect, this would throw, so a clean open IS the signature
   // proof for the descriptor-bearing manifest.
-  let run;
+  let run: Run;
   try {
     run = await openRun(store, RUN_ID, identity, verifier, {});
     ok("descriptor-bearing run opens and the manifest signature verifies", true);

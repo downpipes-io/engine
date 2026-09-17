@@ -583,7 +583,7 @@ async function main(): Promise<void> {
     const restoreTest = cronHealth.restoreTest;
     ok("an out-of-vocabulary runlog-anomaly kind drops the whole row", payrollIntegrity !== undefined && (payrollIntegrity.runlogAnomalies as unknown[]).length === 2);
     ok("an out-of-vocabulary restore-test class drops the whole row (never a downpipe named with no reason)", restoreTest !== undefined && Object.keys(restoreTest.skips as object).length === 1);
-    ok("an out-of-vocabulary seal attemptClass is dropped from the list, not carried", ((bundle.sealFaults as Array<Record<string, unknown>>).find((r) => r.kind === "completion-lost")?.attemptClasses as string[]).join(",") === "transient,destination");
+    ok("an out-of-vocabulary seal attemptClass is dropped from the list, not carried", ((bundle.sealFaults as Array<Record<string, unknown>>).find((r) => r.kind === "completion-lost")!.attemptClasses as string[]).join(",") === "transient,destination");
     ok("an object key in a checkpointField seam is dropped", (bundle.sealFaults as Array<Record<string, unknown>>).find((r) => r.kind === "checkpoint-invalid")?.checkpointField === undefined);
     ok("an object key in a 12-hex digest seam is dropped (no message can ride a digest field)", !JSON.stringify(bundle.integrityFaults).includes(SENTINELS.objectKey));
     ok("a hostile beacon error class inside the ring is dropped", ((bundle.beacon as { recent: Array<Record<string, unknown>> }).recent[3]!).errorClass === undefined);

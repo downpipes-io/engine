@@ -475,7 +475,7 @@ async function main(): Promise<void> {
 
       // The apply audit records both identities, and the receipt anchor recorded a restore-verified event.
       const applyEvt = (await readAudit("action=restore-apply&outcome=success")).find((e) => (e.target as { planHash?: string }).planHash === planHash);
-      ok("the apply is audited as success with maker + checker", applyEvt?.actorEmail === APPROVER && (applyEvt?.target as { approverEmail?: string }).approverEmail === APPROVER2);
+      ok("the apply is audited as success with maker + checker", applyEvt?.actorEmail === APPROVER && (applyEvt!.target as { approverEmail?: string }).approverEmail === APPROVER2);
       const verifiedEvt = (await readAudit("action=restore-verified")).find((e) => (e.target as { runId?: string }).runId === RUN_ID);
       ok("the restore receipt was anchored as a restore-verified audit event", verifiedEvt !== undefined && (verifiedEvt.target as { receiptSha384?: string }).receiptSha384 !== undefined);
 

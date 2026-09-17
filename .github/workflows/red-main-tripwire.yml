@@ -94,7 +94,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: audit
           disable-sudo: true
@@ -105,7 +105,7 @@ jobs:
       # behaviour, but it is the property the zizmor suppression above rests on and a reader should be able
       # to confirm it from this file instead of from checkout's documentation. The code this job executes is
       # therefore always main's, never the graded run's.
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { ref: main, persist-credentials: false, fetch-depth: 1 }
       # No setup-node and no npm ci ON PURPOSE. The runner image ships a node new enough for this script,
       # which imports nothing outside node: builtins, and every dependency this workflow does not take is a

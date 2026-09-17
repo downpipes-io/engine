@@ -145,7 +145,7 @@ async function testSendEmail(): Promise<void> {
   // A throwing send() -> email-send-failed, never throws.
   {
     let threw = false;
-    let r;
+    let r: Awaited<ReturnType<typeof sendEmail>> | undefined;
     try {
       r = await sendEmail(envWith({ EMAIL: throwingEmail(), EMAIL_FROM: "alerts@example.com" }), msg);
     } catch {

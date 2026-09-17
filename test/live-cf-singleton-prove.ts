@@ -128,7 +128,9 @@ function flipOf(v: unknown): unknown | undefined {
 function damagePaths(node: unknown, path: Array<string | number> = []): Damage[] {
   const found: Damage[] = [];
   if (Array.isArray(node)) {
-    node.forEach((v, i) => found.push(...damagePaths(v, [...path, i])));
+    node.forEach((v, i) => {
+      found.push(...damagePaths(v, [...path, i]));
+    });
   } else if (isPlainObject(node)) {
     for (const [k, v] of Object.entries(node)) {
       if (SERVER_STAMPED.has(k) || NAMING.has(k) || READ_ONLY_META.has(k)) continue;

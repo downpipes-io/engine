@@ -188,7 +188,9 @@ async function main(): Promise<void> {
       ok("the wire carries NO raw CR/LF anywhere (octet-counting adds none; the shaper escaped the MSG)", !/[\r\n]/.test(new TextDecoder().decode(wire)));
       const frames = parseOctetFrames(wire);
       ok("one RFC 6587 frame per event (3 events -> exactly 3 frames), buffer fully consumed", frames.length === 3);
-      frames.forEach((f, i) => assertRecord(`cef frame ${i}`, f, events[i]!, "cef"));
+      frames.forEach((f, i) => {
+        assertRecord(`cef frame ${i}`, f, events[i]!, "cef");
+      });
       // The three outcomes map to the three distinct syslog severities in the PRI (110 info / 107 error / 108 warn).
       const pris = frames.map((f) => Number(RFC5424.exec(f.record)![1]));
       ok("distinct outcomes yield distinct PRIs (success 110 / failed 107 / denied 108)", pris[0] === 110 && pris[1] === 107 && pris[2] === 108);
@@ -203,7 +205,9 @@ async function main(): Promise<void> {
       ok("leef delivery reports ok:true", r.ok === true);
       const frames = parseOctetFrames(concatChunks(cap.chunks));
       ok("one frame per event (2 -> 2)", frames.length === 2);
-      frames.forEach((f, i) => assertRecord(`leef frame ${i}`, f, events[i]!, "leef"));
+      frames.forEach((f, i) => {
+        assertRecord(`leef frame ${i}`, f, events[i]!, "leef");
+      });
       const firstMsg = (RFC5424.exec(frames[0]!.record) as unknown as [string, string, string, string, string, string, string, string, string])[8];
       ok("the LEEF MSG declares LEEF:2.0 with the '^' delimiter", firstMsg.startsWith("LEEF:2.0|Maelstrom AI|Downpipes|") && firstMsg.includes("|^|"));
     }

@@ -75,9 +75,10 @@ function extractTomlArray(source: string, field: string): string[] | null {
   if (inner === undefined) return null;
   const out: string[] = [];
   const itemRe = /'''([\s\S]*?)'''|"((?:[^"\\]|\\.)*)"|'([^']*)'/g;
-  let item: RegExpExecArray | null;
-  while ((item = itemRe.exec(inner)) !== null) {
+  let item: RegExpExecArray | null = itemRe.exec(inner);
+  while (item !== null) {
     out.push(item[1] !== undefined ? item[1] : item[2] !== undefined ? item[2].replace(/\\(.)/g, "$1") : (item[3] ?? ""));
+    item = itemRe.exec(inner);
   }
   return out;
 }
