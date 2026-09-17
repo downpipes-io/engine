@@ -360,7 +360,7 @@
     "fast-check": "^4.10.1",
     "knip": "^6.17.1",
     "madge": "^8.0.0",
-    "typescript": "^6.0.3",
+    "typescript": "^7.0.2",
     "vitest": "^4.1.11",
     "wrangler": "~4.116.0"
   },
