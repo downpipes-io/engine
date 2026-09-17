@@ -99,7 +99,7 @@ for (const name of GO_FILES) {
         "If the Go file changed deliberately, re-vendor it and update test/vectors/spec/SPEC_SHA384.",
     );
   }
-  goSource.set(name, bytes.toString("utf8"));
+  goSource.set(name, new TextDecoder().decode(bytes));
 }
 
 const downpipeRepo = process.env.DOWNPIPE_REPO;
@@ -132,7 +132,7 @@ if (downpipeRepo) {
     sourceLabel = `${join(downpipeRepo, "internal", "spec")}/`;
     for (const name of GO_FILES) {
       const liveBytes = live.get(name)!;
-      goSource.set(name, liveBytes.toString("utf8"));
+      goSource.set(name, new TextDecoder().decode(liveBytes));
       if (sha384(liveBytes) === sha384(vendoredBytes.get(name)!)) {
         ok(`DOWNPIPE_REPO ${name} is byte-identical to the vendored engine copy (no drift)`);
       } else {

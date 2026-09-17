@@ -127,7 +127,7 @@ if (downpipeRepo) {
   }
 }
 
-const schema = JSON.parse(schemaBytes.toString("utf8"));
+const schema = JSON.parse(new TextDecoder().decode(schemaBytes));
 // strict:false because schema.json is the canonical published schema, authored for general
 // JSON-Schema validators and the Go reader; it uses conditional `then.required` shapes that ajv's
 // strict authoring mode flags even though they are valid draft 2020-12. We validate the data against

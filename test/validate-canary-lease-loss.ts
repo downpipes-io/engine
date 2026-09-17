@@ -149,7 +149,9 @@ const DOSES: Dose[] = [
   { label: "1ms", elapsedMs: 1, expired: false },
   { label: "1min", elapsedMs: 60_000, expired: false },
   { label: "half the lease", elapsedMs: Math.floor(CANARY_LEASE_MS / 2), expired: false },
-  { label: "LEASE-1ms", elapsedMs: CANARY_LEASE_MS - 1, expired: false },
+  // One second under, not one millisecond: the subject reads the real clock after the seed, so a probe
+  // inside the scheduler's jitter band would expire on its own before the code saw it.
+  { label: "LEASE-1s", elapsedMs: CANARY_LEASE_MS - 1000, expired: false },
   { label: "LEASE exactly", elapsedMs: CANARY_LEASE_MS, expired: true },
   { label: "LEASE+1ms", elapsedMs: CANARY_LEASE_MS + 1, expired: true },
   { label: "2x LEASE", elapsedMs: CANARY_LEASE_MS * 2, expired: true },
@@ -182,10 +184,10 @@ async function sectionEdge(): Promise<void> {
   console.log("\nD. the edge exactly, asserted from both sides");
   const below = subject();
   await seedDests(below.storage);
-  await seedFlight(below.storage, { inFlight: true, elapsedMs: CANARY_LEASE_MS - 1 });
+  await seedFlight(below.storage, { inFlight: true, elapsedMs: CANARY_LEASE_MS - 1000 });
   await below.stub.canaryRunNow();
-  ok("D1 at LEASE-1ms the lease is HELD", (await readState(below.storage)).inFlight === true);
-  ok("D2 at LEASE-1ms nothing is booked at all", (await readLosses(below.storage)) === undefined);
+  ok("D1 at LEASE-1s the lease is HELD", (await readState(below.storage)).inFlight === true);
+  ok("D2 at LEASE-1s nothing is booked at all", (await readLosses(below.storage)) === undefined);
 
   const at = subject();
   await seedDests(at.storage);

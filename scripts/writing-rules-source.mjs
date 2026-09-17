@@ -476,8 +476,7 @@ function trackedFiles(repo) {
     maxBuffer: 1 << 28,
     stdio: ["ignore", "pipe", "pipe"],
   });
-  return out
-    .toString("utf8")
+  return new TextDecoder().decode(out)
     .split("\0")
     .filter((s) => s !== "");
 }
@@ -512,7 +511,7 @@ function readSubject(repo, tracked) {
       continue;
     }
     files.push(rel);
-    texts.set(rel, buf.toString("utf8"));
+    texts.set(rel, new TextDecoder().decode(buf));
   }
   return { files, texts, ungradedReason, binary };
 }
