@@ -22,7 +22,7 @@
 //
 // Run with `node test/validate-framework-posture-claims.ts`.
 //
-// House style: Australian English, no em dashes, no rule-of-three, no AI attribution.
+// House style: Australian English, no em dashes, no rule-of-three.
 
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";

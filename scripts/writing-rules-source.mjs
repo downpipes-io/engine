@@ -68,7 +68,7 @@
  * nothing on stderr over a tree it never read. See planInvocation(), which answers for the whole command
  * line in one place, and checkArbitration(), which sweeps every combination of it.
  *
- * House style: Australian English, no em dashes, no rule-of-three, no AI attribution.
+ * House style: Australian English, no em dashes, no rule-of-three.
  */
 
 import { execFileSync, spawnSync } from "node:child_process";

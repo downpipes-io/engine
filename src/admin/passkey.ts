@@ -40,11 +40,7 @@ import { CborReader, COSE_ES256, COSE_RS256, mapGetText, parseCoseKey, verifySig
 // DO, the passkey validator) keeps working unchanged.
 import { PasskeyError } from "./passkey-types.ts";
 
-export type { AuthData, ClientData } from "./passkey-authdata.ts";
-export { parseAuthData, parseClientData } from "./passkey-authdata.ts";
-export type { CoseKey } from "./passkey-cose.ts";
-export { COSE_ES256, COSE_RS256, derEcdsaToRaw, parseCoseKey, verifySignature } from "./passkey-cose.ts";
-export type { PasskeyReason } from "./passkey-types.ts";
+export { derEcdsaToRaw, parseCoseKey } from "./passkey-cose.ts";
 export { errId, PasskeyError, StoredKeyCorruptError } from "./passkey-types.ts";
 
 // sha256 is the WebAuthn-mandated hash (the rpIdHash, the clientDataJSON hash, and the user-handle

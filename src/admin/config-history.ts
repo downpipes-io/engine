@@ -37,20 +37,11 @@ import { type ConfigSnapshot, serialiseSnapshot } from "./config-snapshot.ts";
 
 // Re-export the plain-English diff layer so existing callers keep importing these by name from
 // config-history.ts. They live in ./config-diff.ts.
-export type { ChangeKind, ConfigChange } from "./config-diff.ts";
+export type { ConfigChange } from "./config-diff.ts";
 export { diffConfig, SUMMARY_MAX_CHANGES, summarise } from "./config-diff.ts";
 // Re-export the snapshot layer (shapes + projection + serialisation) so existing callers keep importing
 // these by name from config-history.ts. They live in ./config-snapshot.ts.
 export type {
-  ConfigCoverageInventory,
-  ConfigCustomRole,
-  ConfigDownpipe,
-  ConfigExpiryItem,
-  ConfigGroupRole,
-  ConfigNotifyChannel,
-  ConfigNotifyRule,
-  ConfigRiskAccept,
-  ConfigRoleGrant,
   ConfigSnapshot,
   SnapshotInput,
 } from "./config-snapshot.ts";

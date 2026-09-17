@@ -12,7 +12,7 @@
 // fixture, and the oracle sidecar this corpus test needs. NET-ZERO: fake data, a harness-minted key
 // (never a customer key), an ephemeral out dir; no estate, bucket, network, seed or spend.
 //
-// House style: Australian English, no em dashes, no rule-of-three, no AI attribution.
+// House style: Australian English, no em dashes, no rule-of-three.
 
 import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";

@@ -26,10 +26,10 @@ import type { OidcTestConfig } from "./idp-test-oidc.ts";
 import { testOidcConnection } from "./idp-test-oidc.ts";
 import type { SamlTestConfig } from "./idp-test-saml.ts";
 import { testSamlConnection } from "./idp-test-saml.ts";
-import type { CheckStatus, IdpTestCheck, IdpTestResult } from "./idp-test-shared.ts";
+import type { IdpTestCheck, IdpTestResult } from "./idp-test-shared.ts";
 import { finalise, screenFetchUrl } from "./idp-test-shared.ts";
 
-export type { CheckStatus, IdpTestCheck, IdpTestResult, OidcTestConfig, SamlTestConfig };
+export type { IdpTestCheck, IdpTestResult };
 // Re-export the moved symbols so importers (the route, the validator) are unchanged by the split.
 export { finalise, screenFetchUrl, testOidcConnection, testSamlConnection };
 

@@ -43,7 +43,7 @@
 // the defect through the real extractor, so a future edit that drops the blanking fails HERE, loudly, instead
 // of quietly restoring the blindness.
 //
-// House style: Australian English, no em dashes, no rule-of-three, no AI attribution.
+// House style: Australian English, no em dashes, no rule-of-three.
 
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";

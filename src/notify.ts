@@ -180,7 +180,7 @@ export function buildAlert(config: Pick<DownpipeConfig, "id" | "name">, history:
 // authority-boundary validator), WEBHOOK_TIMEOUT_MS and deliverPayload all live in the leaf
 // ./notify/types.ts (which breaks the notify.ts<->notify/channels/* cycle). Re-exported so callers that
 // import them by name from notify.ts keep working.
-export { deliverPayload, isAllowedWebhookUrl, canonicaliseBareHost, isInternalSinkHost, WEBHOOK_TIMEOUT_MS } from "./notify/types.ts";
+export { deliverPayload, isAllowedWebhookUrl, canonicaliseBareHost, isInternalSinkHost } from "./notify/types.ts";
 
 // =============================================================================================
 // NOTIFICATION CHANNELS, EVENTS, ROUTING, DELIVERY and the DIGEST flush (contract section 2)
@@ -194,8 +194,8 @@ export { deliverPayload, isAllowedWebhookUrl, canonicaliseBareHost, isInternalSi
 // unchanged.
 
 // Channel-facing types + cosmetic helper + the success-class digest cadence, from the leaf.
-export type { AckOutcome, ChannelDeliveryResult, ChannelKind, DeliveryFailCode, DigestPeriod, NotifyChannel, NotifyEmission, NotifyEvent, ResolvedSinkVerdict, Severity, SinkScreenVerdict } from "./notify/types.ts";
-export { ACK_OUTCOMES, classifyHttpDeliveryStatus, classifyNetworkFailure, classifyReplication, DELIVERY_FAIL_CODES, isRunEvictionRisk, NOTIFY_EVENT_NAMES, RESOLVED_SINK_VERDICTS, SINK_SCREEN_VERDICTS, sanitiseEmailPlatformCode, screenSinkHost, severityEmoji } from "./notify/types.ts";
+export type { AckOutcome, ChannelKind, DeliveryFailCode, DigestPeriod, NotifyChannel, NotifyEmission, NotifyEvent, ResolvedSinkVerdict, Severity, SinkScreenVerdict } from "./notify/types.ts";
+export { ACK_OUTCOMES, classifyHttpDeliveryStatus, classifyReplication, DELIVERY_FAIL_CODES, isRunEvictionRisk, NOTIFY_EVENT_NAMES, RESOLVED_SINK_VERDICTS, SINK_SCREEN_VERDICTS, sanitiseEmailPlatformCode, screenSinkHost } from "./notify/types.ts";
 // The daily/weekly digest flush layer, from ./notify-digest.ts.
 export type { DigestBatch, DigestSummary, PendingDigestEntry } from "./notify-digest.ts";
 export {
@@ -207,13 +207,12 @@ export {
   summariseDigest,
 } from "./notify-digest.ts";
 // The channels/events/routing/delivery layer, from ./notify-routing.ts.
-export type { DeliveryRecord, NotifyHistoryEntry, NotifyRule, ResolvedDelivery } from "./notify-routing.ts";
+export type { DeliveryRecord, NotifyHistoryEntry, NotifyRule } from "./notify-routing.ts";
 export {
   deliverEmission,
   routeEngineNotification,
   deliverToChannel,
   isNotifyEvent,
-  isSeverity,
   isSuccessClass,
   NOTIFY_CHANNEL_PREFIX,
   NOTIFY_HISTORY_CAP,

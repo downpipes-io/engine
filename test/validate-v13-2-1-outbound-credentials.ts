@@ -21,7 +21,7 @@
 //
 // Run with `node test/validate-v13-2-1-outbound-credentials.ts`.
 //
-// House style: Australian English, no em dashes, no rule-of-three, no AI attribution.
+// House style: Australian English, no em dashes, no rule-of-three.
 
 import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";

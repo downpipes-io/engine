@@ -21,7 +21,7 @@ import type { CrawlEvent, Meter, ResumableSource, Selector, SourceAdapter, Sourc
 // The sizing constants and the resume-token codec live in sibling modules (d1-reader.ts holds the
 // byte/page bounds and the D1 read surface; d1-token.ts holds the resume token shape and codec).
 // They are re-exported below so importers of d1.ts see the same names.
-export { D1_EXPORT_SIZE_LIMIT, D1_PAGE_BYTE_LIMIT, D1_PAGE_TARGET_BYTES, D1_ROWS_PER_PAGE } from "./d1-reader.ts";
+export { D1_EXPORT_SIZE_LIMIT, D1_PAGE_BYTE_LIMIT, D1_ROWS_PER_PAGE } from "./d1-reader.ts";
 
 // A D1 database is backed up as a RESUMABLE SEQUENCE of bounded records the sliced seal can
 // checkpoint BETWEEN, not as one whole-database value sealed in a single invocation. The records

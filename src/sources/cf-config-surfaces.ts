@@ -38,26 +38,24 @@
 
 // Re-export the console catalogue (per-surface selection metadata) + the label helper. They live in
 // ./cf-config-catalogue.ts.
-export { type CfConfigSurfaceMeta, cfConfigCatalogue, surfaceLabel } from "./cf-config-catalogue.ts";
+export { cfConfigCatalogue } from "./cf-config-catalogue.ts";
+/** @knipignore Label helper for the built-but-unwired cf-config restore diff-preview (see diffConfig). Wire or remove (P3). */
+export { surfaceLabel } from "./cf-config-catalogue.ts";
 // Re-export the core types + client + paginator + read-builders so existing callers keep importing them
 // by name from cf-config-surfaces.ts. They live in ./cf-config-core.ts.
 export {
-  CF_PAGINATION_MAX_PAGES,
-  CF_PAGINATION_PER_PAGE,
   type CfApi,
   CfApiError,
   type CfConfigSurface,
   type CfPage,
   CfPaginationTruncated,
-  type CfResultInfo,
-  type CfScope,
   type ConfigWriteResult,
   isCfPlanEntitlementError,
   makeCfApi,
   paginate,
-  type RestoreTier,
 } from "./cf-config-core.ts";
-export { type ConfigDiff, diffConfig } from "./cf-config-diff.ts";
+/** @knipignore Restore diff-preview for cf-config, built but not wired into a route (see surfaceLabel). Wire or remove (P3). */
+export { diffConfig } from "./cf-config-diff.ts";
 
 // Re-export the registry array, the derived counts and surfaceById. They live in ./cf-config-registry.ts.
 export {
@@ -68,9 +66,6 @@ export {
   CF_CONFIG_TIER_COUNTS,
   surfaceById,
 } from "./cf-config-registry.ts";
-// Re-export the shared ConfigChange shape and the restore diff PREVIEW so existing callers keep importing
-// them by name from cf-config-surfaces.ts.
-export type { ConfigChange } from "./cf-config-shared.ts";
 
 // CF_CONFIG_IDENTITY_ID is the reserved record name of the self-identifying record every cf-config crawl
 // emits FIRST: its value records WHICH account/zone this backup is for ({ v, accountId, zoneId?, zoneName? }),

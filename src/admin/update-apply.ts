@@ -55,7 +55,7 @@ export type UpdateOutcome = "no-update" | "dry-run" | "refused" | "applied" | "r
 // StepLog, ArtefactMeta, LiveVersionShare, DeployDriver and HealthGate are defined in update-types.ts and
 // re-exported at the foot of this module so this module's public surface is unchanged.
 export type { ArtefactMeta, DeployDriver, HealthGate, LiveVersionShare, ReadbackResult, StepLog } from "./update-types.ts";
-export { liveSingleVersion, msg } from "./update-types.ts";
+export { liveSingleVersion } from "./update-types.ts";
 
 import type { ReadbackResult } from "./update-types.ts";
 
@@ -428,11 +428,6 @@ export async function runSafeApply(driver: DeployDriver, gate: HealthGate, input
 
 export {
   type RampInput,
-  type RampOutcome,
-  type RampResult,
-  type RampSettleArgs,
-  type RampSettleOutcome,
-  type RampSettleResult,
   rampPercentageValid,
   settleAfterRamp,
   startGradualRamp,
@@ -440,10 +435,5 @@ export {
 // The standalone rollback and the opt-in gradual ramp were split into sibling modules to keep this
 // file under the size budget. They are re-exported here so this module's public surface is unchanged and every
 // existing importer of update-apply.ts keeps working. See update-rollback.ts and update-ramp.ts.
-export {
-  type RollbackOutcome,
-  runStandaloneRollback,
-  type StandaloneRollbackArgs,
-  type StandaloneRollbackResult,
-} from "./update-rollback.ts";
+export { runStandaloneRollback } from "./update-rollback.ts";
 

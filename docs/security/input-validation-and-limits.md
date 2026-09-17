@@ -39,11 +39,11 @@ campaign" binds the whole account, and is checked one request or one campaign at
 
 | Limit | Value | Scope | Where enforced |
 |-------|-------|-------|----------------|
-| Mutating admin requests per window | 120 per 60 s | per subject (one shared `token` bucket for the bare-token break-glass) | `RATE_LIMIT_MAX_PER_WINDOW` at `src/sched/scheduler-do-limits.ts:651` |
-| Unauthenticated `/admin/auth/*` ceremony requests | 30 per 60 s | per IP | `AUTH_RATE_LIMIT_MAX_PER_WINDOW` at `src/sched/scheduler-do-limits.ts:665` |
-| Bare `ADMIN_TOKEN` compares | 10 per 60 s | per IP | `ADMIN_TOKEN_RATE_LIMIT_MAX_PER_WINDOW` at `src/sched/scheduler-do-limits.ts:674` |
-| Recovery-code attempts | 5 per 60 s | per IP | `RECOVERY_RATE_MAX_PER_IP` at `src/sched/scheduler-do-limits.ts:734` |
-| Recovery-code attempts | 5 per 60 s | per email | `RECOVERY_RATE_MAX_PER_EMAIL` at `src/sched/scheduler-do-limits.ts:735` |
+| Mutating admin requests per window | 120 per 60 s | per subject (one shared `token` bucket for the bare-token break-glass) | `RATE_LIMIT_MAX_PER_WINDOW` at `src/sched/scheduler-do-limits.ts:650` |
+| Unauthenticated `/admin/auth/*` ceremony requests | 30 per 60 s | per IP | `AUTH_RATE_LIMIT_MAX_PER_WINDOW` at `src/sched/scheduler-do-limits.ts:664` |
+| Bare `ADMIN_TOKEN` compares | 10 per 60 s | per IP | `ADMIN_TOKEN_RATE_LIMIT_MAX_PER_WINDOW` at `src/sched/scheduler-do-limits.ts:673` |
+| Recovery-code attempts | 5 per 60 s | per IP | `RECOVERY_RATE_MAX_PER_IP` at `src/sched/scheduler-do-limits.ts:733` |
+| Recovery-code attempts | 5 per 60 s | per email | `RECOVERY_RATE_MAX_PER_EMAIL` at `src/sched/scheduler-do-limits.ts:734` |
 | Audit-feed pulls | 120 per 60 s | per ingest client id | `INGEST_PULL_RATE_LIMIT_MAX_PER_WINDOW` at `src/admin/support-ingest.ts:226` |
 | Downpipes per bulk create | 100 (10 while config approval is on) | account-global, per request | `BULK_DOWNPIPES_MAX` at `src/sched/config-validate.ts:97` |
 | Run cadence floor | 60 s | per downpipe | `cadenceSeconds` at `src/sched/config-validate.ts:162` |
@@ -60,12 +60,12 @@ campaign" binds the whole account, and is checked one request or one campaign at
 | Prune approval lifetime | 24 h | per request | `PRUNE_APPROVAL_TTL_MS` at `src/admin/prune-approvals.ts:84` |
 | Dry-run preview rows | 50 | per request | `SAMPLE_CAP` at `src/admin/restore-sinks.ts:139` |
 | In-account restore records | 200 | per request | `MAX_IN_ACCOUNT_RESTORE_RECORDS` at `src/admin/restore-sinks.ts:149` |
-| Run-history ring | 50 runs | per downpipe | `RING_CAP` at `src/sched/scheduler-do-limits.ts:741` |
+| Run-history ring | 50 runs | per downpipe | `RING_CAP` at `src/sched/scheduler-do-limits.ts:740` |
 | Audit chain entries retained | 10000 | account-global | `AUDIT_CAP` at `src/admin/audit.ts:93` |
 | Audit page size | 500 | per request | `AUDIT_PAGE_MAX` at `src/admin/audit.ts:269` |
 | Drill-evidence rows retained | 500 | account-global | `DRILL_EVIDENCE_CAP` at `src/sched/scheduler-do-records.ts:320` |
-| Config-history versions retained | 2000 | account-global | `CONFIG_HISTORY_CAP` at `src/admin/config-history.ts:79` |
-| Downpipes per fleet drill | 5000 | account-global, per campaign | `FLEET_DRILL_MAX` at `src/sched/scheduler-do-limits.ts:752` |
+| Config-history versions retained | 2000 | account-global | `CONFIG_HISTORY_CAP` at `src/admin/config-history.ts:70` |
+| Downpipes per fleet drill | 5000 | account-global, per campaign | `FLEET_DRILL_MAX` at `src/sched/scheduler-do-limits.ts:751` |
 | Change number length | 64 | per request | `CHANGE_NUMBER_MAX` at `src/admin/change-ref.ts:37` |
 | Change reason length | 500 | per request | `CHANGE_REASON_MAX` at `src/admin/change-ref.ts:38` |
 | STS session duration | 900 to 43200 s | per destination | `STS_DURATION_MAX` at `src/dest/factory-validators.ts:134` |
@@ -562,7 +562,7 @@ prune approval the same two windows (`PRUNE_APPROVAL_TTL_MS` at
 
 ### 9.1 `RING_CAP`
 
-`RING_CAP` = `50` at `src/sched/scheduler-do-limits.ts:752`. The per-downpipe run-history ring holds
+`RING_CAP` = `50` at `src/sched/scheduler-do-limits.ts:740`. The per-downpipe run-history ring holds
 the 50 most recent runs. When a run is appended, the ring is shifted from the front until it is
 within the cap (`hist.length > RING_CAP` at `src/sched/scheduler-do-scheduling.ts:306`). The durable
 record is the signed RUNLOG in the archive.
@@ -572,7 +572,7 @@ record is the signed RUNLOG in the archive.
 `AUDIT_CAP` = `10000` at `src/admin/audit.ts:93`. The tamper-evident audit chain retained in the DO
 holds at most 10,000 entries. Past the cap the oldest entries are rolled over, not silently
 dropped: the DO records the earliest retained sequence number and the cumulative rolled-over count
-under `AUDIT_ROLLOVER_KEY` at `src/sched/scheduler-do-limits.ts:905`
+under `AUDIT_ROLLOVER_KEY` at `src/sched/scheduler-do-limits.ts:897`
 (`rolledOverCount` at `src/sched/scheduler-do-audit.ts:209`). `GET /admin/audit/verify` surfaces
 the count, and `GET /admin/audit/export` carries the chain head hash so an export is verifiable
 without the live DO.
@@ -778,12 +778,12 @@ is the limiter-specific complement to that model.
 
 ### 17.1 The window and the counter
 
-`RATE_LIMIT_WINDOW_MS` = `60_000` at `src/sched/scheduler-do-limits.ts:644`. A fixed window costs
+`RATE_LIMIT_WINDOW_MS` = `60_000` at `src/sched/scheduler-do-limits.ts:643`. A fixed window costs
 one storage read and one write per check on the single-threaded DO; a burst can straddle two
 windows, which is acceptable for an anti-automation limiter.
 
 `rateCheck` reads the stored window for the key (`RATE_LIMIT_PREFIX` = `"ratelimit:"` at
-`src/sched/scheduler-do-limits.ts:635`). With no live window it opens one at `now` and admits.
+`src/sched/scheduler-do-limits.ts:634`). With no live window it opens one at `now` and admits.
 Inside a live window it refuses when `count + cost` would exceed the bucket's `max`
 (`cur.count + cost > max` at `src/sched/scheduler-do.ts:814`), reporting `retryAfterMs` as the
 time left in the window (`retryAfterMs` at `src/sched/scheduler-do.ts:813`). A refused request
@@ -792,7 +792,7 @@ does not increment the counter. A request without an explicit `max` uses
 
 ### 17.2 Per-subject limit on mutating admin routes
 
-`RATE_LIMIT_MAX_PER_WINDOW` = `120` at `src/sched/scheduler-do-limits.ts:651`.
+`RATE_LIMIT_MAX_PER_WINDOW` = `120` at `src/sched/scheduler-do-limits.ts:650`.
 
 The mutating admin routes call `rateLimited` at `src/admin/router-core.ts:303` after the caller
 is resolved and before the handler runs; GET routes are exempt. `test/validate-ratelimit.ts` in
@@ -812,12 +812,12 @@ blocks a verified operator's recovery action.
 
 Two limiters key on `CF-Connecting-IP`, because there is no verified identity yet:
 
-- `AUTH_RATE_LIMIT_MAX_PER_WINDOW` = `30` at `src/sched/scheduler-do-limits.ts:665` bounds the
+- `AUTH_RATE_LIMIT_MAX_PER_WINDOW` = `30` at `src/sched/scheduler-do-limits.ts:664` bounds the
   `/admin/auth/*` ceremony routes (register and login, begin and finish). `authRateLimited` at
   `src/admin/router-core.ts:612` keys the bucket `ip:<address>` (`ip:${ip}` at
   `src/admin/router-core.ts:624`) and is called from every auth-flow route
   (`authRateLimited` at `src/admin/router-auth-flow.ts:49`).
-- `ADMIN_TOKEN_RATE_LIMIT_MAX_PER_WINDOW` = `10` at `src/sched/scheduler-do-limits.ts:674` bounds
+- `ADMIN_TOKEN_RATE_LIMIT_MAX_PER_WINDOW` = `10` at `src/sched/scheduler-do-limits.ts:673` bounds
   the bare `ADMIN_TOKEN` compare. `adminTokenRateLimitedViaDO` at `src/admin/router-session.ts:335`
   keys the bucket `admin-token-ip:<address>` (`admin-token-ip:${ip}` at
   `src/admin/router-session.ts:341`).
@@ -845,15 +845,15 @@ password brute force) covers this section and the recovery-code and audit-feed l
 
 ### 17.4 Per-IP and per-email limits on recovery codes
 
-`RECOVERY_RATE_WINDOW_MS` = `60_000` at `src/sched/scheduler-do-limits.ts:733`,
+`RECOVERY_RATE_WINDOW_MS` = `60_000` at `src/sched/scheduler-do-limits.ts:732`,
 `RECOVERY_RATE_MAX_PER_IP` = `5` at `src/sched/scheduler-do-limits.ts:734` and
-`RECOVERY_RATE_MAX_PER_EMAIL` = `5` at `src/sched/scheduler-do-limits.ts:735`.
+`RECOVERY_RATE_MAX_PER_EMAIL` = `5` at `src/sched/scheduler-do-limits.ts:734`.
 
 A recovery-code sign-in must pass both buckets (`recoveryRateAllow` at
 `src/sched/scheduler-do-recovery.ts:514`): the email bucket `email:<canonical email>` (a malformed
 email spends the shared `email:_invalid` bucket) and the IP bucket `ip:<address>`
 (`recoveryRateAllow` at `src/sched/scheduler-do-recovery.ts:363`). The buckets live in the
-`recovery-rate:` namespace (`RECOVERY_RATE_PREFIX` at `src/sched/scheduler-do-limits.ts:732`). The
+`recovery-rate:` namespace (`RECOVERY_RATE_PREFIX` at `src/sched/scheduler-do-limits.ts:731`). The
 limiter fails closed: a storage fault denies the attempt (`recovery-limiter-unavailable` at
 `src/sched/scheduler-do-recovery.ts:537`). A denied attempt does not increment the counter, so a
 caller cannot extend their own lockout past one window.
@@ -910,7 +910,7 @@ identity-sessions-and-files.md section 2.6.
 
 ## 18. Config History Cap
 
-`CONFIG_HISTORY_CAP` = `2000` at `src/admin/config-history.ts:79`. The DO retains at most 2000
+`CONFIG_HISTORY_CAP` = `2000` at `src/admin/config-history.ts:70`. The DO retains at most 2000
 config versions. Past the cap the oldest versions roll off while the sequence stays monotonic
 (`countAfter > CONFIG_HISTORY_CAP` at `src/sched/scheduler-do-config-version.ts:131`), and the
 retained chain stays verifiable from its first retained version.
@@ -946,7 +946,7 @@ duration must be an integer in that range, else
 
 ## 21. Fleet Drill Cap
 
-`FLEET_DRILL_MAX` = `5000` at `src/sched/scheduler-do-limits.ts:752`. One fleet-drill campaign may
+`FLEET_DRILL_MAX` = `5000` at `src/sched/scheduler-do-limits.ts:751`. One fleet-drill campaign may
 enqueue at most 5000 downpipes; a larger selection is refused with
 `fleet drill exceeds the 5000-downpipe cap; narrow it with a downpipeIds subset`
 (`FLEET_DRILL_MAX` at `src/sched/scheduler-do-observability.ts:618`).
@@ -955,16 +955,16 @@ enqueue at most 5000 downpipes; a larger selection is refused with
 
 ## 22. IdP Connection Field Bounds
 
-`validateIdpConnection` at `src/admin/idpconn.ts:55` bounds every field of a native OIDC, OAuth2
+`validateIdpConnection` at `src/admin/idpconn.ts:54` bounds every field of a native OIDC, OAuth2
 or SAML connection at the write boundary.
 
-- `id` must satisfy `CONN_ID_PATTERN` at `src/admin/identity.ts:242`
+- `id` must satisfy `CONN_ID_PATTERN` at `src/admin/identity.ts:241`
   (`^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$`), else
   `id must be 1 to 64 chars of lowercase letters, digits and hyphen (no leading/trailing hyphen)`
-  at `src/admin/idpconn.ts:58`. A duplicate id is refused (`already exists` at
-  `src/admin/idpconn.ts:59`).
+  at `src/admin/idpconn.ts:57`. A duplicate id is refused (`already exists` at
+  `src/admin/idpconn.ts:58`).
 - `label`: 1 to `LABEL_MAX` = `128` at `src/admin/idpconn-validators.ts:35` characters
-  (`label must be 1 to` at `src/admin/idpconn.ts:62`).
+  (`label must be 1 to` at `src/admin/idpconn.ts:61`).
 - `presetId`: at most `PRESET_ID_MAX` = `64` at `src/admin/idpconn-validators.ts:41` characters.
 - `clientId`: at most `CLIENT_ID_MAX` = `512` at `src/admin/idpconn-validators.ts:36` characters.
 - `scopes`: at most `SCOPES_MAX` = `32` at `src/admin/idpconn-validators.ts:38` entries, each at

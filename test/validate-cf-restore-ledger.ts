@@ -27,7 +27,7 @@
 // fixture would have to be re-pinned on every legitimate writer edit, which is the hand-maintained pin this
 // whole design refuses. A gate whose failing branches are unreachable is a gate that cannot fail.
 //
-// House style: Australian English, no em dashes, no rule-of-three, no AI attribution.
+// House style: Australian English, no em dashes, no rule-of-three.
 
 import { rmSync } from "node:fs";
 import { dirname, join } from "node:path";

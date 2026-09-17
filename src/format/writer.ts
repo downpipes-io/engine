@@ -25,10 +25,10 @@ import { type RunlogEntry, signRunlog, thisRunEntry } from "./writer-runlog.ts";
 
 export type { RecordMeta, RecordSealResult, SegmentRef } from "./writer-record.ts";
 export { buildRecordLine, chunkCount, segmentObjectKey, singleSegment } from "./writer-record.ts";
-export type { RecipientEntry, RootSealParams, ShardSealParams, Signer } from "./writer-root.ts";
+export type { RecipientEntry, Signer } from "./writer-root.ts";
 export { buildSignedRoot, sealShardManifest, signerFingerprint } from "./writer-root.ts";
 export type { RunlogEntry } from "./writer-runlog.ts";
-export { parseRunlog, signRunlog, thisRunEntry } from "./writer-runlog.ts";
+export { parseRunlog, signRunlog } from "./writer-runlog.ts";
 
 /**
  * One record to write into an archive: its source type and name, either a buffered value (small

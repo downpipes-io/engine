@@ -22,7 +22,7 @@ import type { Destination, WormPolicy } from "./types.ts";
 // config-anomalies.ts can decide what this factory will DISCARD using the very functions that discard it,
 // with no import cycle). They are re-exported here VERBATIM, so every existing importer of
 // "./factory.ts" -- the admin router, the scheduler DO's dest-config mixin, the validators -- is unchanged.
-export { addressingRejected, addressingRejection, assumeRolePolicyRejection, type AssumeRolePolicy, type AzureEntraDirectory, azureEntraDirectoryRejection, STORAGE_CLASSES, STS_DURATION_MAX, STS_DURATION_MIN, validateAddressing, validateAssumeRolePolicy, validateAzureEntraDirectory, validateStorageClass, validateWormPolicyValue, wormPolicyRejection } from "./factory-validators.ts";
+export { addressingRejection, assumeRolePolicyRejection, type AssumeRolePolicy, type AzureEntraDirectory, azureEntraDirectoryRejection, validateAddressing, validateAssumeRolePolicy, validateAzureEntraDirectory, validateStorageClass, validateWormPolicyValue, wormPolicyRejection } from "./factory-validators.ts";
 
 /**
  * The console-set destination: the S3-shaped credentials an Owner stores from the Destinations

@@ -39,13 +39,12 @@ import { parseXml } from "./parser.ts";
 // The standard-base64 decoder + the X.509/DER certificate extractors live in response-cert.ts (a sibling
 // split out so each module stays a coherent unit under 500 lines). decodeBase64Std is used below to decode
 // the SAMLResponse POST value; pemToSpki/certValidity drive the pinned-cert verify path. pemToSpki,
-// PemToSpkiResult, certNotAfter, certValidity and CertValidity are RE-EXPORTED here so every existing
+// certNotAfter, certValidity and pemToSpki are RE-EXPORTED here so every existing
 // importer of response.ts (idp-test.ts, scheduler-do.ts) keeps working unchanged.
 import { certValidity, decodeBase64Std, pemToSpki } from "./response-cert.ts";
 import type { XmlElement } from "./xml-node.ts";
 import { isElement, localName } from "./xml-node.ts";
 
-export type { CertValidity, PemToSpkiResult } from "./response-cert.ts";
 export { certNotAfter, certValidity, pemToSpki } from "./response-cert.ts";
 
 // The pinned-cert health ledger. This module is PURE (no env, no DO stub, no network -- deliberately: it

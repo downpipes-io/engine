@@ -32,7 +32,7 @@
 //
 // Run with `node test/validate-attended-cadence-policy.ts`.
 //
-// House style: Australian English, no em dashes, no rule-of-three, no AI attribution.
+// House style: Australian English, no em dashes, no rule-of-three.
 
 import { ok, failureCount, buildContext } from "./validate-owner-action-dualcontrol-harness.ts";
 import { verdictReached } from "./lib/verdict-guard.ts";

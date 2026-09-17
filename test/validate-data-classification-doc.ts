@@ -33,7 +33,7 @@
 //
 // Run with `node test/validate-data-classification-doc.ts [--require]`.
 //
-// House style: Australian English, no em dashes, no rule-of-three, no AI attribution.
+// House style: Australian English, no em dashes, no rule-of-three.
 
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";

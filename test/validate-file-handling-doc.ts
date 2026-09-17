@@ -31,7 +31,7 @@
 // Run with `node test/validate-file-handling-doc.ts [--require]`. Overrides: DOWNPIPES_CONSOLE_ROOT,
 // DOWNPIPES_DOWNPIPE_ROOT, DOWNPIPES_CONTROL_PLANE_ROOT, DOWNPIPES_INTERNAL_DOCS_ROOT.
 //
-// House style: Australian English, no em dashes, no rule-of-three, no AI attribution.
+// House style: Australian English, no em dashes, no rule-of-three.
 
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";

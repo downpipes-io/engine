@@ -15,7 +15,7 @@
 // scripts/sibling-freshness.mjs diverged on their own main while two written statements said they must
 // not, and the requirement had been recorded twice and changed nothing. A published package is the
 // correct-in-principle answer and is refused on the same ground
-// control-plane/scripts/sibling-freshness-copy-gate.mjs refuses it: version-pinned per repository, the copies would
+// the sibling-freshness copy gate refuses it: version-pinned per repository, the copies would
 // drift by PIN instead of by bytes, and a stale pin is silent. What is taken here is duplication that a
 // gate polices, and the policing is cheaper than the sibling-freshness case because a self-digest needs
 // no peer on disk at all.
@@ -46,8 +46,8 @@
 // EVERY TREE, NOT THE ROOT TREE. A repository can hold more than one lockfile, and auditing the root and
 // printing a repository-wide verdict is a false negative rather than a partial answer. This gate walks
 // the checkout for package-lock.json, audits every one it finds, and FAILS on any it finds that the
-// config's `trees` list does not declare. The case is not hypothetical: harness's root tree audited clean
-// while workers/harness-sink carried six advisories, two of them high, and the only thing
+// config's `trees` list does not declare. The case is not hypothetical: one sibling repository's root tree audited
+// clean while its nested workers/sink tree carried six advisories, two of them high, and the only thing
 // pointing at it was a Dependabot alert naming the manifest path.
 //
 // THE EMPTY LIST IS THE GOAL AND IT IS REACHABLE. When this file was written every repository that
@@ -74,8 +74,8 @@
 //
 // THE COMPLETION GUARD, and the one place the family had to bend. control-plane and docs require every
 // entry point to import scripts/lib/verdict-guard.mjs and call verdictReached before the exit that
-// reports the outcome. console, engine and harness have no such module, so a static import of it here
-// would crash this gate at load in three repositories, and an `await import()` would make the file
+// reports the outcome. the other repositories have no such module, so a static import of it here
+// would crash this gate at load there, and an `await import()` would make the file
 // asynchronous, which is exactly what console's verdict-guard rules say a scripts/ gate must not become.
 // So `main` is exported and takes hooks, and it runs itself only when it IS the entry module. The two
 // repositories that require enrolment invoke a small local file, scripts/dependency-advisory-guarded.mjs,
@@ -92,7 +92,7 @@
 //
 // FS-WRITES: none outside this repo
 //
-// House style: Australian English, no em dashes, no rule-of-three, no AI attribution.
+// House style: Australian English, no em dashes, no rule-of-three.
 
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -105,7 +105,7 @@ const ROOT = dirname(dirname(SELF));
 const CONFIG_PATH = join(ROOT, ".github", "dependency-advisories.json");
 const BLOCKING = new Set(["high", "critical"]);
 const DIGEST_DECLARATION = /^const CANONICAL_BODY_SHA256 = .*$/m;
-const CANONICAL_BODY_SHA256 = "5eabce3c9d6c2de85fad9603fb86e29f2237ed4c17fd2bafa4914273795c9506";
+const CANONICAL_BODY_SHA256 = "5ee5817a8bd4f433d073468a19d3810528ce90f5e5f560fa728d93b01637b6e3";
 
 // The self-check. Hashing the file with the declaration line removed is what lets the constant live in
 // the file it describes. A copy that fails this has been edited in one repository and nowhere else, which
@@ -115,8 +115,8 @@ export function bodyDigest(source) {
 }
 
 // EVERY lockfile in the repository, found rather than assumed. This exists because assuming the root is
-// the whole repository is a false negative that had already happened: the harness repository's root tree
-// audited clean while workers/harness-sink/package-lock.json carried six advisories, two of
+// the whole repository is a false negative that had already happened: a sibling repository's root tree
+// audited clean while its nested workers/sink/package-lock.json carried six advisories, two of
 // them high, and the only thing that pointed at it was a Dependabot alert naming the manifest path. A
 // gate that audits one tree and reports "clean" for a repository is worse than no gate, because the
 // number it prints is about a different question from the one its reader is asking.
@@ -133,8 +133,8 @@ export function lockfilesUnder(root) {
     for (const e of entries) {
       if (e.isDirectory()) {
         // EVERY dot-directory, not a list of them. The first draft named .git, .wrangler, .astro and
-        // .venv and let .worktrees through, and harness's worktree-overscan gate caught it on this
-        // branch's own CI: a linked git worktree nested under a checkout holds a complete second copy of
+        // .venv and let .worktrees through, and a sibling repository's worktree-overscan gate caught it in
+        // CI: a linked git worktree nested under a checkout holds a complete second copy of
         // the repository, so a walk that descends into it reads another branch's lockfiles as part of
         // this one and reports trees this commit does not have.
         if (!e.name.startsWith(".") && !skip.has(e.name)) walk(join(dir, e.name));
@@ -446,11 +446,11 @@ function selfTest(hooks) {
   }
   {
     // The false negative that had already happened, driven as a case rather than described in a comment.
-    const r = grade({ ...base, config: cfg(), lockfilesFound: [".", "workers/harness-sink"] });
-    record("a lockfile the config does not declare fails", r.problems.some((p) => p.includes("workers/harness-sink/package-lock.json")), JSON.stringify(r.problems));
+    const r = grade({ ...base, config: cfg(), lockfilesFound: [".", "workers/sink"] });
+    record("a lockfile the config does not declare fails", r.problems.some((p) => p.includes("workers/sink/package-lock.json")), JSON.stringify(r.problems));
   }
   {
-    const r = grade({ ...base, config: cfg({ trees: [".", "workers/harness-sink"] }), lockfilesFound: [".", "workers/harness-sink"] });
+    const r = grade({ ...base, config: cfg({ trees: [".", "workers/sink"] }), lockfilesFound: [".", "workers/sink"] });
     record("every lockfile declared passes", r.problems.length === 0, JSON.stringify(r.problems));
   }
   {
@@ -605,7 +605,7 @@ export function main({ onVerdict = () => {}, onRefusal = () => {} } = {}) {
 // and does not follow a symlink, so reached through a symlinked path this file would decide it is not the
 // entry point, print nothing, run nothing and exit 0. A gate that silently passes when it is invoked
 // through a link is the exact failure this whole file exists to stop, and engine's verdict-guard rules
-// name that shape after finding it in six harness gates and one engine validator.
+// name that shape after finding it in seven gates across the sibling repositories.
 function isProcessEntry() {
   const argv1 = process.argv[1];
   if (!argv1) return false;

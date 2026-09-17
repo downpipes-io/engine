@@ -32,7 +32,7 @@
 // It also asserts that the two call sites AGREE, member for member, over the whole table. A per-component
 // row and a release verdict that disagree is the exact shape the console rendered.
 //
-// House style: Australian English, no em dashes, no rule-of-three, no AI attribution.
+// House style: Australian English, no em dashes, no rule-of-three.
 //
 //   node test/validate-update-version-skew.ts
 

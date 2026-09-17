@@ -95,7 +95,7 @@
 //
 // Usage: node scripts/run-gate-chain.mjs <script-name> <min-members>
 //
-// House style: Australian English, no em dashes, no rule-of-three, no AI attribution.
+// House style: Australian English, no em dashes, no rule-of-three.
 
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";

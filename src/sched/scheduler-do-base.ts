@@ -69,25 +69,15 @@ import type { AttestSession, BlackoutResolve, CronResolve, DownpipeConfig, Downp
 import type { StatedPrecondition } from "./downpipe-precondition.ts";
 
 export type {
-  BlackoutWindow,
   DownpipeConfig,
   DownpipeSchedule,
   DownpipeState,
   DrillEvidenceEntry,
-  DrillEvidenceKind,
   FleetDrillCampaign,
   FleetDrillProgress,
-  IntegrityVerified,
-  IntegrityVerifiedHow,
   LastConfigChange,
-  RestoreProven,
   RestoreProvenMethod,
-  RetentionPolicy,
   RunHistoryEntry,
-  SealVerification,
-  SealVerificationTier,
-  SecretBindingSpec,
-  SourceSpec,
 } from "./types.ts";
 
 import type {

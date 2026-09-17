@@ -16,7 +16,7 @@
 //
 // Run with `node test/validate-attended-cadence.ts`.
 //
-// House style: Australian English, no em dashes, no rule-of-three, no AI attribution.
+// House style: Australian English, no em dashes, no rule-of-three.
 
 import { dueFor, evaluateAttendedCadence } from "../src/admin/attended-cadence.ts";
 import { ATTENDED_CADENCE_CHECK_ID, buildAttendedCadence } from "../src/admin/posture-checks.ts";
