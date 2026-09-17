@@ -166,6 +166,9 @@ jobs:
         working-directory: engine
         env:
           REQUIRE_DOWNPIPE: "1"
+          # The downpipe checkout above is pinned to a release tag on purpose, so it is behind its own
+          # main whenever the reader has moved on; the doc validators grade against the pinned tag.
+          DOWNPIPES_ALLOW_STALE_SIBLINGS: "downpipe"
       - name: cf-config safety guards are load-bearing (curated mutation test)
         # Each guard carrying a safety claim is REMOVED in turn and the gate that should notice is run.
         # A guard whose removal changes nothing is a gap in the evidence, and three such gaps were found
@@ -352,6 +355,9 @@ jobs:
         working-directory: engine
         env:
           REQUIRE_DOWNPIPE: "1"
+          # The downpipe checkout above is pinned to a release tag on purpose, so it is behind its own
+          # main whenever the reader has moved on; the doc validators grade against the pinned tag.
+          DOWNPIPES_ALLOW_STALE_SIBLINGS: "downpipe"
 
   build:
     name: Bundle

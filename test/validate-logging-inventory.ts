@@ -161,7 +161,7 @@ export function readDoc(text: string): DocClaims {
   const actions = [...eventsSection.matchAll(/^\| `([^`]+)` \|/gm)].map((m) => m[1] ?? "");
   const countMatch = flat.match(/`AUDIT_ACTIONS` \(`src\/admin\/audit-types\.ts:\d+`\), (\d+) members/);
 
-  const proseMatch = flat.match(/Measured [0-9-]+: (\d+) `log\(` call sites across (\d+) files \(([^)]*)\)/);
+  const proseMatch = flat.match(/Measured(?: [0-9-]+)?: (\d+)\s*`log\(` call sites across (\d+) files \(([^)]*)\)/);
   const tableMatch = flat.match(/`src\/log\.ts`, (\d+) call sites \/ (\d+) files/);
   const files = proseMatch?.[3] ? [...proseMatch[3].matchAll(/`([^`]+)`/g)].map((m) => m[1] ?? "").sort() : [];
 
