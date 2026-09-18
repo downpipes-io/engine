@@ -11,7 +11,7 @@
 // threaded and serial, so the DO input gate, real DurableObjectStorage transactions, the real
 // crypto, and real alarm scheduling are never exercised. Here they are.
 
-import { Miniflare, Log, LogLevel } from "miniflare";
+import { Miniflare, Log, LogLevel, convertV4MiniflareOptions } from "miniflare";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -30,7 +30,10 @@ export async function startScheduler() {
   const bundlePath = await bundleSchedulerWorker();
   const script = readFileSync(bundlePath, "utf8");
 
-  const mf = new Miniflare({
+  // Miniflare 5 requires the multi-worker `{ workers: [...] }` shape; convertV4MiniflareOptions
+  // is Miniflare's own first-party shim that maps this unchanged V4-style options object onto it
+  // (one worker, same bindings/DOs/modules), so nothing here needs to be restated by hand.
+  const mf = new Miniflare(convertV4MiniflareOptions({
     modules: true,
     script,
     // scriptPath anchors module resolution + sourcemaps to the bundle location.
@@ -45,7 +48,7 @@ export async function startScheduler() {
     // Quiet unless something genuinely warns/errors (keeps test output readable; flip to DEBUG
     // when diagnosing a workerd load failure).
     log: new Log(LogLevel.WARN),
-  });
+  }));
 
   // Force the isolate to come up now (and surface any module-load error here, with context)
   // rather than on the first request inside a test case.

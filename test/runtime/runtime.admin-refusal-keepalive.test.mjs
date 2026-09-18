@@ -35,7 +35,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
-import { Log, LogLevel, Miniflare } from "miniflare";
+import { Log, LogLevel, Miniflare, convertV4MiniflareOptions } from "miniflare";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const ENTRY = join(here, "admin-refusal-keepalive-worker.ts");
@@ -78,7 +78,9 @@ async function main() {
   const script = readFileSync(bundlePath, "utf8");
 
   const mkInstance = async () => {
-    const mf = new Miniflare({
+    // Miniflare 5 requires the multi-worker `{ workers: [...] }` shape; convertV4MiniflareOptions
+    // is Miniflare's own shim mapping this unchanged V4-style options object onto it.
+    const mf = new Miniflare(convertV4MiniflareOptions({
       modules: true,
       script,
       scriptPath: bundlePath,
@@ -86,7 +88,7 @@ async function main() {
       durableObjects: { SCHEDULER: { className: "SchedulerDO", useSQLite: true }, REFUSAL_SLOW: { className: "RefusalSlowDO", useSQLite: true } },
       bindings: { ADMIN_TOKEN: TOKEN, CONSOLE_ORIGIN: "https://console.test" },
       log: new Log(LogLevel.WARN),
-    });
+    }));
     await mf.ready;
     const hit = async (p, init) => {
       const r = await mf.dispatchFetch(`https://engine.test${p}`, init);

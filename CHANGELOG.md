@@ -30,6 +30,20 @@ tracks the engine Worker, its scheduler Durable Object and the admin API.
 - A `DEST_ENDPOINT` of `http://localhost`, `http://127.0.0.1` or `http://[::1]` is no
   longer accepted. It was the local test-emulator allowance and it applied to deployed
   configurations too, where it would have sent the destination credential in cleartext.
+- The first public CI run is green on a standalone clone: the cross-repository checks that need a
+  sibling repository now check out the public downpipe at its release tag or state that they skipped.
+- Dead compatibility re-exports removed from the admin, scheduler, destination and seal modules;
+  every consumer already imported the real definition.
+
+### Dependencies
+
+- @noble/hashes 2.4.0 and @noble/post-quantum 0.7.1.
+- @cloudflare/vitest-pool-workers 0.19 and @cloudflare/workers-types 5.20260914.
+- Biome 2.5.14, with the diagnostics the new release adds cleared at their sites.
+- knip 6.36.
+- GitHub Actions pins: step-security/harden-runner 2.21.1, actions/checkout 7.0.1,
+  actions/setup-node 7.0.0, actions/upload-artifact 7.0.1, actions/download-artifact 8.0.1,
+  ossf/scorecard-action 2.4.4, github/codeql-action 4.38.0.
 
 ## [0.3.3] - 2026-09-07
 

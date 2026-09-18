@@ -369,8 +369,8 @@ export async function rateLimited(scheduler: DurableObjectStub, caller: Caller):
 // (/custom-roles/delete) is an equally high-consequence identity mutation, so a stale ambient cookie must
 // not reach them without a fresh re-auth either. It also covers evicting
 // ANOTHER operator's sessions (/sessions/terminate-user) or every operator's sessions (/sessions/terminate-
-// all, owner-only) and emailing a custody share to a recipient outside the engine (/custody/send-share).
-// /sessions/terminate-others stays exempt: it only bumps the CALLER's own epoch, never another operator's.
+// all, owner-only), the caller's own terminations (/sessions/terminate-others, /sessions/terminate: a stale
+// session must not sign the operator's other tabs out) and emailing a custody share (/custody/send-share).
 // It also covers the DETECTION CONFIG: the notify rules and channels that
 // decide whether anything the rest of this list guards is ever noticed. See the block on those entries.
 // Each string here MUST match a real POST dispatch case the
@@ -510,11 +510,11 @@ export const STEPUP_SUBS: ReadonlySet<string> = new Set([
   // Evicting ANOTHER operator's live sessions or every operator's
   // sessions is a takeover-adjacent action (a stale ambient session that survives a suspected compromise
   // could silence the legitimate operator's other tabs so they never notice the attacker acting), so it
-  // needs the same fresh re-auth as the identity-lifecycle mutations above. /sessions/terminate-others is
-  // DELIBERATELY absent: it only bumps the CALLER's own epoch (self-scoped housekeeping, never another
-  // operator's session), matching the "only gate the dangerous direction" convention this set already
-  // follows for restore/retention-prune. terminate-user (one named operator) and terminate-all (every
-  // operator, owner-only) both touch a session that is not the caller's own, so both are gated.
+  // needs the same fresh re-auth as the identity-lifecycle mutations above. terminate-user (one named
+  // operator) and terminate-all (every operator, owner-only) both touch a session that is not the
+  // caller's own, so both are gated. The caller's own terminations follow two entries down, with their
+  // own reason: they were exempt as self-scoped housekeeping until a stale ambient session signing the
+  // operator's other tabs out unchallenged was recognised as the same threat from the other side.
   "/sessions/terminate-user",
   "/sessions/terminate-all",
   // Ending a session, one's own other sessions or one by id, is done having authenticated again

@@ -147,9 +147,9 @@
     "validate:email-theme": "node test/validate-email-theme.ts",
     "validate:role-invite": "node test/validate-role-invite.ts",
     "validate:errlog": "node test/validate-errlog.ts",
-    "typecheck": "tsc --noEmit && npm run typecheck:test",
-    "typecheck:test": "tsc --noEmit -p tsconfig.test.json",
-    "typecheck:workspace": "tsc -p tsconfig.workspace.json --noEmit",
+    "typecheck": "node node_modules/typescript-7/bin/tsc --noEmit && npm run typecheck:test",
+    "typecheck:test": "node node_modules/typescript-7/bin/tsc --noEmit -p tsconfig.test.json",
+    "typecheck:workspace": "node node_modules/typescript-7/bin/tsc -p tsconfig.workspace.json --noEmit",
     "lint:circular": "madge --circular --extensions ts src",
     "lint:deadcode": "knip",
     "lint:tsdoc": "node scripts/tsdoc-presence.mjs",
@@ -350,10 +350,10 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.14",
-    "@cloudflare/vitest-pool-workers": "^0.19.0",
+    "@cloudflare/vitest-pool-workers": "^0.22.0",
     "@cloudflare/workers-types": "^5.20260914.1",
     "@stryker-mutator/core": "^9.6.1",
-    "@types/node": "^22.20.0",
+    "@types/node": "^26.6.1",
     "@vitest/coverage-istanbul": "^4.1.9",
     "ajv": "8.20.0",
     "c8": "^12.0.0",
@@ -361,8 +361,9 @@
     "knip": "^6.36.0",
     "madge": "^8.0.0",
     "typescript": "^6.0.3",
+    "typescript-7": "npm:typescript@^7.0.2",
     "vitest": "^4.1.11",
-    "wrangler": "~4.116.0"
+    "wrangler": "~4.134.0"
   },
   "overrides": {
     "browserslist": "^4.28.8",

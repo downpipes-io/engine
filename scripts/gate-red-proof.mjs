@@ -65,8 +65,12 @@ function run(script) {
   return { code: r.status, out: `${r.stdout ?? ""}${r.stderr ?? ""}` };
 }
 
+// Invoked by explicit path, not "npx tsc": "typescript" (6.x, the compiler-API package) and
+// "typescript-7" (the aliased 7.x package this CLI comes from) both declare a "tsc" bin, so
+// node_modules/.bin/tsc is whichever one npm linked last.
+const TSC = join(REPO, "node_modules", "typescript-7", "bin", "tsc");
 function tsc(configPath) {
-  const r = spawnSync("npx", ["tsc", "--noEmit", "-p", configPath], { cwd: REPO, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+  const r = spawnSync("node", [TSC, "--noEmit", "-p", configPath], { cwd: REPO, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
   if (r.error) throw new Error(`cannot check: tsc did not start (${r.error.message})`);
   return { code: r.status, out: `${r.stdout ?? ""}${r.stderr ?? ""}` };
 }
