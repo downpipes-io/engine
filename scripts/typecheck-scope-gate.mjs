@@ -80,7 +80,14 @@ if (process.argv.includes("--self-test")) {
 // The regex below reads that per-line form; against the grouped table it matches nothing, which is the
 // exact "config that read no files" shape the zero-guard below exists to catch, so the flag stays pinned
 // here rather than becoming a silent miscount.
-const r = spawnSync("npx", ["tsc", "-p", "tsconfig.checkjs.json", "--noEmit", "--pretty", "false"], { cwd: ROOT, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+//
+// The tsc binary is invoked by explicit path, not "npx tsc" or a bare "tsc". Both "typescript" (the
+// compiler-API package the .mjs gates import by name, pinned at 6.x) and "typescript-7" (the aliased 7.x
+// package this gate's tsc CLI comes from) declare a "tsc" bin, so node_modules/.bin/tsc is whichever one
+// npm linked last -- a real trial once ran the 6.x binary while believing it ran 7.x. Naming the path
+// removes the ambiguity rather than hoping the link points the right way.
+const TSC = join(ROOT, "node_modules", "typescript-7", "bin", "tsc");
+const r = spawnSync("node", [TSC, "-p", "tsconfig.checkjs.json", "--noEmit", "--pretty", "false"], { cwd: ROOT, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
 if (r.error) die(2, `cannot check: tsc did not run (${r.error.message})`);
 const out = `${r.stdout ?? ""}${r.stderr ?? ""}`;
 if (out.trim() === "" && r.status !== 0) die(2, `cannot check: tsc exited ${r.status} with no output`);
@@ -92,7 +99,7 @@ const found = lines.length;
 // A zero here is far more likely to be a config that read nothing than a clean tree, and this gate's whole
 // subject is a config that read nothing. So a zero against a nonzero pin REFUSES rather than celebrating.
 const pinned = JSON.parse(readFileSync(BASELINE, "utf8")).errors;
-if (found === 0 && pinned > 0) die(2, `cannot check: tsc reported 0 errors against a pin of ${pinned}. That is the shape of a config that read no files, which is the defect this gate exists for. Verify with: npx tsc -p tsconfig.checkjs.json --noEmit`);
+if (found === 0 && pinned > 0) die(2, `cannot check: tsc reported 0 errors against a pin of ${pinned}. That is the shape of a config that read no files, which is the defect this gate exists for. Verify with: node node_modules/typescript-7/bin/tsc -p tsconfig.checkjs.json --noEmit`);
 
 /** @type {Record<string, number>} */
 const byDir = {};

@@ -24,7 +24,7 @@ Both repos share the same two runtime dependencies, declared in `engine/package.
 | `@noble/curves` | `2.4.0` | see `package-lock.json` | Ed25519 signing, X25519 key agreement (classical half of the PQ-hybrid) |
 | `@noble/post-quantum` | `0.6.1` | see `package-lock.json` | ML-KEM-1024 key encapsulation, ML-DSA-87 signatures (post-quantum half of the PQ-hybrid) |
 
-All other `dependencies` and `devDependencies` entries (`@cloudflare/workers-types`, `typescript`, `vitest`, `wrangler`) are build-time or type-checking tools that are not bundled into the deployed Worker artefact.
+All other `dependencies` and `devDependencies` entries (`@cloudflare/workers-types`, `typescript`, `typescript-7`, `vitest`, `wrangler`) are build-time or type-checking tools that are not bundled into the deployed Worker artefact. `typescript-7` is an `npm:` alias for a second, newer `typescript` release (`engine/package.json`): the compiler-API gates under `test/` and `scripts/` import the "typescript" package by name and stay on the 6.x line, while every `tsc` CLI invocation is pointed at the 7.x binary by explicit path, because both packages declare a `tsc` bin and only one name can occupy `node_modules/.bin/tsc`.
 
 There are no transitive runtime dependencies beyond the `@noble` libraries. The `@noble` libraries are zero-dependency by design.
 

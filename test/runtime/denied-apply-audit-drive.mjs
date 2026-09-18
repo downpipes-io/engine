@@ -34,7 +34,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
-import { Log, LogLevel, Miniflare } from "miniflare";
+import { Log, LogLevel, Miniflare, convertV4MiniflareOptions } from "miniflare";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const ENTRY = join(here, "denied-apply-audit-admin-worker.ts");
@@ -83,7 +83,9 @@ async function main() {
   });
   if (built.errors.length > 0) throw new Error(`esbuild failed:\n${built.errors.map((e) => e.text).join("\n")}`);
 
-  const mf = new Miniflare({
+  // Miniflare 5 requires the multi-worker `{ workers: [...] }` shape; convertV4MiniflareOptions
+  // is Miniflare's own shim mapping this unchanged V4-style options object onto it.
+  const mf = new Miniflare(convertV4MiniflareOptions({
     modules: true,
     script: readFileSync(OUTFILE, "utf8"),
     scriptPath: OUTFILE,
@@ -91,7 +93,7 @@ async function main() {
     durableObjects: { SCHEDULER: { className: "SchedulerDO", useSQLite: true } },
     bindings: { ADMIN_TOKEN, CONSOLE_ORIGIN },
     log: new Log(LogLevel.WARN),
-  });
+  }));
   await mf.ready;
 
   const call = async (method, path, { body, bearer, cookie, origin, headers } = {}) => {

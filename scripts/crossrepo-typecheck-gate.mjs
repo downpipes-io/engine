@@ -129,10 +129,14 @@ for (const rel of walk(TEST_DIR).sort()) {
 // tsc resolves `extends`, include and exclude and prints the concrete file list, so this measures effect
 // rather than intent. A config that cannot be read at all is a failure, not an empty answer: an empty file
 // list would otherwise satisfy every rule below by vacuity.
+// Invoked by explicit path to node_modules/typescript-7/bin/tsc, not "npx tsc": "typescript" (6.x, the
+// compiler-API package) and "typescript-7" (the aliased 7.x package this CLI comes from) both declare a
+// "tsc" bin, so node_modules/.bin/tsc is whichever one npm linked last.
+const TSC = join(ROOT, "node_modules", "typescript-7", "bin", "tsc");
 const filesOf = (config) => {
   let raw;
   try {
-    raw = execFileSync("npx", ["tsc", "-p", config, "--showConfig"], {
+    raw = execFileSync("node", [TSC, "-p", config, "--showConfig"], {
       cwd: ROOT,
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],

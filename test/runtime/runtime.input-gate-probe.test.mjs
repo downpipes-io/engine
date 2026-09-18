@@ -37,7 +37,7 @@
 // LOAD-BEARING the moment any gate-releasing await (a timer, a fetch) is introduced into that window -- which
 // PART B demonstrates directly.
 
-import { Miniflare, Log, LogLevel } from "miniflare";
+import { Miniflare, Log, LogLevel, convertV4MiniflareOptions } from "miniflare";
 
 const SCRIPT = `
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -110,7 +110,9 @@ const ok = (label, cond) => {
 };
 
 async function main() {
-  const mf = new Miniflare({
+  // Miniflare 5 requires the multi-worker `{ workers: [...] }` shape; convertV4MiniflareOptions
+  // is Miniflare's own shim mapping this unchanged V4-style options object onto it.
+  const mf = new Miniflare(convertV4MiniflareOptions({
     modules: true,
     script: SCRIPT,
     compatibilityDate: "2026-06-01",
@@ -119,7 +121,7 @@ async function main() {
       PAT: { className: "PatternDO", useSQLite: true },
     },
     log: new Log(LogLevel.WARN),
-  });
+  }));
   await mf.ready;
 
   const N = 16;
