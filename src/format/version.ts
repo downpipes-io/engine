@@ -27,7 +27,7 @@ export const VERSION = "downpipe/0.1.0";
  * bytes on its own rehearsal channel. This bump to 0.2.0 is the re-cut
  * COMPATIBILITY-AND-BACKTESTING.md demands ("a re-cut must bump rather than re-publish 0.1.9"),
  * and the minor rather than the patch because the archive format identity moved with it. */
-export const ENGINE_VERSION = "0.3.4";
+export const ENGINE_VERSION = "0.3.5";
 
 /** The STREAM chunk size in bytes: 64 KiB of plaintext per AES-256-GCM chunk. */
 export const CHUNK_SIZE = 65536;
