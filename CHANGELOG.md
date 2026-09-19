@@ -17,6 +17,40 @@ tracks the engine Worker, its scheduler Durable Object and the admin API.
 
 ## [Unreleased]
 
+## [0.3.5] - 2026-09-21
+
+The first release built and attested by the public release workflow, and the first
+published to the update channel since 0.3.3. It carries everything below and the
+0.3.4 changes, which were tagged on 17 September but never released.
+
+### Changed
+
+- The first public CI run is green on a standalone clone: the cross-repository checks that need a
+  sibling repository now check out the public downpipe at its release tag or state that they skipped.
+- Dead compatibility re-exports removed from the admin, scheduler, destination and seal modules;
+  every consumer already imported the real definition.
+
+### Dependencies
+
+- Runtime harness on Miniflare 5 (wrangler 4.134, @cloudflare/vitest-pool-workers 0.22),
+  with the workers-shaped options the new Miniflare requires.
+- TypeScript 7.0.2 compiles the engine (as the `typescript-7` package); TypeScript 6 stays
+  installed under its own name for the tools that still need the JavaScript compiler API.
+- @types/node 26.6.1, c8 12, fast-check 4.10.1.
+- @noble/hashes 2.4.0 and @noble/post-quantum 0.7.1.
+- @cloudflare/workers-types 5.20260914.
+- Biome 2.5.14, with the diagnostics the new release adds cleared at their sites.
+- knip 6.36.
+- GitHub Actions pins: step-security/harden-runner 2.21.1, actions/checkout 7.0.1,
+  actions/setup-node 7.0.0, actions/upload-artifact 7.0.1, actions/download-artifact 8.0.1,
+  ossf/scorecard-action 2.4.4, github/codeql-action 4.38.0.
+
+## [0.3.4] - 2026-09-17
+
+Tagged but not released: the tag arrived in the same push that created the release
+workflow, so no artefacts were built, nothing was attested and the update channel
+was not published. Its changes ship in 0.3.5.
+
 ### Changed
 
 - The syslog-over-TLS audit-export sink now refuses a private, loopback or link-local
@@ -30,20 +64,6 @@ tracks the engine Worker, its scheduler Durable Object and the admin API.
 - A `DEST_ENDPOINT` of `http://localhost`, `http://127.0.0.1` or `http://[::1]` is no
   longer accepted. It was the local test-emulator allowance and it applied to deployed
   configurations too, where it would have sent the destination credential in cleartext.
-- The first public CI run is green on a standalone clone: the cross-repository checks that need a
-  sibling repository now check out the public downpipe at its release tag or state that they skipped.
-- Dead compatibility re-exports removed from the admin, scheduler, destination and seal modules;
-  every consumer already imported the real definition.
-
-### Dependencies
-
-- @noble/hashes 2.4.0 and @noble/post-quantum 0.7.1.
-- @cloudflare/vitest-pool-workers 0.19 and @cloudflare/workers-types 5.20260914.
-- Biome 2.5.14, with the diagnostics the new release adds cleared at their sites.
-- knip 6.36.
-- GitHub Actions pins: step-security/harden-runner 2.21.1, actions/checkout 7.0.1,
-  actions/setup-node 7.0.0, actions/upload-artifact 7.0.1, actions/download-artifact 8.0.1,
-  ossf/scorecard-action 2.4.4, github/codeql-action 4.38.0.
 
 ## [0.3.3] - 2026-09-07
 
@@ -261,7 +281,10 @@ tracks the engine Worker, its scheduler Durable Object and the admin API.
 - A native identity-provider bridge: OIDC, OAuth2 and a native SAML service
   provider across the supported providers.
 
-[Unreleased]: https://github.com/downpipes-io/engine/compare/v0.3.2...HEAD
+[Unreleased]: https://github.com/downpipes-io/engine/compare/v0.3.5...HEAD
+[0.3.5]: https://github.com/downpipes-io/engine/releases/tag/v0.3.5
+[0.3.4]: https://github.com/downpipes-io/engine/releases/tag/v0.3.4
+[0.3.3]: https://github.com/downpipes-io/engine/releases/tag/v0.3.3
 [0.3.2]: https://github.com/downpipes-io/engine/releases/tag/v0.3.2
 [0.3.1]: https://github.com/downpipes-io/engine/releases/tag/v0.3.1
 [0.3.0]: https://github.com/downpipes-io/engine/releases/tag/v0.3.0
