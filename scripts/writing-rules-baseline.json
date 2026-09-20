@@ -14,6 +14,12 @@
       },
       "why": "Pre-existing when lint:prose took the whole tracked tree as its subject. Debt to rewrite, not an exemption."
     },
+    "design/change-management/DESIGN.md": {
+      "counts": {
+        "em-dash": 13
+      },
+      "why": "Pre-existing when lint:prose took the whole tracked tree as its subject. Debt to rewrite, not an exemption."
+    },
     "scripts/demo-reset.sh": {
       "counts": {
         "em-dash": 5
@@ -260,7 +266,19 @@
       },
       "why": "Pre-existing when lint:prose took the whole tracked tree as its subject. Debt to rewrite, not an exemption."
     },
+    "wrangler.demo.toml": {
+      "counts": {
+        "em-dash": 5
+      },
+      "why": "Pre-existing when lint:prose took the whole tracked tree as its subject. Debt to rewrite, not an exemption."
+    },
     "wrangler.dev.toml": {
+      "counts": {
+        "em-dash": 3
+      },
+      "why": "Pre-existing when lint:prose took the whole tracked tree as its subject. Debt to rewrite, not an exemption."
+    },
+    "wrangler.internal.toml": {
       "counts": {
         "em-dash": 3
       },
@@ -269,6 +287,12 @@
     "wrangler.toml": {
       "counts": {
         "em-dash": 7
+      },
+      "why": "Pre-existing when lint:prose took the whole tracked tree as its subject. Debt to rewrite, not an exemption."
+    },
+    "wrangler.uat.toml": {
+      "counts": {
+        "em-dash": 3
       },
       "why": "Pre-existing when lint:prose took the whole tracked tree as its subject. Debt to rewrite, not an exemption."
     }

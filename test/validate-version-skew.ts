@@ -194,7 +194,7 @@ function testFormatGuard(): void {
 
   // REFUSE: a foreign prefix and malformed labels the reader must never read. A TWO-component label is
   // malformed rather than a version somebody could go and find a reader for: the pre-release lineage that
-  // stamped MAJOR.MINOR was retired and nothing obtainable emits one. downpipe/0.1 is the
+  // stamped MAJOR.MINOR was retired on 2026-08-08 and nothing obtainable emits one. downpipe/0.1 is the
   // trap in that shape, carrying the same two numbers this build implements.
   ok("format: REFUSE a foreign label (borg/0.1.0)", threw(() => checkFormatVersion("borg/0.1.0")));
   ok("format: REFUSE downpipe/0.1 (missing the patch component)", threw(() => checkFormatVersion("downpipe/0.1")));

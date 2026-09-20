@@ -1,4 +1,4 @@
-// validate-dest-replace-reassignment: the rehearsal CRITICAL defect (found 10:37Z,
+// validate-dest-replace-reassignment: the rehearsal-2026-09-05 CRITICAL defect (found 10:37Z,
 // confirmed 17:20Z). "Replace from the console" on a deploy-time-bound destination (a single
 // deploy-time DEST_R2 binding, or DEST_* env vars, no console record yet) is the only console path from
 // that binding to a console-managed destination. Adding the FIRST console destination made it the

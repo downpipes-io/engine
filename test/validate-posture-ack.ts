@@ -37,7 +37,7 @@ function ok(label: string, cond: boolean): void {
 }
 
 // The CURRENT version per posture. They are no longer the same: the offline statement went to v2 on
-// when a clause about in-console restore turned out to be stale, and the operational statement
+// 2026-07-28 when a clause about in-console restore turned out to be stale, and the operational statement
 // was accurate and stayed at v1. Pinned per posture rather than asserted as one shared string, so a bump on
 // either side is a deliberate edit here rather than something a loosened check would let through.
 const CURRENT_VERSION: Record<PostureChoice, string> = {

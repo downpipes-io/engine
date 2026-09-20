@@ -244,7 +244,7 @@ async function main(): Promise<void> {
   // record into the per-destination sidecar the DestinationStatus view joins.
   ok("the applied cron row carries its destination key ('' = default)", liveRec?.downpipes.find((d) => d.id === "dp_enabled")?.destKey === "");
   // The record's timestamp is epoch milliseconds and must SURVIVE sanitisation: the count clamp's 1e9
-  // ceiling must not crush it to, which the sidecar would render to a customer as a date.
+  // ceiling must not crush it to 2001-09-09, which the sidecar would render to a customer as a date.
   ok("the pass record's timestamp survives as epoch milliseconds (not crushed by the count clamp)", (liveRec?.at ?? 0) > 1_600_000_000_000);
   {
     const dp = await readDestPrune(live.scheduler);

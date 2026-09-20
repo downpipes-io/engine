@@ -332,7 +332,7 @@ async function main(): Promise<void> {
 
   // ===== THE POSTURE-ACK CHANNEL IS REFUSED OUT OF ENUM, NOT FILED AS "onboarding". =====
   //
-  // (, second batch.) `channel` was
+  // (2026-08-09, second batch.) `channel` was
   // `body.channel === "keys-rekey" ? "keys-rekey" : "onboarding"`, so ANY other value recorded the
   // acknowledgement against the onboarding ceremony and answered 200. This record IS the compliance
   // evidence that a customer accepted a key-posture statement, so filing it against a ceremony that did not

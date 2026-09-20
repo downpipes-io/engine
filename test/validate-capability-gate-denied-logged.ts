@@ -3,7 +3,7 @@
 // nothing at all on a grant.
 //
 // WHY THIS EXISTS. gate() is called from ~150 sites across the router spokes and answers a bare 403
-// with no side effect: measured, only 18 of those call sites' routes were named in the hub's
+// with no side effect: measured 2026-09-13, only 18 of those call sites' routes were named in the hub's
 // ADMIN_WRITE_SURFACES table (router.ts's one write-refusal recorder), so 113+ capability-gate denials
 // reached neither the tamper-evident audit chain nor Workers Logs. This drives the REAL gate() and
 // asserts a Layer 2 log line is emitted on every denial and NONE on a grant, so a revert of the fix (the

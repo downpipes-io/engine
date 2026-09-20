@@ -44,7 +44,7 @@ const PROTOCOL_BINDING_POST = "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST";
 // ACS later pins as ctx.acsUrl, so the redirect and the inbound check agree on one string).
 export interface AuthnRequestParams {
   id: string; // a syntactically valid XML ID ("_<hex>"); minted by the DO, only escaped here
-  issueInstant: string; // RFC-3339 / XSD dateTime, e.g. ""; minted by the DO
+  issueInstant: string; // RFC-3339 / XSD dateTime, e.g. "2026-06-13T12:00:00Z"; minted by the DO
   acsUrl: string; // the SP's AssertionConsumerServiceURL (must equal the ctx.acsUrl the ACS pins)
 }
 

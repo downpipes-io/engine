@@ -2,9 +2,9 @@
 # mutation run is slow (about 8 minutes locally, longer on a CI runner), so this is a SCHEDULED
 # gating job rather than a per-pull-request gate: it runs weekly and on demand, and FAILS when the
 # mutation score drops below the stryker.config.json break threshold (75 per cent; measured 79.95
-# per cent). That keeps the crypto mutation gate enforced without adding minutes to
+# per cent on 2026-06-22). That keeps the crypto mutation gate enforced without adding minutes to
 # every pull request. The break threshold is the project standard of 90 per cent (high 95). The
-# score measured 79.95 per cent, BELOW 90, so this scheduled run fails until the
+# score measured 79.95 per cent on 2026-06-22, BELOW 90, so this scheduled run fails until the
 # surviving crypto/format mutants are killed to raise the score to the standard.
 name: Mutation
 

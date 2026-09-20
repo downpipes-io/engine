@@ -90,7 +90,7 @@ function testDigestSummaryInstantWindow(): void {
   // By instant the oldest is the +10:00 entry and the newest is the .5Z entry, and summariseDigest must
   // EMIT each chosen entry's OWN original string (not a re-serialised form).
   {
-    const earliestInstant = "2026-06-01T20:00:00+10:00";
+    const earliestInstant = "2026-06-01T20:00:00+10:00"; // == 2026-06-01T10:00:00Z
     const middleInstant = "2026-06-01T12:00:00Z";
     const latestInstant = "2026-06-01T18:00:00.5Z";
     // Precondition: assert the lexical order really is the misleading one, so this test cannot pass

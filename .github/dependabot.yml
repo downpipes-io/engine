@@ -3,6 +3,21 @@ updates:
   - package-ecosystem: npm
     directory: "/"
     schedule: { interval: weekly }
+    # Majors blocked upstream, each with its mechanism and a review date (release playbook,
+    # section 5). Dependabot otherwise reopens the same PR every week; the block is re-checked
+    # on the date, not on its schedule.
+    ignore:
+      # vitest 5 and its coverage provider: @cloudflare/vitest-pool-workers 0.22 peers vitest ^4.1,
+      # and this repository's tests run under that pool. Review 2026-10-05.
+      - dependency-name: vitest
+        versions: [">=5.0.0"]
+      - dependency-name: "@vitest/coverage-istanbul"
+        versions: [">=5.0.0"]
+      # TypeScript 7 ships no JavaScript compiler API, which the gates, madge and the type-aware
+      # lints still need. The tree already compiles with 7.0.2 as the typescript-7 package and
+      # keeps typescript 6 under its own name for the API. Review when a 7.x API ships.
+      - dependency-name: typescript
+        versions: [">=7.0.0"]
     groups:
       npm-security-updates:
         applies-to: security-updates

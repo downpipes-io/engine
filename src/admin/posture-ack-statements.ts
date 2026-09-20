@@ -45,7 +45,7 @@ export interface PostureAckStatement {
 // EARLIER without the customer present, so scheduled restore tests and pruning do not run in the engine),
 // so the safer-sounding posture is not chosen for a security halo.
 //
-// v2 corrects a clause that had gone stale under the code. v1 listed "in-console restore"
+// v2 (2026-07-28) corrects a clause that had gone stale under the code. v1 listed "in-console restore"
 // among the things that do not run, and that stopped being true when the in-console break-glass restore
 // landed: restore now opens a run from a browser-supplied per-run master and refuses only when there is
 // NEITHER an operational key NOR a supplied master (admin/restore.ts, the `!env.OPERATIONAL_PRIVATE &&

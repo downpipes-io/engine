@@ -160,7 +160,7 @@ function selfTest() {
   check("cli: omitting --min-members REFUSES with exit 2", runMember(`node ${JSON.stringify(SELF)} --repeats 2`, ROOT, scratch).code === CANNOT_RUN);
   check("cli: --repeats 1 REFUSES with exit 2, because one run cannot disagree with itself", runMember(`node ${JSON.stringify(SELF)} --repeats 1 --min-members 1`, ROOT, scratch).code === CANNOT_RUN);
   // A PASS FROM THIS GATE MUST SAY WHAT IT DID NOT COVER, and that is asserted rather than trusted to
-  // survive an edit. Measured: this gate graded validate-cf-pace STABLE across 5 repeats at the
+  // survive an edit. Measured 2026-08-29: this gate graded validate-cf-pace STABLE across 5 repeats at the
   // commit where it was still broken, because it runs each member ALONE and that member only failed under
   // the load of its 432 neighbours. A detector with a known positive it cannot see must say so on every
   // clean run, or the next reader takes the clean run for "no flaky members".
@@ -254,7 +254,7 @@ function main() {
   //
   // This gate runs each member ALONE and SERIALLY, so it finds a member that disagrees with ITSELF. It
   // cannot find a member that only disagrees when its 432 neighbours are running around it, and that class
-  // is real: `validate-cf-pace` failed inside a 433-member chain run, passed 3 of 3
+  // is real: on 2026-08-29 `validate-cf-pace` failed inside a 433-member chain run, passed 3 of 3
   // standalone, and this gate graded it STABLE across 5 repeats at the very commit where it was still
   // broken. Its assertion timed a wall-clock refill window that only closes when the machine is busy
   // BEFORE the clock is read, so running it quietly is running it in the one condition it cannot fail in.

@@ -9,27 +9,27 @@
 // rides under INDETERMINATE"), except where a real preflight/run consequence sets a primary
 // (cpr.wrap-key-rotated -> POSTURE-ISSUE; notify.canary-dead-cooldown-suppressed -> DEST-THROTTLED-OR-DOWN).
 //
-// ## FINDINGS (all four FIXED in the fix round; labels below encode the POST-FIX behavior):
+// ## FINDINGS (all four FIXED in the 2026-07-02 fix round; labels below encode the POST-FIX behavior):
 //
-// FINDING-1 (cpr.export-stale-quiet-fleet) — FIXED: `control-plane-export-stale` now treats
+// FINDING-1 (cpr.export-stale-quiet-fleet) — FIXED 2026-07-02: `control-plane-export-stale` now treats
 //   an old export as FRESH when the export pass skipped with the benign "unchanged" code OR the pass's
 //   current configVersion equals the export's covered configVersion (the config has not moved since the
 //   export). A quiet stable fleet reads clean HEALTHY; a genuinely-stale export (the config MOVED past
 //   it) still fires — see cpr.export-pass-failing-and-stale.
 //
-// FINDING-2 (notify.canary-dead-cooldown-suppressed) — FIXED: `alert-cooldown-stuck` no
+// FINDING-2 (notify.canary-dead-cooldown-suppressed) — FIXED 2026-07-02: `alert-cooldown-stuck` no
 //   longer fires on an ACTIVE cooldown (the suppression window working as designed). It fires only on a
 //   GENUINELY stuck row: the window elapsed (at + cooldownMs + a 30-min reconcile grace < generatedAt)
 //   while the row persists — the engine refreshes `at` on re-nudge and deletes the row on recovery, so
 //   a long-elapsed surviving row means the reconciliation stopped. Genuine-stuck proof:
 //   fixround.alert-cooldown-genuinely-stuck.
 //
-// FINDING-3 (signals.ts notify loop) — FIXED: `notify-delivery-failed` now fires only when
+// FINDING-3 (signals.ts notify loop) — FIXED 2026-07-02: `notify-delivery-failed` now fires only when
 //   the NEWEST dated state for a channelKind is a failure; a failure superseded by a newer
 //   delivered:true on the same kind is a self-healed blip and stays quiet (benign proof:
 //   fixround.notify-self-healed-blip). notify.sink-rebind-blocked still fires (its failure is newest).
 //
-// FINDING-4 (cpr.wrap-key-rotated) — FIXED: probeDestination now stamps an additive closed
+// FINDING-4 (cpr.wrap-key-rotated) — FIXED 2026-07-02: probeDestination now stamps an additive closed
 //   `overrideUnreadable: true` on the destination item when the console-set record could not be
 //   read/decrypted, and the bot pairs it with wrap-key-unhealthy to route the POSTURE-ISSUE cause to
 //   "the console-set destination record could not be read/decrypted (check CONFIG_WRAP_KEY)" instead of
@@ -209,7 +209,7 @@ export const DOMAIN_SCENARIOS: Scenario[] = [
       ...expectInBundle(b, '"configVersion":6', "the stale export-state pointer's covered config version"),
     ],
   },
-  // FINDING-1 FIXED: this fleet is HEALTHY — the config has not changed for 9 days, the
+  // FINDING-1 FIXED 2026-07-02: this fleet is HEALTHY — the config has not changed for 9 days, the
   // export pass skips with the benign "unchanged" code and the old export covers the CURRENT config
   // version, so control-plane-export-stale now stays quiet and the fleet auto-posts clean.
   {
@@ -322,7 +322,7 @@ export const DOMAIN_SCENARIOS: Scenario[] = [
       return fails;
     },
   },
-  // FINDING-4 FIXED: the destination probe now stamps `overrideUnreadable: true` when the
+  // FINDING-4 FIXED 2026-07-02: the destination probe now stamps `overrideUnreadable: true` when the
   // console-set record cannot be read/decrypted, and the bot routes the POSTURE-ISSUE cause to "the
   // console-set destination record could not be read/decrypted (check CONFIG_WRAP_KEY)" instead of
   // "no destination is configured" (asserted by the bot's fixround item-20 unit tests over this exact
@@ -357,7 +357,7 @@ export const DOMAIN_SCENARIOS: Scenario[] = [
     id: "cpr.deploy-identity-changed-benign",
     title: "a routine engine update 4 hours ago (bindings survived); the customer asks whether the update broke anything",
     domain: "cpr",
-    // FIXED (F-HV2): deploy-identity-changed is now a correlator, so a redeploy whose
+    // FIXED 2026-07-02 (F-HV2): deploy-identity-changed is now a correlator, so a redeploy whose
     // bindings all VERIFIED present and whose runs are green stays quiet and the fleet reads clean
     // HEALTHY. roster-dropped-across-version-change still fires (a version-change keystone with no
     // sources-detached after it) but it only routes a primary inside the bindings-probe-failed branch
@@ -499,7 +499,7 @@ export const DOMAIN_SCENARIOS: Scenario[] = [
       ...expectInBundle(b, '"deliveryCode":"internal-sink-blocked"', "the internal-sink send-time block code"),
     ],
   },
-  // FINDING-2 FIXED: the 30-minute-old ACTIVE cooldown is the suppression window WORKING
+  // FINDING-2 FIXED 2026-07-02: the 30-minute-old ACTIVE cooldown is the suppression window WORKING
   // (the first alert delivered) — alert-cooldown-stuck no longer fires on it and is now the scenario's
   // benign-active proof. The genuinely-stuck twin is fixround.alert-cooldown-genuinely-stuck.
   {

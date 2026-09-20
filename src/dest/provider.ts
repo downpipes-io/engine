@@ -7,13 +7,13 @@
 // XML API, which is why they work at all) and wrong for everything an operator reads or is refused:
 //
 //   - A Google Cloud Storage bucket has worked as a downpipes destination for as long as the S3-compatible
-// arm has existed. Driven live against a real bucket with this repo's own signer, every
+//     arm has existed. Driven live on 2026-08-24 against a real bucket with this repo's own signer, every
 //     call the engine makes succeeded: PUT 200, GET 200 byte-correct, HEAD 404 on a missing key, DELETE 204,
 //     and multipart initiate/upload/complete all 200. It was simply never NAMED, so it was labelled S3,
 //     priced as Amazon S3 Standard, and offered fields it cannot honour.
 //   - Azure Blob Storage is not an S3-compatible endpoint at all and never will be. Pointed at the same arm
 //     it answers 403 AuthenticationFailed on the first call, and no credential or setting changes that.
-// It is a SUPPORTED destination, and it is supported BECAUSE of that fact rather than
+//     It is a SUPPORTED destination as of 2026-08-25, and it is supported BECAUSE of that fact rather than
 //     in spite of it: it has its own client (dest/azure-blob.ts) and its own Shared Key signer, and this
 //     derivation is the thing that routes an Azure host to them instead of to the S3 arm that cannot reach
 //     it. Collapsed into the "s3" residual it would still be signed with SigV4 and still answer 403.
@@ -40,7 +40,7 @@ export type DestProvider = "r2" | "s3" | "gcs" | "azure";
  * separate from DestProvider because these are not destinations: they are refusals with a name.
  *
  * `azure-blob` USED to be a member and is not any more: Azure Blob Storage became a supported destination
- * with its own client (dest/azure-blob.ts) and its own Shared Key signer. ADLS Gen2 stays
+ * on 2026-08-25 with its own client (dest/azure-blob.ts) and its own Shared Key signer. ADLS Gen2 stays
  * refused, because its `dfs` endpoint is a genuinely different wire protocol and not merely a different
  * host for the Blob one. */
 export type UnusableEndpoint = "azure-dfs";
@@ -85,7 +85,7 @@ const GCS_HOST = /^storage\.googleapis\.com$/i;
  * refused for dfs in the same edit and the two cannot drift. It is declared ABOVE the matchers because they
  * read it while they are being built, and a const read before its own initialiser throws.
  *
- *   core.windows.net        the commercial cloud, the only one measured live
+ *   core.windows.net        the commercial cloud, the only one measured live (2026-08-24)
  *   core.usgovcloudapi.net  Azure US Government
  *   core.chinacloudapi.cn   Azure China, operated by 21Vianet
  *
@@ -156,7 +156,7 @@ export function providerForEndpoint(hostOrUrl: string | undefined): DestProvider
  * for every endpoint that is worth probing.
  *
  * ITS ONLY MEMBER IS THE ADLS GEN2 `dfs` ENDPOINT. An Azure BLOB endpoint is NOT unusable and never reaches
- * here: it became a supported destination, so providerForEndpoint classifies it as "azure" and
+ * here: it became a supported destination on 2026-08-25, so providerForEndpoint classifies it as "azure" and
  * the factory dispatches it to the Azure client. The dfs endpoint stays refused because it speaks a
  * different wire protocol from the Blob one, which is not something a credential or a setting can change.
  *
@@ -190,7 +190,7 @@ export const UNUSABLE_ENDPOINT_REASON: Readonly<Record<UnusableEndpoint, string>
 /**
  * AZURE_REFUSED_FIELDS is the closed set of destination fields an Azure Blob endpoint cannot honour.
  *
- * IMMUTABILITY IS NOT IN THIS SET, AND IT WAS, WRONGLY. The first version of this module
+ * IMMUTABILITY IS NOT IN THIS SET, AND IT WAS, WRONGLY (2026-08-25). The first version of this module
  * refused an immutability policy on every Azure endpoint, arguing that Azure's TWO primitives (a policy
  * that is separately unlocked or locked, plus an independent legal hold) could not be mapped onto the one
  * mode plus one window the form collects, so any mapping would be a guess that might promise a guarantee
@@ -253,7 +253,7 @@ export const AZURE_REFUSED_FIELDS: ReadonlyArray<{ field: string; reason: string
  * GCS_REFUSED_FIELDS is the closed set of destination fields a Google Cloud Storage endpoint cannot
  * honour, each with the reason a GCS operator can act on.
  *
- * IMMUTABILITY IS NOT IN THIS SET, AND IT BRIEFLY WAS, WRONGLY. The first version of this
+ * IMMUTABILITY IS NOT IN THIS SET, AND IT BRIEFLY WAS, WRONGLY (2026-08-25). The first version of this
  * module refused an immutability policy on every GCS endpoint, on the belief that Google Cloud Storage
  * has no S3 Object Lock. MEASURED AGAINST A REAL BUCKET, that belief is false:
  *
@@ -276,7 +276,7 @@ export const AZURE_REFUSED_FIELDS: ReadonlyArray<{ field: string; reason: string
  * while STANDARD_IA is rejected on the wire, is worse than a field that is honestly always refused.
  *
  * WHY EACH ONE IS REFUSED HERE RATHER THAN LEFT TO THE PROBE. Every one of these already failed, and
- * failed loudly, before this refusal existed. Measured against a real GCS bucket:
+ * failed loudly, before this refusal existed. Measured against a real GCS bucket on 2026-08-24:
  *
  *   - a PUT carrying x-amz-storage-class: STANDARD_IA answers 400 InvalidStorageClass, and the save-time
  *     write probe carries the storage class, so the save was already refused;

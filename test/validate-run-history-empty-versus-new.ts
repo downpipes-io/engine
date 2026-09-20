@@ -2,7 +2,7 @@
 //
 // AN ESTATE THAT HAS LOST ITS RUN HISTORY AND AN ESTATE THAT NEVER HAD ANY WERE THE SAME RESPONSE.
 //
-// An earlier pass repaired four console surfaces and named one it could not repair, honestly:
+// An earlier pass repaired four console surfaces on 2026-08-13 and named one it could not repair, honestly:
 // "a run-history map that settles ok:true and EMPTY is byte-identical to a brand-new estate, and no
 // console change can separate them". That is correct, and the reason it is correct is that the fact
 // which separates them was never on the wire. GET /history returned byDownpipe and nothing else, so an

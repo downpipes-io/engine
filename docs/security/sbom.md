@@ -2,7 +2,7 @@
 
 **Scope:** All three Downpipes repositories -- `engine`, `console`, `downpipe`
 **Standard:** CycloneDX 1.6 (JSON)
-**ASVS control:** V15.1.2 (L2, PARTIAL, per the assessment)
+**ASVS control:** V15.1.2 (L2, PARTIAL, per the 2026-06-08 assessment)
 **Source files read:** `engine/package.json`, `console/package.json`, `downpipe/go.mod`, `downpipe/go.sum`
 
 ---

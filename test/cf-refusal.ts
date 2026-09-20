@@ -25,7 +25,7 @@
 //                a fact about the account's STATE rather than its plan, and it MAY be satisfiable.
 //
 //                "May" is doing real work there. A PRECONDITION CAN BE AN ENTITLEMENT IN DISGUISE, and
-// the only way to tell is to try to satisfy it. Two surfaces refused with
+//                the only way to tell is to try to satisfy it. Two surfaces refused on 2026-07-27 with
 //                textbook precondition wording, "No Zone Hold Found" and "Custom Nameserver set doesn't
 //                exist", and both were recorded as prereq candidates on the strength of that wording.
 //                Creating the missing object was then attempted for each: zone holds answered "only

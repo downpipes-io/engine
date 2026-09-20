@@ -146,7 +146,7 @@ function basePathFor(format: EmulatorFormat): string {
       return "/v2/enqueue";
     case "splunk-hec":
       // HEC's real ingest path. Was "/ingest" (a path Splunk does not serve), which meant a destination
-      // configured with ANY path passed the suite: the emulator never checked one. Observed on
+      // configured with ANY path passed the suite: the emulator never checked one. Observed 2026-07-30 on
       // a real Splunk Cloud stack, port 8088.
       return "/services/collector/event";
     case "otlp":
@@ -166,7 +166,7 @@ function basePathFor(format: EmulatorFormat): string {
 // Splunk HEC: the OBSERVED contract
 // ============================================================================================================
 //
-// Every status/body pair below was captured against a real Splunk Cloud stack, POSTing to
+// Every status/body pair below was captured against a real Splunk Cloud stack on 2026-07-30, POSTing to
 // its :8088 /services/collector/event listener. Before this, the emulator applied
 // NO auth check and served ANY path with 200 {"text":"Success","code":0} -- so a destination configured with
 // `Authorization: Bearer <token>` (which real HEC REFUSES) passed the whole suite green. That is the

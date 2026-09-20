@@ -5,7 +5,7 @@
 // the way Cloudflare R2 and Google Cloud Storage are: it is a different wire protocol with a different
 // authentication scheme, a different request shape and a different object model. Pointing the
 // S3-compatible destination at an Azure endpoint answers 403 AuthenticationFailed on the first call,
-// measured against a real storage account. So Azure needs its own signer, and this is it.
+// measured 2026-08-24 against a real storage account. So Azure needs its own signer, and this is it.
 //
 // THE SCHEME. Azure builds a canonical string from a FIXED-POSITION list of eleven standard headers, then
 // every x-ms-* header sorted, then a canonicalised resource path with its query parameters sorted. The
@@ -19,7 +19,7 @@
 // and azure-sharedkey.knownAnswer.ts checks this implementation against them character for character
 // rather than checking that some signature was produced.
 //
-// CONTENT-LENGTH IS THE SPECIFIC ONE. Azure's own rule changed with the API version: a zero
+// CONTENT-LENGTH IS THE SPECIFIC ONE. Azure's own rule changed with the 2015-02-21 API version: a zero
 // content length is signed as an EMPTY string, not as "0". A signer that writes "0" authenticates every
 // body-bearing request correctly and fails every GET, HEAD and DELETE, which reads like a permission
 // problem rather than a signing one.
@@ -42,12 +42,12 @@ export interface AzureSignInput {
   /** Headers to sign and send. Every x-ms-* header is signed; the eleven standard fields below are read
    *  from here where present. `x-ms-date` is added by this module when absent. */
   headers: Record<string, string>;
-  /* * The request body length. Signed as an EMPTY line when zero, per the rule. */
+  /** The request body length. Signed as an EMPTY line when zero, per the 2015-02-21 rule. */
   contentLength?: number;
 }
 
 /** The API version this module signs for. It is part of every request as `x-ms-version` and it is not a
- *  cosmetic header: the empty-string rule for a zero Content-Length below is specific to and
+ *  cosmetic header: the empty-string rule for a zero Content-Length below is specific to 2015-02-21 and
  *  later, so changing this constant without re-reading that rule silently breaks every body-less call. */
 export const AZURE_API_VERSION = "2021-12-02";
 
@@ -150,7 +150,7 @@ export async function signAzureSharedKey(input: AzureSignInput, creds: AzureShar
 
   const fields = STANDARD_FIELDS.map((f) => {
     if (f === "content-length") {
-      // The rule: a zero length signs as EMPTY, never "0". See this module's header for why
+      // The 2015-02-21 rule: a zero length signs as EMPTY, never "0". See this module's header for why
       // getting this wrong looks exactly like a permission problem.
       const n = input.contentLength ?? 0;
       return n === 0 ? "" : String(n);

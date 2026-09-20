@@ -250,7 +250,7 @@ async function main(): Promise<void> {
     //
     // THIS BLOCK PINS A KNOWN DIVERGENCE, NOT A DESIRED END STATE. It used to describe itself as "the
     // engine-side analogue of the CLI coding a deleted segment as ExitIncomplete", and that citation is
-    // stale: the reader landed ExitDangling (13) at downpipe@e86b003 precisely because
+    // stale: the reader landed ExitDangling (13) at downpipe@e86b003 on 2026-08-05 precisely because
     // conflating an absent object with an altered one points an operator away from the replica that would
     // have restored them. See the long note at the matching net in src/restore-reasons.ts for the evidence
     // and for the structural reason the engine cannot follow yet, which is that its restore walk aborts on

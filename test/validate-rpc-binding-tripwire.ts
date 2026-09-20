@@ -1,5 +1,5 @@
 // validate-rpc-binding-tripwire.ts -- a TRIPWIRE for a latent risk R-08 round-3's independent
-// adversarial review named and left inert.
+// adversarial review named and left inert (2026-08-03).
 //
 // THE RISK. enumerateBoundSources (src/admin/router-sources.ts) tells a Secrets Store binding apart from
 // every other Cloudflare binding kind by duck-typing: a value that answers "yes" to three or more of five
@@ -12,7 +12,7 @@
 // `new Proxy(...)` with a wildcard trap -- "appears to have an infinite number of methods of every
 // possible name" (developers.cloudflare.com/workers/runtime-apis/rpc/; entrypoint/RPC support for
 // `[[services]]` and `[[dispatch_namespaces]]` confirmed at developers.cloudflare.com/workers/wrangler/
-// configuration/, both read). Attach one as a source and its runtime value would plausibly
+// configuration/, both read 2026-08-03). Attach one as a source and its runtime value would plausibly
 // answer "yes" to three-plus groups and .get for the exact structural reason the Secrets Store binding
 // did, and get misclassified as a backup source. INERT today: this scan (below) finds zero `[[services]]`
 // or `[[dispatch_namespaces]]` declarations anywhere in this repo's wrangler*.toml files.

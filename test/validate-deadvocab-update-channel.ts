@@ -1,4 +1,4 @@
-// DEAD-VOCABULARY PRODUCERS: THE UPDATE PIPELINE'S CHANNEL AND DIGEST LEGS.
+// DEAD-VOCABULARY PRODUCERS: THE UPDATE PIPELINE'S CHANNEL AND DIGEST LEGS (2026-07-13).
 //
 // Four members of the update-fault ring were declared and could never be emitted: the `channel` COMPONENT,
 // the `channel-verify` STEP, the `digest-check` STEP and the `digest-mismatch` CAUSE. The consequences were

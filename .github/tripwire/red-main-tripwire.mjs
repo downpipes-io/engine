@@ -3,8 +3,8 @@
 // goes green again.
 //
 // WHY IT EXISTS, measured rather than asserted. The workspace's internal test harness had main red for 38
-// consecutive CI runs /04 and nothing in this workspace said so. This file is copied into every
-// repo, though copies have since diverged (three distinct digests across six repos), so the
+// consecutive CI runs on 2026-08-03/04 and nothing in this workspace said so. This file is copied into every
+// repo, though copies have since diverged (three distinct digests across six repos as at 2026-09-01), so the
 // measurement is named against that harness rather than "this repo": a claim that travels must stay true in
 // the repo it lands in. What eventually found it was a scheduled sweep by a
 // pass looking at something else, which means the thirty-eighth red was the one that got noticed rather
@@ -110,7 +110,7 @@ export function decide({ conclusion, previousState, hasOpenIssue }) {
 //
 // decide() grades a TRANSITION, so it is silent about a main that was already red before it was installed:
 // every red it sees has a red predecessor, and the README states that cost plainly. Two of the three
-// saturated repos in this workspace were in exactly that position, so for them a transition
+// saturated repos in this workspace on 2026-08-05 were in exactly that position, so for them a transition
 // tripwire would have opened nothing, ever, until main went green once of its own accord.
 //
 // decideAdopt() grades a STATE instead: main is red now, and no issue says so. It is deliberately a
@@ -333,7 +333,7 @@ const ORDER_FIXTURES = [
   { name: "unwidened: CI alone, green then red, opens and stays open", events: [{ workflow: "CI", conclusion: "success", previousState: "success" }, { workflow: "CI", conclusion: "failure", previousState: "success" }], wantOpen: true },
   // A skipped run must never be read as redness. Scorecard carries `if: github.event.repository.private ==
   // false`, so it concludes `skipped` on every run while a repo is private, and the streaks are long. Every
-  // count below is the unbroken run of skips on main, measured by paginating that
+  // count below is the unbroken run of skips on main as at 2026-08-05, measured by paginating that
   // workflow's whole run history and reading down from the newest, so each is bounded by a real non-skipped
   // run rather than by the edge of a page: 199 on docs, 85 on downpipe, 56 on control-plane, and none at all
   // on website or the internal test harness, neither of which carries a `scorecard.yml`, so in those two
@@ -471,7 +471,7 @@ async function api(method, path, body) {
  * returns the workflow's most recent runs, newest first, with no notion of "before this one". Asked for one
  * page and then filtered down to run numbers below the run being graded, it answers correctly for the
  * newest run and answers "there is no previous run" for anything older than a page, because the page it
- * fetched contains nothing old enough. Measured against the internal test harness's own history: grading run
+ * fetched contains nothing old enough. Measured against the internal test harness's own history on 2026-08-04: grading run
  * #281, the first red of the 38-run streak, reported previousState "absent" when run #280 exists and
  * concluded success. That is not a harmless imprecision. The two states produce the same ACTION here, but
  * the issue body would have told a reader there was nothing to compare against on the one run where the
@@ -768,7 +768,7 @@ async function main() {
 // Guard on realpath, not on the raw argv path. node records import.meta.url after resolving symlinks, so
 // comparing it against pathToFileURL(process.argv[1]) is false for any invocation reaching this file
 // through a symlinked directory, and main() then never runs while the process still exits 0. That exact
-// fail-open guard was found in this workspace in a gate that printed nothing and passed.
+// fail-open guard was found in this workspace on 2026-08-04 in a gate that printed nothing and passed.
 const { realpathSync } = await import("node:fs");
 const { pathToFileURL } = await import("node:url");
 const invokedDirectly = process.argv[1] !== undefined && realpathSync(process.argv[1]) === realpathSync(new URL(import.meta.url).pathname);

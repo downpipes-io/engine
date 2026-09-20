@@ -48,7 +48,7 @@ async function main(): Promise<void> {
   // it in the one message a person reads mid-disaster: "this run needs one of: break-glass dpr1:X, <role>
   // dpr1:Y" (downpipe/internal/crypto/capsule.go, describeWanted).
   //
-  // Until this helper hardcoded "operational" for whatever second key it was handed, and the
+  // Until 2026-07-28 this helper hardcoded "operational" for whatever second key it was handed, and the
   // control-plane pass hands it the CONFIG recipient, so every sealed configuration export claimed its
   // second recipient was the operational key. That sends an operator after a key that does not open it and
   // that a break-glass-only estate does not have.

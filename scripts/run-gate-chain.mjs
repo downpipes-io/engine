@@ -3,7 +3,7 @@
 //
 // WHY THIS EXISTS, measured on this repo rather than argued. `npm run validate` was a single `&&` chain of
 // 383 members. `&&` stops at the first non-zero exit, which is right for a build and wrong for a gate suite:
-// the chain stopped at member 219, test/validate-cmp-compound-faults.ts, and the 164 members
+// on 2026-08-05 the chain stopped at member 219, test/validate-cmp-compound-faults.ts, and the 164 members
 // behind it had not run for as long as that member had been red. Running those 164 individually took 169
 // seconds and found THREE reds, not one. Two of the three had the same root cause as the member that
 // stopped the chain: commit d3099399 added a spend-time identity re-resolution to the restore-approval
@@ -38,7 +38,7 @@
 //
 // WHAT THE CHAIN'S OWN EXIT CODE MEANS, and why a refusal outranks a finding. The convention in this repo is
 // 0 clean, 1 a finding, 2 could-not-check, with exit 2 reserved for the instrument being unable to answer
-// rather than for a question it declines to treat as its own. Until this runner read each
+// rather than for a question it declines to treat as its own. Until 2026-08-10 this runner read each
 // member's code, printed it in the run log, and then returned a flat 1 for any non-zero. A member that
 // refused because it could not establish its own subject came out of the chain looking exactly like a member
 // that had graded a full population and found violations.
@@ -113,7 +113,7 @@ const ROOT = process.cwd();
 // wait here is an unbounded wait in the deploy a customer follows: no output, no progress, no timeout,
 // and not a failure, which is worse, because a hang cannot be told from a slow step.
 //
-// PORTED FROM console/scripts/run-gate-chain.mjs, where the defect was measured:
+// PORTED FROM console/scripts/run-gate-chain.mjs, where the defect was measured on 2026-08-13:
 // test/validate-break-glass-restore.ts printed VERDICT: PASS failures=0 at about two seconds and then held
 // the event loop for just under an hour on an uncancelled timer in the screen it drives. THE ENGINE CHAIN
 // HAS NO MEMBER OF THAT SHAPE TODAY, and that was measured rather than assumed: all 427 members were run

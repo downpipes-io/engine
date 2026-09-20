@@ -11,16 +11,16 @@
 // forces escalation but never sets the primary class -- so a world where such a signal is the
 // only evidence is INDETERMINATE + escalate with isFault:true.
 //
-// ## FINDINGS (all three FIXED in the fix round; labels encode the POST-FIX behavior)
-// 1. FIXED: source-records-collapsed now joins diagnose.ts's HEALTHY class gate, so a
+// ## FINDINGS (all three FIXED in the 2026-07-02 fix round; labels encode the POST-FIX behavior)
+//  1. FIXED 2026-07-02: source-records-collapsed now joins diagnose.ts's HEALTHY class gate, so a
 //     source whose latest ok run collapsed to 0 records classes INDETERMINATE (it already escalated;
 //     the class label now agrees). See sources.record-count-collapsed.
-// 2. FIXED: restore-test-failed now carries the CLOSED lastRestoreTestReason (+ streak) and
+//  2. FIXED 2026-07-02: restore-test-failed now carries the CLOSED lastRestoreTestReason (+ streak) and
 //     both the warning and (when the restore test is the ONLY suspect-seal evidence) the SEAL-SUSPECT
 //     cause are routed by it — an `integrity` failure gets AT-REST-CORRUPTION prose ("a re-run does NOT
 //     repair the stored archive"), never the reassuring re-run line. See dr.scheduled-restore-test-failed
 //     (+ fixround.restore-test-dest-access for the availability routing).
-// 3. FIXED: plan-ceiling-exceeded now also requires some recorded tick to have DISPATCHED
+//  3. FIXED 2026-07-02: plan-ceiling-exceeded now also requires some recorded tick to have DISPATCHED
 //     work, so a brand-new install (nothing due, nothing dispatched) no longer cries wolf; a working
 //     unproven fleet still fires. See infra.free-plan-ceiling-unproven (its ticks dispatch) and
 //     healthy.fresh-install (relabelled).
@@ -210,7 +210,7 @@ export const DOMAIN_B_SCENARIOS: Scenario[] = [
 
   // ----------------------------------------------------------------------- infra
   {
-    // FIXED (finding 3, header): the signal now ALSO requires a dispatching fleet (some
+    // FIXED 2026-07-02 (finding 3, header): the signal now ALSO requires a dispatching fleet (some
     // tick with dispatched>0) — this scenario's tick[0] dispatches, so the genuine working-but-unproven
     // free-plan risk still fires; the brand-new-install cry-wolf (nothing dispatched) no longer does.
     id: "infra.free-plan-ceiling-unproven",
@@ -404,7 +404,7 @@ export const DOMAIN_B_SCENARIOS: Scenario[] = [
 
   // ------------------------------------------------------------------- dr-restore
   {
-    // FIXED (finding 2, header): the reason code + streak now ride the restore-test-failed
+    // FIXED 2026-07-02 (finding 2, header): the reason code + streak now ride the restore-test-failed
     // signal, and the SEAL-SUSPECT primary cause is routed by them — this scenario's `integrity`
     // reason gets the AT-REST-CORRUPTION prose ("a re-run does NOT repair the stored archive"), not
     // the reassuring re-run line (bot-side prose asserted by the fixround item-3 unit tests).
@@ -531,7 +531,7 @@ export const DOMAIN_B_SCENARIOS: Scenario[] = [
     capture: (b) => expectInBundle(b, '"recordsSkipped":4', "the skipped-record count on the run row"),
   },
   {
-    // FIXED (finding 1, header): source-records-collapsed now joins the HEALTHY class gate,
+    // FIXED 2026-07-02 (finding 1, header): source-records-collapsed now joins the HEALTHY class gate,
     // so the probable silently-emptied source classes INDETERMINATE (it already escalated with the
     // collapse warning; the class label a reviewer sees now agrees with the concern).
     id: "sources.record-count-collapsed",

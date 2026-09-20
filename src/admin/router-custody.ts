@@ -135,7 +135,7 @@ function wrapProse(line: string): string {
 //    now the theme's neutral automated-message line.
 // 2. THE PALETTE HAD GONE STALE AND THE COMMENT SAYING OTHERWISE WAS THE LAST THING STILL ASSERTING IT.
 //    The deleted constants claimed to "match the licence-email palette (control-plane email-blocks.ts)",
-// and by six of the seven no longer did: the accent was slate #34506c against the
+//    and by 11 August 2026 six of the seven no longer did: the accent was slate #34506c against the
 //    pack's brand indigo #3b66f0, and the code well, border, text and muted values had each drifted a
 //    step. That claim was true when it was written; the pack moved and this copy did not, which is what
 //    a second copy of a design always eventually does.

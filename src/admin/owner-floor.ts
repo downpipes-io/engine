@@ -16,7 +16,7 @@
 // THIS PARAGRAPH USED TO CALL BOTH EDGES "RECOVERABLE via the break-glass off-switch (the route guarantees
 // the break-glass can always disarm)". THAT WAS FALSE, and the sentence was the whole safety argument.
 // Retiring the break-glass token removes the off-switch, there is no un-retire route, and the product's own
-// dispose-bootstrap-token posture check tells the operator to retire it. Measured by another
+// dispose-bootstrap-token posture check tells the operator to retire it. Measured 2026-08-11 by another
 // pass over the full eight-cell lattice; see wouldStrandDualControl below, which now refuses the
 // combination at each of its three entrances, and test/validate-owner-floor-breakglass-escape.ts.
 //
@@ -132,7 +132,7 @@ export function canRequireDualControl(ownerCount: number): boolean {
 // ---- THE UNRECOVERABLE COMBINATION, and why the module's own "RECOVERABLE" note above needed a floor ---
 //
 // The paragraph at the head of this file calls both residual edges "RECOVERABLE via the break-glass
-// off-switch (the route guarantees the break-glass can always disarm)". Measured: THE ESCAPE IS
+// off-switch (the route guarantees the break-glass can always disarm)". Measured 2026-08-11: THE ESCAPE IS
 // DISPOSABLE. POST /admin/policy/retire-break-glass-token sets a durable latch after which a bare ADMIN_TOKEN
 // never resolves to owner, so the `method === "token"` branch that disarms immediately is unreachable, and
 // there is no un-retire route (the DO honours retired:false, nothing sends it). The product's own

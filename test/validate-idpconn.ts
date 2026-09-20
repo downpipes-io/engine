@@ -376,7 +376,7 @@ const baseOauth2 = {
     && richSaml.conn.allowIdpInitiated === true && richSaml.conn.clockSkewSec === 0);
   // ===== A PRESENT-BUT-UNUSABLE ATTRIBUTE MAPPING IS REFUSED, NOT DROPPED ONTO A 200. =====
   //
-  // (, second batch.) These three were a bare truthiness
+  // (2026-08-09, second batch.) These three were a bare truthiness
   // guard over boundedStr's null, so an over-CLAIM_NAME_MAX value fell through the `if` and the connection
   // saved with the mapping ABSENT. groupsAttr is authorisation: the operator's groups-to-roles rules then
   // silently did not apply and every user landed with no groups, on a connection reported as saved. The

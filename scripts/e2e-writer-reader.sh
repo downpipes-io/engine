@@ -105,7 +105,7 @@ echo "e2e: PASS - the engine wrote it and the independent Go reader verified + r
 
 # ---- The commands the SIGNED, IN-ARCHIVE RECOVER.md prints are DRIVEN, from the archive's own bytes.
 # This is the only place in the repo where both halves needed to drive them exist at once: a real
-# engine-written archive is on disk and a real Go reader is built. Until nothing ran them,
+# engine-written archive is on disk and a real Go reader is built. Until 2026-08-04 nothing ran them,
 # and the document shipped a custody line that exits 6 (ExitUsage) against a 3-of-N split and a
 # headline line with no --apply, so the only instruction a customer had mid-disaster exited 0 and
 # restored nothing. Reading the string literal is what missed both; the gate runs the lines instead.

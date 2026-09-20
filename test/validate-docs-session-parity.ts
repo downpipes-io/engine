@@ -122,8 +122,8 @@ for (const [name, ms] of BOUNDS) {
 }
 
 // ---- VERDICTS: the 800-63B revision 4 comparison, derived rather than transcribed -------------------------
-// The figures are NIST SP 800-63B rev 4, §2.2.3 (AAL2) and §2.3.3 (AAL3), read from
-// pages.nist.gov/800-63-4/sp800-63b.html. They are the standard's, so they are held here.
+// The figures are NIST SP 800-63B rev 4 (26 August 2025), §2.2.3 (AAL2) and §2.3.3 (AAL3), read from
+// pages.nist.gov/800-63-4/sp800-63b.html on 2026-09-12. They are the standard's, so they are held here.
 const NIST_ROWS: Array<{ row: string; figure: string; limitMs: number; bound: number }> = [
   { row: "AAL2 overall (2.2.3)", figure: "SHOULD be no more than 24 hours", limitMs: 24 * HOUR, bound: SESSION_TTL_MS },
   { row: "AAL2 inactivity (2.2.3)", figure: "SHOULD be no more than 1 hour", limitMs: 1 * HOUR, bound: SESSION_IDLE_MS },

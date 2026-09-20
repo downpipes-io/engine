@@ -402,7 +402,7 @@ async function bundleTests(): Promise<void> {
   // separate repo, and the bundle content is not normative because each archive verifies against the
   // SHA384SUMS written in the same run); the two are held in step by the matching assertion there.
   //
-  // The last three claims were added with the two defects they stand for. `--apply`:
+  // The last three claims were added on 2026-08-04 with the two defects they stand for. `--apply`:
   // restore plans by default, so the headline line without it exited 0 having written nothing, and a
   // customer following their only instruction mid-disaster got no data. The two signer.pub sentences:
   // the prose named only the break-glass identity, while restore and verify BOTH hard-require --signer,

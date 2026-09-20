@@ -53,7 +53,7 @@ import { CF_CONFIG_SURFACES } from "./cf-config-registry.ts";
  * write() directly. That is the right way to prove a WRITER and it skips everything a customer goes
  * through: decoding the snapshot, building the plan, summarising the diff the operator reads before
  * consenting, scoping the approval, and applying under it. Only the console round trip crosses that layer,
- * and it is engine code that moves independently of any writer. restore-cfconfig.ts changed,
+ * and it is engine code that moves independently of any writer. restore-cfconfig.ts changed on 2026-08-08,
  * which postdates every engine-API proof in the tree. A fingerprint that omitted this could not fall when
  * the layer between the customer and the writer changed, which is most of what a restore depends on.
  *

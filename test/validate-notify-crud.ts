@@ -109,7 +109,7 @@ async function testNotifyCrudRules(): Promise<void> {
   }
   // ===== A RULE MAY NAME A DOWNPIPE THAT DOES NOT EXIST. THAT IS DELIBERATE. =====
   //
-  // An earlier pass examined this as a candidate defect and LEFT IT,
+  // An earlier pass (2026-08-09) examined this as a candidate defect and LEFT IT,
   // pinning the decision here.) addNotifyRule's own comment states the policy for the SIBLING reference on
   // the same record: it "does NOT require the referenced channels to exist at write time (an operator may
   // wire a rule before a channel); resolveDelivery skips unknown ids at delivery time". The downpipe scope
@@ -229,7 +229,7 @@ async function testNotifyResolve(): Promise<void> {
   // shapes (a +10:00 offset, a sub-millisecond fractional, and a no-millis Z) and assert each is echoed
   // canonically. The canonical target reuses isoAt (the same producer normalisation).
   {
-    const canon = isoAt(Date.parse("2026-06-09T10:00:00Z"));
+    const canon = isoAt(Date.parse("2026-06-09T10:00:00Z")); // "2026-06-09T10:00:00.000Z"
     const shapes = [
       "2026-06-09T20:00:00+10:00", // offset form of 10:00:00Z
       "2026-06-09T10:00:00.000123Z", // sub-millisecond precision

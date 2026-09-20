@@ -110,14 +110,14 @@ console.log("\n-- discovery walks the tree rather than a hand-kept list --\n");
   const sites = discoverSites(root, "src", "maybeWrapConfigSecret");
   // The count is asserted against the census in validate-secret-and-signature-guard-completeness.ts, which
   // reaches the same number by a different reader. Two readers, one answer.
-  // 7 across 6 files, when the IdP client secret's write ingress joined them (POST
+  // 7 across 6 files since 2026-09-10, when the IdP client secret's write ingress joined them (POST
   // /idp/connections seals it under IDP_SECRET_AAD). Both numbers are asserted, because a site added in a
   // file already counted would leave the file total unchanged.
   ok("it finds the seven maybeWrapConfigSecret call sites", sites.length === 7);
   ok("across six files, so it is not reading one file and stopping", new Set(sites.map((s) => s.file)).size === 6);
   ok("and it excludes the declaration itself", sites.every((s) => s.file !== "admin/config-secret.ts"));
   const verify = discoverSites(root, "src", "hybridVerify");
-  // Eleven since b236b6e4 added a second site to format/freshness.ts. Both readers are moved
+  // Eleven since b236b6e4 (2026-08-11) added a second site to format/freshness.ts. Both readers are moved
   // together on purpose: the point of "two readers, one answer" is that a wrong number has to be written
   // twice to survive, and updating only the census would have left this one red and the pair silent.
   ok("it finds the eleven hybridVerify call sites", verify.length === 11);

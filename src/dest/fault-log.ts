@@ -161,7 +161,7 @@ export function closedS3Code(body: string): S3ErrorCode {
  *                                 wildly wrong value.
  *   sealed-bound-exceeded         a sealed stream ran past its declared bound (an engine-side invariant).
  *   key-shape-refused             the key-traversal guard refused an object key's shape.
- *   endpoint-internal-refused  the wire-time SSRF screen in s3.ts's metered refused a request
+ *   endpoint-internal-refused     (2026-09-10) the wire-time SSRF screen in s3.ts's metered() refused a request
  *                                 whose host classifies as internal/private/loopback/link-local (incl. the
  *                                 169.254.169.254 cloud-metadata IP). The endpoint had passed the https shape
  *                                 check and was stored, so without this member the refusal appears only as a

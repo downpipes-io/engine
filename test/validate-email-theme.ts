@@ -18,7 +18,7 @@
 //   - The claim-code and raw-token rules. There is no claim code and no licence token in engine mail. The
 //     engine's own redaction boundary stands in their place: section (8) drives the REAL notify caller and
 //     proves the emission's unsafe fields never reach the card.
-// - The human-date rule. control-plane renders " (UTC)" because a customer reading a licence
+//   - The human-date rule. control-plane renders "12 June 2027 (UTC)" because a customer reading a licence
 //     term should not have to parse an ISO string. An on-call alert is the opposite case: the operator
 //     wants the precise instant, and src/notify/channels/email.ts renders emission.at verbatim on purpose.
 //     Section (8) pins that it survives verbatim instead.
@@ -111,7 +111,7 @@ const kinds: Record<string, EngineEmailInput> = {
   },
   // src/admin/router-custody.ts: the recovery-share email, the one kind that carries a code block and a
   // numbered list, and the only kind whose body is a customer's own key material. It joined this card on
-  // , having been a hand-rolled second renderer until then: a fixed 480px table that
+  // 11 August 2026, having been a hand-rolled second renderer until then: a fixed 480px table that
   // overflowed a 360px phone, no dark scheme, a palette whose own comment claimed to match the licensing
   // pack and by then differed in six of seven values, and the vendor sign-off this module's header
   // forbids on engine-sent mail. NO CTA: a share email must never carry a link.

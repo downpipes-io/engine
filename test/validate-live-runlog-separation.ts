@@ -1,8 +1,8 @@
-// Measured. Does the SHARED harness archive bucket explain the forked RUNLOG, and
+// Measured 2026-08-11. Does the SHARED harness archive bucket explain the forked RUNLOG, and
 // would giving each estate its own bucket clear it?
 //
 // The four documents under test/fixtures/bucket-split-runlogs/ are REAL, read read-only off the Cloudflare R2
-// S3 endpoint with the account-read half of the `harness-dest-r2` credential (tools/r2snap.mjs
+// S3 endpoint on 2026-08-11 with the account-read half of the `harness-dest-r2` credential (tools/r2snap.mjs
 // get). Nothing was written to, repaired, reset or cleaned in any bucket. They are:
 //
 //   harness-archive-a.ndjson           the SHARED fixture bucket all seven dest-fixtures name

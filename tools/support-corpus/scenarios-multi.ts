@@ -109,7 +109,7 @@ export const MULTI_FAULT_SCENARIOS: Scenario[] = [
     // migration/reset is deploy-adjacent), exactly as the core amnesia payload carries it.
     expectSignals: ["recovery-required", "dest-auth-failed", "deploy-identity-changed"],
     expectAbsentSignals: ["throttled"],
-    // F-1 FIXED (item 19): dest-auth-failed as a SECONDARY now appends a warning line
+    // F-1 FIXED 2026-07-02 (item 19): dest-auth-failed as a SECONDARY now appends a warning line
     // ("the DESTINATION is ALSO rejecting writes ... any recovery/restore that must READ or WRITE the
     // destination will fail"), so the note prescribing a control-plane recovery names the revoked
     // credential that would block it (bot-side prose asserted by the fixround item-19 unit test over
@@ -221,7 +221,7 @@ export const MULTI_FAULT_SCENARIOS: Scenario[] = [
     // The malformed BREAK_GLASS_PUBLIC fires BOTH the recipients preflight probe (posture-failed) and
     // the keys-health parse probe (key-material-unhealthy) -- the same root cause, two detectors.
     expectSignals: ["records-incomplete-nonzero", "posture-failed", "key-material-unhealthy"],
-    // F-3 FIXED (item 19): posture-failed as a SECONDARY now appends its own warning line
+    // F-3 FIXED 2026-07-02 (item 19): posture-failed as a SECONDARY now appends its own warning line
     // ("a posture/access prerequisite is ALSO failing"), so a posture failure with no keys-block twin
     // is no longer prose-invisible under a higher primary (bot-side prose asserted by the fixround
     // item-19 unit test). See ## FINDINGS.
@@ -386,7 +386,7 @@ export const MULTI_FAULT_SCENARIOS: Scenario[] = [
     // coherent story: the offsite replica destination died 2 hours ago (canary dead + replication
     // ok=false), its replication-degraded alert fired then and the re-alert reconciliation has NOT
     // refreshed or cleared the cooldown row since (its 1h window elapsed an hour ago -> genuinely
-    // STUCK, the post-fix semantics), the no-custody export is 9 days old while the config
+    // STUCK, the post-fix 2026-07-02 semantics), the no-custody export is 9 days old while the config
     // has since moved to v8 (genuinely stale — the export-pass keeps skipping on budget-yield), and
     // the latest seal verify passed only structurally (break-glass recipient, no decrypt sample).
     trueClass: "INDETERMINATE",
@@ -435,9 +435,9 @@ export const MULTI_FAULT_SCENARIOS: Scenario[] = [
   },
 ];
 
-// ## FINDINGS (precedence / masking concerns; F-1/F-3 FIXED, F-2/F-4 by-design)
+// ## FINDINGS (precedence / masking concerns; F-1/F-3 FIXED 2026-07-02, F-2/F-4 by-design)
 //
-// F-1 (multi.amnesia-plus-dest-auth) — FIXED (item 19): dest-auth-failed now HAS a
+// F-1 (multi.amnesia-plus-dest-auth) — FIXED 2026-07-02 (item 19): dest-auth-failed now HAS a
 //     secondary surface — when it fires under a non-dest primary, diagnose.ts appends the "the
 //     DESTINATION is ALSO rejecting writes ... any recovery/restore that must READ or WRITE the
 //     destination will fail" warning, so the note prescribing a control-plane recovery names the
@@ -452,7 +452,7 @@ export const MULTI_FAULT_SCENARIOS: Scenario[] = [
 //     skimming the primary cause line sees "transient" first. Labeled as designed (the seal-after-
 //     actionable-causes ordering exists so a read-back blip cannot mask owner-#1/dest faults).
 //
-// F-3 (multi.incompleteness-plus-posture) — FIXED (item 19): posture-failed now HAS a
+// F-3 (multi.incompleteness-plus-posture) — FIXED 2026-07-02 (item 19): posture-failed now HAS a
 //     secondary surface (its own "a posture/access prerequisite is ALSO failing" warning line), so a
 //     posture failure with no keys-block twin is no longer prose-invisible under a higher primary.
 //

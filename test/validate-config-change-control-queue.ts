@@ -81,7 +81,7 @@ export async function runQueue(ctx: Ctx, shared: Shared): Promise<void> {
       proposedAt: "2026-06-10T00:00:00.000Z", status: "pending",
       contentHash: "sha384:x", baseVersionId: 0, baseVersionHash: "sha384:y",
     };
-    // now is far past base.proposedAt (a fixed timestamp), well clear of the ASVS V2.4.2
+    // now is far past base.proposedAt (a fixed 2026-06-10 timestamp), well clear of the ASVS V2.4.2
     // approval-dwell floor, so these unit-level self-approval/distinct-approver checks are not
     // themselves refused as too-soon; that floor is proven separately (validate-approval-dwell.ts).
     const now = Date.now();

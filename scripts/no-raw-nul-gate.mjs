@@ -5,11 +5,11 @@
 // WHY THIS FILE EXISTS IN THIS REPOSITORY, WHICH IS A SIBLING-GAP FINDING RATHER THAN A NEW RULE.
 //
 // The rule is not new. console/scripts/no-raw-nul-gate.mjs, docs/scripts/no-raw-nul-gate.mjs,
-// harness/scripts/no-binary-source-gate.mjs and,, internal-docs and control-plane have
+// harness/scripts/no-binary-source-gate.mjs and, since 2026-08-13, internal-docs and control-plane have
 // each enforced it. This file is the internal-docs port adapted rather than re-invented. What was missing
 // was a copy HERE, in the repository the defect has visited most.
 //
-// The gap was measured rather than assumed, by counting how often a raw NUL has actually
+// The gap was measured on 2026-08-13 rather than assumed, by counting how often a raw NUL has actually
 // landed in each repository's source history (every blob reachable from every ref, source extensions
 // only, vendor and node_modules excluded):
 //

@@ -217,7 +217,7 @@ function testImmutabilityReport(): void {
 
 // ---- the four WORM readings, each stated as ITSELF in a SIGNED attestation -----------------
 //
-// Until every non-enforcing reading ended with one shared sentence, "archives are tamper-evident
+// Until 2026-08-08 every non-enforcing reading ended with one shared sentence, "archives are tamper-evident
 // but not write-once-locked", and nothing here passed a worm argument at all, so the whole of wormProperty
 // below the first branch was untested. That sentence is true only of the invalid-policy reading. On a bucket
 // that does not enforce Object-Lock there are no archives: R2 answers a lock-bearing PUT with 501
@@ -289,7 +289,7 @@ function testImmutabilityWormReadings(): void {
 // The strongest sentence this report carries is "a compromised delete-credential cannot hard-delete an
 // archive within its retention window", and it needs a retention WINDOW on the archive. Exactly two things
 // put one there: the per-object retention header the engine writes under a VALID policy, and the bucket's
-// own DEFAULT RETENTION RULE. Until bucketEnforces === true was tested first and alone, so that
+// own DEFAULT RETENTION RULE. Until 2026-08-08 bucketEnforces === true was tested first and alone, so that
 // sentence was asserted on every lock-enabled bucket, including both states where neither applies.
 //
 // These are reachable configurations, not invented ones:
@@ -684,7 +684,7 @@ function testReportKind(): void {
 }
 
 // ---- SLA compliance: a young downpipe's window is clamped to its own creation time ---------
-// DEFECT C (, rehearsal): buildSlaComplianceReport computed expectedRuns over
+// DEFECT C (2026-09-05, rehearsal-2026-09-05): buildSlaComplianceReport computed expectedRuns over
 // the report's DEFAULT 90-DAY WINDOW with no clamp to when the downpipe was actually created, so a
 // downpipe a few hours old at hourly cadence, every run successful, read expectedRuns:2160 against
 // successfulRuns:3-4 -- a ~0.2% compliance figure -- shown signed and tamper-evident on the console's
@@ -709,7 +709,7 @@ async function testYoungDownpipeSlaWindow(): Promise<void> {
   );
 
   // THE REPRODUCTION: a downpipe created 3.5 hours ago at hourly cadence, with three successful runs
-  // since (the rehearsal shape). createdAt is backdated directly on the stored state (the DO's
+  // since (the rehearsal-2026-09-05 shape). createdAt is backdated directly on the stored state (the DO's
   // clock is real and cannot be backdated through the live route), the same convention testDORoutes below
   // uses to seed the run-history ring directly rather than run real ticks.
   const createdAt = nowMs - 3.5 * HOUR;
@@ -781,7 +781,7 @@ async function testDORoutes(): Promise<void> {
     // The LOWER bound was the half that had not been thought through, and it was a dated failure rather
     // than a latent one. It read `realNowSec - 90 days`, while the three runs above are seeded at NOW-3,
     // NOW-2 and NOW-1 days off the FIXED test clock, so the floor crept forward every day while the runs
-    // stood still. the floor would have passed the oldest of them and the count would have
+    // stood still. On 2026-09-04 the floor would have passed the oldest of them and the count would have
     // fallen from two to one. Bisected rather than guessed, by running this file under a shifted Date:
     // green at plus 25 days, red at plus 26 with exactly one FAIL, DO sla successful counts the two ok
     // runs in period. A reader on that morning would have gone looking at the SLA aggregation.

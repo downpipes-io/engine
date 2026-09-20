@@ -143,7 +143,7 @@ async function main(): Promise<void> {
       if (method === "PUT") return new Response(null, { status: 201, headers: { etag: '"0x1"' } });
       if (method === "DELETE") return new Response(null, { status: 202 });
       // The WORM capability probe: Get Container Properties, answering the version-level immutability
-      // header. Two modes, because the whole point of the reversal is that the two containers
+      // header. Two modes, because the whole point of the 2026-08-25 reversal is that the two containers
       // get DIFFERENT answers. Before it, every Azure endpoint was refused an immutability policy by a
       // hardcoded rule, so the enabled container could not be told from the disabled one.
       if (method === "GET" && url.includes("restype=container") && !url.includes("comp=list")) {

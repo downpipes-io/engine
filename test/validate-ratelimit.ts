@@ -27,7 +27,7 @@
 //    other deny answers. A rate limit is not a statement about the credential, and a client that reads it
 //    as one signs the operator out mid-task, which is what happened. Meanwhile a caller from a DIFFERENT,
 //    under-cap IP authenticates normally in the same window (independent per-IP buckets, no lockout).
-// This header said the opposite until, three lines of "the refusal is a 401" left standing
+//    This header said the opposite until 2026-07-29, three lines of "the refusal is a 401" left standing
 //    over an assertion that had already been repinned to 429, which is how the body drift below survived.
 //  - EVERY 429 this engine emits carries ONE wire contract: an RFC 9457 problem+json body with
 //    error: "rate limited", served as application/problem+json, with a whole-second Retry-After and the
@@ -447,7 +447,7 @@ async function main(): Promise<void> {
     }
     ok("handleAdmin: the first cap GETs (valid token) from one IP authenticate normally (200)", any401Early === false);
     const tipped = await tokenCallFromIp(ip);
-    // 429, and it was 401 before. The refusal is unchanged and that is what this line has
+    // 429 SINCE 2026-07-28, and it was 401 before. The refusal is unchanged and that is what this line has
     // always been about; only its shape moved. A 401 here was indistinguishable from a session loss, so the
     // console signed the operator out on a rate limit and the harness banked one as an auth failure. Safe to
     // distinguish because this limiter fires BEFORE tokenEqual, refusing a correct and an incorrect token

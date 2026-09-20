@@ -1,4 +1,4 @@
-// THE IMMUTABILITY POSTURE CHECK, split out of admin/posture-checks.ts.
+// THE IMMUTABILITY POSTURE CHECK, split out of admin/posture-checks.ts on 2026-08-25.
 //
 // WHY IT IS ITS OWN FILE. posture-checks.ts crossed the 1000-line budget scripts/max-lines-lint.mjs
 // enforces, by seven lines, on the landing that made this check speak each store's own vocabulary. An
@@ -54,7 +54,7 @@ import { immutabilityEnableWhen, immutabilityMechanism, immutabilityRemedy, immu
 // When the worm slice is ABSENT entirely (an older caller, or no destination to probe) the check reports
 // the honest not-configured informational pass rather than fabricating a verdict.
 //
-// CORRECTED (the retention axis). failed = !enforces asserted the strong claim, "a compromised
+// CORRECTED 2026-08-08 (the retention axis). failed = !enforces asserted the strong claim, "a compromised
 // delete-credential cannot hard-delete or overwrite an archive within its retention window", on an
 // Object-Lock-enabled bucket carrying an INVALID policy and on one carrying NO policy at all, neither of
 // which puts a retention window anywhere. The second needs no misconfiguration by anyone and is the more
@@ -70,7 +70,7 @@ export function buildImmutability(input: PostureInput): CheckDraft {
   const w = input.worm;
   // lock is what THIS store calls write-once retention and store is what it calls the thing archives land
   // in, both from dest/worm-remedy.ts and both falling back to the S3 spelling when the provider is not
-  // resolvable. The signed report has read them; this check did not, so an Azure customer
+  // resolvable. The signed report has read them since 2026-08-25; this check did not, so an Azure customer
   // was told to inspect a "bucket" for "S3 Object-Lock", neither of which exists in their portal. The
   // remedy line here was already provider-aware, which is what made the gap easy to miss: the sentence
   // offering the fix named Azure's mechanism while the sentence stating the finding named Amazon's.

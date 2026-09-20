@@ -96,13 +96,13 @@ if (validators.length === 0) {
 const reached = new Set(validators.filter((f) => allScriptText.includes(f)));
 
 // blankCommentsAndStrings (scripts/lib/blank-comments.mjs, shared with verdict-guard-gate.mjs and
-// crossrepo-typecheck-gate.mjs, consolidated from three independently-written copies of the
+// crossrepo-typecheck-gate.mjs, consolidated 2026-08-03 from three independently-written copies of the
 // same scan) additionally blanks the INTERIOR of every string and template literal (keeping delimiters
 // and newlines, so offsets stay aligned with `src`/the raw file), used ONLY to verify a candidate import
 // match below is real code, never to read a path from (a real module specifier IS a string, so
 // blankComments -- which leaves strings intact -- is still what the regexes below match against).
 //
-// WHY THIS MATTERS HERE: blankComments strips comments but leaves string
+// WHY THIS MATTERS HERE (2026-08-03): blankComments strips comments but leaves string
 // content untouched, and the two matchAll regexes below have no requirement that a `from "./x.ts"` or
 // `import("./x.ts")` match sit in real import syntax rather than inside an unrelated STRING that
 // merely contains that text. Confirmed live: adding a genuine orphan (test/validate-guard-attack-

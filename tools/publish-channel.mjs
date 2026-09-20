@@ -450,7 +450,7 @@ function parseIntotoStatement(jsonlPath) {
   const envelope = JSON.parse(firstLine);
   // slsa-github-generator@v2.1.0's *.intoto.jsonl is a Sigstore-bundle-wrapped DSSE envelope
   // ({mediaType, verificationMaterial, dsseEnvelope:{payload,...}}), not a bare one; read both
-  // shapes. Never exercised before (the first attested release to reach this ingest).
+  // shapes. Never exercised before 2026-09-06 (the first attested release to reach this ingest).
   const payloadB64 = envelope.dsseEnvelope?.payload ?? envelope.payload ?? envelope.Payload;
   if (typeof payloadB64 !== "string") throw new Error(`${jsonlPath} carries no DSSE payload`);
   const statement = JSON.parse(Buffer.from(payloadB64, "base64").toString("utf8"));

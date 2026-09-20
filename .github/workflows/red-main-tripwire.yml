@@ -2,7 +2,7 @@
 #
 # The reasoning, the two failure modes it is designed against, and the one cost it accepts are all in
 # .github/tripwire/red-main-tripwire.mjs, next to the code that implements them. The short version: this
-# harness repo's main was red for 38 consecutive runs /04 and what found it was a scheduled
+# harness repo's main was red for 38 consecutive runs on 2026-08-03/04 and what found it was a scheduled
 # sweep by a pass looking at something else, so the thirty-eighth red was the one that got noticed. The
 # measurement is named against harness rather than "this repo" because this file is copied unchanged into
 # every repo, and a claim that travels must stay true in the repo it lands in.
@@ -34,7 +34,7 @@ name: Red-main tripwire
 # NEVER PUT A SQUARE BRACKET IN THE IGNORE REASON BELOW, HERE OR IN ANY OTHER WORKFLOW IN THIS REPO.
 # zizmor 1.20.0 stops honouring the whole ignore if the reason text contains one, without saying so: the
 # finding comes straight back and the comment still reads as though it suppressed it. It was bisected on a
-# minimal workflow, and reasons containing a colon, an apostrophe, a full stop or a comma all
+# minimal workflow on 2026-08-05, and reasons containing a colon, an apostrophe, a full stop or a comma all
 # suppress correctly, so the square bracket is the only character known to break it. It was found on the docs
 # copy of this file, where a reason wrote the trigger fence as the branches key with the branch name in
 # brackets and left `Security Audit` red while looking correct.

@@ -21,7 +21,7 @@
 //                  (seq:hash) came back. Write and read-back, both, on the wire.
 //   SUBSTITUTED    delivery succeeded and the destination parsed the bytes, but ONLY under a parser for a
 //                  DIFFERENT format than the operator configured. The receiver got plausible bytes under
-// the wrong label. This is the class the syslog-tls sink was refused for.
+//                  the wrong label. This is the class the syslog-tls sink was refused for on 2026-07-30.
 //   REJECTED       the destination refused the bytes (a strict parse failure), or delivery reported not-ok.
 //   NOT-DRIVEN     nothing drove the pair at all.
 //
@@ -37,7 +37,7 @@
 //               SigV4-signed PUT and hold the object. NO relay and NO stub at all: the drain signs and sends
 //               to it directly. Reaching a 127.0.0.1 emulator needs the ONE delivery-time seam
 //               (deliverResolvedPush's allowInternalSink, threaded to S3Destination's allowInternalEndpoint),
-// because both the http loopback allowance in requireHttpsEndpoint and the
+//               because since 2026-09-10 both the http loopback allowance in requireHttpsEndpoint and the
 //               internal-host screen at S3Destination's fetch chokepoint refuse a loopback endpoint by
 //               default. The stored object is then read back off the emulator and strict-parsed. destsim had
 //               no S3 emulator; the s3 sink is a third of the delivery surface and nothing had ever read one
@@ -352,7 +352,7 @@ async function driveHttp(format: PushFormat, corrupt: boolean): Promise<Graded> 
       // splunk-hec carries the literal, case-sensitive "Splunk " scheme a real HEC listener requires; every
       // other format keeps the bare token, because the scheme is vendor-specific and only HEC pins one.
       //
-      // THIS LINE WAS A FALSE GREEN UNTIL. The bare token was sent for splunk-hec too, and the
+      // THIS LINE WAS A FALSE GREEN UNTIL 2026-08-12. The bare token was sent for splunk-hec too, and the
       // destsim HEC emulator checked no auth at all, so the pair graded ROUND-TRIP here while a customer
       // configured exactly this way would have been refused 403 code 4 on their first push. It was the
       // emulator learning the real contract that turned this red -- the fixture was always wrong, and
@@ -438,7 +438,7 @@ async function driveSyslog(format: PushFormat, corrupt: boolean): Promise<Graded
     if (!sameIdentities(keys)) return { format, sink: "syslog-tls", verdict: "REJECTED", detail: `the destination ledgered ${keys.length} of ${EXPECTED_KEYS.length} event identities` };
     // The destination AUTO-DETECTS each frame's MSG format (parseSyslogFrames with no format hint) and
     // records what it actually received, so a silent CEF-for-everything substitution -- the defect refused
-    // , where every non-LEEF format fell into the CEF arm -- grades SUBSTITUTED here rather
+    // on 2026-07-30, where every non-LEEF format fell into the CEF arm -- grades SUBSTITUTED here rather
     // than passing on a ledger that never looked at the wire shape.
     const wrong = emu.requests.filter((q) => q.format !== format);
     if (wrong.length > 0) return { format, sink: "syslog-tls", verdict: "SUBSTITUTED", detail: `configured ${format}, but ${wrong.length} of ${emu.requests.length} frames arrived as ${wrong[0]!.format}` };
@@ -661,7 +661,7 @@ async function main(): Promise<void> {
       console.log = realLog;
     }
     // NEGATIVE CONTROL for this section, through the identical call: a pair the cross-field rule REFUSES
-    // (splunk-hec over syslog-tls, the defect) must NOT be stored. Without it, "every pair stored"
+    // (splunk-hec over syslog-tls, the 2026-07-30 defect) must NOT be stored. Without it, "every pair stored"
     // is equally consistent with a boundary that stores anything at all.
     let refusedStored = false;
     const control = new SchedulerDO({ storage: new MockStorage() } as unknown as DurableObjectState);
@@ -678,7 +678,7 @@ async function main(): Promise<void> {
     console.log(`  the DO stores ${stored.length} of the ${pairs.length} deliverable pairs`);
     ok(`every deliverable pair is also a STORABLE pair (${stored.length} of ${pairs.length}); a pair the delivery path handles but the config boundary refuses would be dead vocabulary`, stored.length === pairs.length);
     // THE FOUR PAIRS THE SCREEN REFUSED AND THE API DID NOT, driven through the API's own boundary. The
-    // console's validatePushFormatSink has refused cef/leef over http and over s3 and the
+    // console's validatePushFormatSink has refused cef/leef over http and over s3 since 2026-07-30 and the
     // docs state the rule, while pushSinkFormatError implemented only the other direction of it, so the engine
     // stored all four. It now refuses them, and this asserts the refusal from the outside rather than trusting
     // the edit: each is offered to setSiemPushDestination exactly as the other pairs were.

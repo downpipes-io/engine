@@ -8,7 +8,7 @@
 // account", and then tables them with a severity each. A reader is entitled to treat that table as the whole
 // set.
 //
-// it was FOUR behind. It said twenty-one and the product graded twenty-five:
+// On 2026-07-28 it was FOUR behind. It said twenty-one and the product graded twenty-five:
 // environment-self-backup, update-apply-provenance and update-version-drift had been shipped without the
 // page learning them, and attended-verification-cadence made a fourth. Three of those four predate this
 // workstream, so this is not one careless commit, it is the absence of anything that would notice.
@@ -81,7 +81,7 @@ if (root === undefined) {
 
 // WHICH DOCS TREE, and REFUSE when it is not the sibling's main.
 //
-// Measured against this exact file: PASS failures=0 against docs origin/main 4d4f97f5, and
+// Measured on 2026-08-08 against this exact file: PASS failures=0 against docs origin/main 4d4f97f5, and
 // FAIL failures=4, exit 1, against docs b9c8021 checked out beside it. Nothing in the engine changed between
 // the two runs, and the failing output named the docs tree ZERO times (positive control on the same capture:
 // "posture" occurs twice). So this gate's verdict was a function of a docs checkout it never named, and its

@@ -15,7 +15,7 @@
 // down to 23, the error arm would report the rise to 25 and still pass this file, but the PIN arm would see
 // a baseline that does not match the recorded 23/100 and refuse.
 //
-// THE PIN MOVED DOWN AND THIS ARM IS WHY THAT WAS A DECISION RATHER THAN A SIDE EFFECT.
+// THE PIN MOVED DOWN ON 2026-08-13 AND THIS ARM IS WHY THAT WAS A DECISION RATHER THAN A SIDE EFFECT.
 // Another pass removed 44 unused imports from test/, which are noUnusedImports WARNINGS, so the live
 // count fell 144 to 100 while the pin still read 144. lint:scope PASSED (a ratchet never complains about
 // going down) and printed "below the pin; re-pin", but the gate then had FORTY-FOUR WARNINGS OF SLACK and

@@ -162,7 +162,7 @@ async function recordOtlpPassFault(scheduler: ReturnType<typeof schedulerStub>, 
 // recorded on the trail); only an unreadable DO round-trip counts against passErrors -- the fail-open
 // contract this feature must never break a backup pass over.
 export async function runOtlpPushPass(env: Env, scheduler: ReturnType<typeof schedulerStub>): Promise<boolean> {
-  // loadConfigWrapKey is guarded (item 13, HARDENING.md) and has its OWN arm so the trail can
+  // loadConfigWrapKey is guarded (item 13, HARDENING-2026-07-05.md) and has its OWN arm so the trail can
   // name the wrap key as the cause (wrap-key-invalid) rather than blaming a DO read that never ran.
   let wrapKey: Uint8Array | undefined;
   try {
@@ -197,7 +197,7 @@ export async function runOtlpPushPass(env: Env, scheduler: ReturnType<typeof sch
   // throw must still record a failure and surface as the false-green signal, rather than escaping
   // runOtlpPushPass or skipping the tick silently.
   //
-  // CHUNKING (item 4, HARDENING.md): a single POST covering a large fleet can exceed a vendor's
+  // CHUNKING (item 4, HARDENING-2026-07-05.md): a single POST covering a large fleet can exceed a vendor's
   // OTLP/HTTP request-size cap (New Relic's ~1 MB, the tightest of the targets), which would otherwise fail
   // the WHOLE tick silently every 15 minutes. buildOtlpResourceMetricsChunks splits the (post-cap) snapshot
   // into conservative, independently-sized chunks; EACH is sent and recorded as its OWN delivery outcome, so

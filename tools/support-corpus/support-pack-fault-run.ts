@@ -76,7 +76,7 @@ async function main(): Promise<void> {
   console.log(`DEFECTS PRODUCING A PACK INDISTINGUISHABLE FROM A HEALTHY ONE: ${tally.SILENT}.`);
   // AND THE PROBE SET IS COMPARED TO THE TABLE IT CLAIMS TO COVER, because "over a defect table of N" was N =
   // the probe set's own size, which is true of a run that probes nothing new for ever. The table GREW from 45
-  // to 50 inside one hour and again to 51 while another pass was landing, so a denominator
+  // to 50 inside one hour on 2026-08-13 and again to 51 while another pass was landing, so a denominator
   // that quietly means "however many probes exist" turns every future addition into an invisible gap. Only
   // meaningful on the whole set: a --only run is deliberately partial and says nothing about coverage.
   if (only === undefined) coverage(scored.map((s2) => s2.n));

@@ -128,7 +128,7 @@ export function clampRetentionInt(v: number): number {
 
 // clampRetentionAt bounds a TIMESTAMP: a non-negative integer up to MAX_SAFE_INTEGER, not the count
 // clamp's smaller ceiling. RETENTION_INT_MAX (1e9) sits far below epoch milliseconds, so running `at`
-// through the count clamp would crush every stored pass record's timestamp to -- a defect that
+// through the count clamp would crush every stored pass record's timestamp to 2001-09-09 -- a defect that
 // shows up wherever the value renders as a date (lastApplied.at).
 export function clampRetentionAt(v: number): number {
   return Number.isFinite(v) && v >= 0 ? Math.min(Math.floor(v), Number.MAX_SAFE_INTEGER) : 0;

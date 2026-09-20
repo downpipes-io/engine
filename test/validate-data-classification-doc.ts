@@ -2,7 +2,7 @@
 //
 // WHY THIS EXISTS. docs/security/data-classification.md is the document an assessor reads to learn what
 // sensitive data the engine holds, at which protection level, and under which controls. It is cited by
-// file and line into the source. Between June and the engine gained a native identity
+// file and line into the source. Between June and September 2026 the engine gained a native identity
 // provider, sealed credential envelopes, a SCIM bearer, a licence token, a config-recipient key pair and
 // dual-control approval records, and the document gained none of them; in the same span 22 of its 28
 // line-pinned citations came to point at lines their identifier was no longer on, and its summary table

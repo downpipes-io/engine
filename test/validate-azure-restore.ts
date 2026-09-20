@@ -18,7 +18,7 @@
 //      object as availability (which routes the 3-2-1 replica walk), a missing segment as integrity (which
 //      must never fall through to a replica).
 //   5. The optional diagnostic accessors the Azure client does not implement are tolerated by their callers
-// rather than assumed present, and the one it DOES implement (destIo,) answers.
+//      rather than assumed present, and the one it DOES implement (destIo, since 2026-08-25) answers.
 //   6. A metered build charges the slice budget for Azure requests, which is what makes the sliced seal and
 //      the 3-2-1 replication pass yield before the platform subrequest cap.
 //
@@ -419,7 +419,7 @@ async function optionalAccessorsTolerated(): Promise<void> {
   // zero, which is the convention seal/run-fault-report.ts states for a driver that cannot answer.
   ok("multipartAbortFailures is absent (Azure stages blocks, it has no S3 multipart upload to strand)", typeof dest.multipartAbortFailures !== "function");
   ok("destFaults is absent (the S3 fault ring is an S3 <Code> vocabulary)", typeof dest.destFaults !== "function");
-  // destIo MOVED from absent to present, and the line is kept rather than deleted because the
+  // destIo MOVED from absent to present on 2026-08-25, and the line is kept rather than deleted because the
   // absence it used to assert was the gap: the degradation vocabulary is not S3-specific the way the fault
   // ring's <Code> table is, so an Azure destination that was throttled or black-holed had nowhere to say so
   // and read as healthy. It is now implemented, and a caller reading it on a fresh instance must get the

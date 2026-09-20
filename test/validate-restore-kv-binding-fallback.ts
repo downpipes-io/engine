@@ -6,7 +6,7 @@
 // resolveSink missed and fell back to the KV_<namespace> convention, and every record skipped with "target
 // binding not present". The operator saw a restore that completed and wrote nothing.
 //
-// Measured live (an internal chaos-test finding, G-P1-030, harness-crud): plannedWrites=0 recordsVerified=0
+// Measured live on 2026-07-28 (an internal chaos-test finding, G-P1-030, harness-crud): plannedWrites=0 recordsVerified=0
 // skipped=2 [2x target binding not present], on a fixture PROVEN able to overwrite.
 //
 // THE KEY IS THE BINDING because that is what the archive record carries in this case. seal/adapters.ts

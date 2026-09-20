@@ -91,8 +91,8 @@ fi
 # WHAT IT COST, MEASURED RATHER THAN ARGUED. Until today this script stamped the artefact,
 # reconciled the bindings and called `npx wrangler deploy`, and never once invoked typecheck,
 # validate or lint. The console's scripts/deploy.sh has run all three under `set -e` for as long
-# as it has existed. The consequence was found: test/validate-cron-fault-evidence.ts
-# landed with four failing assertions and HAD NEVER ONCE BEEN GREEN. It sat inside
+# as it has existed. The consequence was found on 2026-08-13: test/validate-cron-fault-evidence.ts
+# landed on 2026-07-11 with four failing assertions and HAD NEVER ONCE BEEN GREEN. It sat inside
 # validate:chain, red on every commit for a month, with validate-support-posture-gaps-r7.ts red
 # beside it. No engine deploy could have noticed, because no engine deploy graded anything. That is
 # not a story about two validators. A deploy that grades nothing cannot tell a repo that works from
@@ -135,7 +135,7 @@ fi
 #
 # WHY LINT IS NOT A MEMBER, AND THIS IS THE ONE PLACE THIS PREFLIGHT DEPARTS FROM THE CONSOLE'S.
 # `npm run lint` is RED on this repo's main and has been for some time. Measured at 5854d8ef on
-# , the full 15-member lint chain runs in 34s and returns exit 1 with four findings:
+# 2026-08-13, the full 15-member lint chain runs in 34s and returns exit 1 with four findings:
 #   - lint:deps-installed  node_modules does not match package-lock.json (8 packages drifted)
 #   - lint:size            4 files over their line budgets, wanting module splits
 #   - lint:no-raw-nul      tools/support-corpus/support-pack-fault-redaction.ts carries a raw NUL byte
@@ -420,7 +420,7 @@ if printf "%s" "$SECRETS" | grep -q '"SIGNER_PRIVATE"'; then
 else
   # THE POSTURE CHOICE, PRESENTED RATHER THAN ASSUMED (the two ceremonies now agree).
   #
-  # MERGE NOTE: this branch used to be split in two -- a separate `elif BREAK_GLASS_ONLY`
+  # MERGE NOTE (2026-09-13): this branch used to be split in two -- a separate `elif BREAK_GLASS_ONLY`
   # arm ran its own copy of the break-glass-only ceremony (same generate-keys.ts call, same secret puts,
   # older wording) BEFORE this posture-choice block ever ran, so the two arms silently duplicated one
   # another and the arm below could never see BREAK_GLASS_ONLY=1 at all: the elif upstream always claimed

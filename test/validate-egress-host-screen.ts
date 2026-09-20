@@ -2,7 +2,7 @@
 // graded at the boundary that actually carries the bytes rather than at the boundary that stores the config.
 //
 // WHY THIS FILE EXISTS. Two egress classes were found unscreened during the ASVS section 4 pass on
-// , and neither was disclosed anywhere:
+// 2026-09-10, and neither was disclosed anywhere:
 //
 //   THE SYSLOG-TLS SIEM SINK had no internal-host screen on ANY boundary. admin/router-push.ts took
 //   syslog.host with a non-empty check and nothing else; sched/scheduler-do-siem-push.ts's

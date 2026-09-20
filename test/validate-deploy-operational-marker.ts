@@ -12,7 +12,7 @@
 // with `node` and `npx` shadowed as recording shell functions: no real wrangler call, no real key
 // generation, no network, nothing touches the real engine checkout. Two fragments are exercised:
 //   1. the flag parser, which now sets TWO independent switches from "$@": ENABLE_OPERATIONAL and
-// SKIP_PREFLIGHT. The second is the bypass for the blocking preflight added, and
+//      SKIP_PREFLIGHT. The second is the bypass for the blocking preflight added on 2026-08-13, and
 //      most of what is graded about it here is negative: which flags must NOT turn it on. --yes is
 //      the one that matters, because it reads like a general "stop asking me" while meaning only
 //      "stop asking me about the operational key", and a bypass that a second flag can set by
@@ -63,7 +63,7 @@ function extractBetween(startAnchor: string, endAnchor: string, startInclusive: 
 // THE END ANCHOR MOVED, AND THE REASON IS WORTH KEEPING. It used to be `node scripts/stamp-build-id.mjs`,
 // on the reasoning that the stamp was simply the next thing that happened after the parser. That is a
 // weaker claim than it looks: it names where the parser's SUCCESSOR starts rather than where the parser
-// ENDS, so anything inserted between the two silently joined the fragment. something was:
+// ENDS, so anything inserted between the two silently joined the fragment. On 2026-08-13 something was:
 // deploy.sh gained a blocking preflight there, and this fragment began executing `npm run typecheck` and
 // `npm run validate` inside the throwaway temp directory runShFragment creates. That directory has no
 // package.json, so npm failed, and all five parser assertions went red over a parser that was correct.

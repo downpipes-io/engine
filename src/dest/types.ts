@@ -211,7 +211,7 @@ export interface WormStatus {
  *   r2-binding-unsupported - the native R2 binding has no Object-Lock read API at all: this destination can
  *                            NEVER confirm. It names NO remedy: no R2 bucket enforces S3 Object-Lock by any
  *                            route, and R2's S3 endpoint answers a lock-bearing PUT 501 NotImplemented
- *                            (measured). Not a fault.
+ *                            (measured 2026-08-25). Not a fault.
  *   redirect               - the store answered the credentialed probe with a 3xx (a proxy, or the wrong region)
  *   denied                 - the store refused it (401/403): the credential lacks s3:GetBucketObjectLockConfiguration
  *   not-implemented        - the store answered 501: it has no Object-Lock API at all, so no bucket it holds can

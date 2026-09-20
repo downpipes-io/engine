@@ -3,7 +3,7 @@
 // more than a fraction of itself.
 //
 // WHY THIS EXISTS, and it is a criticism of gates that already pass. An earlier pass measured the class on
-// : the key-ceremony reset ladder was applied to SIX call sites and its gate drove ONE, so
+// 2026-08-12: the key-ceremony reset ladder was applied to SIX call sites and its gate drove ONE, so
 // deleting the argument that carries the fix from the other five reproduced a P0-class defect and red
 // nothing. The general question it left behind is cheap to ask and nobody had asked it: FOR EVERY REPAIR,
 // IS THE SET OF SITES THE FIX TOUCHES EQUAL TO THE SET OF SITES THE GATE DRIVES.

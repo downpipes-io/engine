@@ -363,7 +363,7 @@ async function listing(): Promise<void> {
 
 // ---- immutability -----------------------------------------------------------------------------------
 //
-// Until an Azure destination could not carry an immutability policy at all: the field was
+// Until 2026-08-25 an Azure destination could not carry an immutability policy at all: the field was
 // refused for every Azure endpoint, and objectLockStatus hardcoded a not-enabled answer. Both are gone.
 // These sections grade what replaced them, and the thing they have to prove is not "immutability works"
 // but the finer claim that the mapping is EXACT: a compliance policy must reach the wire as Azure's LOCKED
@@ -386,7 +386,7 @@ async function immutabilityOnTheWire(): Promise<void> {
 
     // RFC 1123, not the RFC 3339 instant the S3 header takes. Sending either store the other spelling is a
     // rejected write, and this is the assertion that keeps the two formatters apart. FIXED is
-    // , so 30 days is.
+    // 2026-08-25T00:00:00Z, so 30 days is 2026-09-24T00:00:00Z.
     ok("the retain-until date is the RFC 1123 form Azure requires, at now + retentionDays", p?.until === "Thu, 24 Sep 2026 00:00:00 GMT", JSON.stringify(p));
 
     // Azure's SECOND primitive, and it must stay absent. A legal hold has no expiry at all and is cleared
@@ -529,7 +529,7 @@ async function wormPosture(): Promise<void> {
   const mock = new MockAzure();
   const restore = install(mock);
   try {
-    // ENABLED. This is the answer that could not be reached at all before, when the probe
+    // ENABLED. This is the answer that could not be reached at all before 2026-08-25, when the probe
     // hardcoded a not-enabled verdict: a container that really does enforce immutability was reported as
     // one that could not, on exactly the destinations a compliance customer bought it for.
     mock.vlw = "true";
@@ -744,7 +744,7 @@ async function errorsCarryNoBody(): Promise<void> {
 
 // ---- backpressure: the pacer and the degradation counters ------------------------------------------
 //
-// These sections are about the thing an Azure destination could NOT do until: back off when the
+// These sections are about the thing an Azure destination could NOT do until 2026-08-25: back off when the
 // store pushes back, and leave a trace when it did. They are graded separately from the wire sections above
 // because the failure they guard against is a run that SUCCEEDS and simply takes ten times as long.
 

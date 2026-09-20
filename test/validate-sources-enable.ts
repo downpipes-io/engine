@@ -53,7 +53,7 @@ async function main(): Promise<void> {
     engineAccountId: "acct-1",
   });
 
-  // (1a) A type outside the closed set is REFUSED (POSTCONDITION), not filtered out with a 200.
+  // (1a) A type outside the closed set is REFUSED (POSTCONDITION-2026-08-11), not filtered out with a 200.
   // It used to be dropped and the write reported success, which the engine's own comment described as
   // reading to the customer as "I added it and it never appeared". Nothing legitimate sits outside the set.
   const enBad = await call(OWNER, "POST", "/admin/sources/enable", { sources: ["workers", "stream", "bogus", "workers"] });

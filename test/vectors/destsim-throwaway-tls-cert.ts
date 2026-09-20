@@ -24,7 +24,7 @@
 //   openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem -days 7300 -nodes \
 //     -subj "/CN=localhost/O=downpipes-destsim-throwaway-test-cert" \
 //     -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
-// Valid for 20 years from generation purely so this file never needs churn; it carries no
+// Valid for 20 years from generation (2026-07-07) purely so this file never needs churn; it carries no
 // authority beyond a local loopback test listener, so a long validity window costs nothing.
 
 export const THROWAWAY_TLS_CERT_PEM = `-----BEGIN CERTIFICATE-----

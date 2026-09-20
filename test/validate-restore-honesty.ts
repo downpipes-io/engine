@@ -1,7 +1,7 @@
 // A RESTORE MUST NOT REPORT A STATE THE RUN IS NOT IN.
 //
 // Four surfaces were claiming success over nothing, all on the same drive (an internal chaos test suite, estate
-// harness-crud,). This file is the proof for all four, and every one carries a GREEN CONTROL that
+// harness-crud, 2026-08-13). This file is the proof for all four, and every one carries a GREEN CONTROL that
 // differs from the red case in exactly one field, so a pass here is a discrimination rather than a state.
 //
 //   A. buildSourceBindingMap's r2 branch REQUIRED bucketName, so restoring to where the data came from
@@ -30,7 +30,7 @@
 //      restore test passed (records verified: 0)". That is our own compliance artefact asserting a restore
 //      test passed when nothing was verified, which is the artefact a customer shows an auditor.
 //
-// E. THE MANUAL POST /admin/restore/verify ROUTE OVER THE SAME ARCHIVE (WIRE-28, measured:
+//   E. THE MANUAL POST /admin/restore/verify ROUTE OVER THE SAME ARCHIVE (WIRE-28, measured 2026-08-20:
 //      restore-verify says no to a receipt sealed seconds earlier). restore-verify.ts:127's
 //      `recordsVerified > 0` clause NEVER answered a false PASS the way drill.ts's missing clause did (ok was
 //      always false here), but it also never carried the nothingToVerify+reason pair the empty-run drill

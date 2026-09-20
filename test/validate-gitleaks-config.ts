@@ -2,7 +2,7 @@
 // .gitleaks.toml (positive detection for the product's own downpipe-identity-v1 /
 // downpipe-signer-private-v1 key format -- see src/crypto/keys.ts LABEL_IDENTITY /
 // LABEL_SIGNER_PRIVATE). Added after a real identity.key/signer.pub pair was briefly committed
-// (commit 2a380907) with no rule in place to have caught it.
+// on 2026-06-08 (commit 2a380907) with no rule in place to have caught it.
 //
 // Also models gitleaks' ALLOWLIST PRECEDENCE (see the "ML-29 r2" section below): the regex alone
 // isn't the whole control. The first cut of this rule was silently nullified for most of the

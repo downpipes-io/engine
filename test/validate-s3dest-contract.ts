@@ -97,7 +97,7 @@ async function httpContract(): Promise<void> {
 // Part 4: a non-https DEST_ENDPOINT is rejected at construction, before any signing or fetch
 // (V12.3.1). https is accepted; everything else throws, the http loopback hosts included.
 //
-// THE LOOPBACK ASSERTIONS FLIPPED. This block used to assert that http://localhost:9000 and
+// THE LOOPBACK ASSERTIONS FLIPPED ON 2026-09-10. This block used to assert that http://localhost:9000 and
 // http://127.0.0.1:9000 CONSTRUCT, which was true of every caller including dest/factory.ts: a DEST_ENDPOINT
 // of http://localhost:9000 built a live archive destination in a deployed worker and signed the SigV4
 // credential onto cleartext. The allowance is now a test seam (requireHttpsEndpoint's allowInternalEndpoint),

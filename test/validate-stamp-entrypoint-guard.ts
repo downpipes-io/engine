@@ -1,4 +1,4 @@
-// Attack on the entry-point guard in scripts/stamp-build-id.mjs.
+// Attack on the entry-point guard in scripts/stamp-build-id.mjs (2026-08-04).
 //
 // THE DEFECT THIS PINS. The guard used to read:
 //

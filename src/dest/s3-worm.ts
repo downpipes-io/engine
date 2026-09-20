@@ -14,7 +14,7 @@ import type { WormMode, WormStatus } from "./types.ts";
  */
 export function retainUntilISO(now: Date, retentionDays: number): string {
   const ms = now.getTime() + retentionDays * 24 * 60 * 60 * 1000;
-  // Floor to whole seconds, then format without milliseconds (e.g.).
+  // Floor to whole seconds, then format without milliseconds (e.g. 2026-06-24T12:34:56Z).
   return new Date(Math.floor(ms / 1000) * 1000).toISOString().replace(/\.\d{3}Z$/, "Z");
 }
 

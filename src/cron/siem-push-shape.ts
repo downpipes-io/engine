@@ -98,7 +98,7 @@ export function shapeSplunkHec(events: AuditEvent[], _meta: PushCursorMeta): Sha
 }
 
 // datadogStatus maps an audit outcome onto Datadog's log `status` attribute, the field Datadog's severity
-// facet/monitors read (HARDENING.md): without it, Datadog defaults every log to "info",
+// facet/monitors read (HARDENING-2026-07-05.md): without it, Datadog defaults every log to "info",
 // so a failed or denied audit event reads as a success in the severity facet. failed -> error (the
 // strongest signal), denied -> warning, success/anything else -> info -- the SAME info/warning/error triad
 // outcomeSeverity/gelfLevel/syslogSeverity already use, kept consistent across every format.

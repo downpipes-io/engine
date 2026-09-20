@@ -54,7 +54,7 @@ const fail = (msg) => problems.push(msg);
 // comment blindness that once made the reachability gate call an orphan wired.
 //
 // STRING-blanked too, to decide which of the comment-blanked matches below are real (R-109, engine-guard-
-// attack,, closed here as part of the three-gate consolidation onto scripts/lib/blank-comments.mjs).
+// attack, 2026-08-03, closed here as part of the three-gate consolidation onto scripts/lib/blank-comments.mjs).
 // blankComments alone leaves string content untouched, and the match itself is read out of that string-intact
 // text (a real module specifier IS a string, so the path has to come from there). Left unchecked, this cuts
 // BOTH ways, opposite to R-106/R-107's false negatives:

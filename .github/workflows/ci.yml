@@ -33,7 +33,7 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
-  # THE COVERAGE JOB RUNS ON THIS SCHEDULE AND ON DISPATCH, NOT ON EVERY PUSH. Decided from the
+  # THE COVERAGE JOB RUNS ON THIS SCHEDULE AND ON DISPATCH, NOT ON EVERY PUSH. Decided 2026-09-11 from the
   # org billing ledger: this workflow billed 9,399 minutes in the first ten days of September, 4,095 of
   # them in `coverage`, which runs the same 340 validators `validate` already runs, under c8, at about
   # 31 billed minutes a run, on every push and every pull request synchronise. It now grades main once a
@@ -45,7 +45,7 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  # `true` ON MAIN AS WELL,: only the tip of a burst of pushes is graded. The red-main
+  # `true` ON MAIN AS WELL, since 2026-09-11: only the tip of a burst of pushes is graded. The red-main
   # tripwire treats a cancelled run as no evidence either way, so a superseded run never opens or closes
   # the red-main issue.
   cancel-in-progress: true
@@ -102,10 +102,10 @@ jobs:
 
   validate:
     name: Crypto/format validators
-    # lint and typecheck are in `needs` for cost (added): they are the two cheapest jobs here and
+    # lint and typecheck are in `needs` for cost (added 2026-09-11): they are the two cheapest jobs here and
     # a red on either would otherwise still buy this job's three sibling checkouts and 340 validators.
     # THREE SIBLING CHECKOUTS, so this job needs the cross-repo token and could not run without it on a
-    # Dependabot pull request. It was missed when the probe below was landed, because that
+    # Dependabot pull request. It was missed when the probe below was landed on 2026-08-06, because that
     # pass conditioned the two jobs whose FIRST step is named "Require the cross-repo token" and this job
     # fails one step later, at the checkout itself. Measured on pull request #17, run 30282875482: this job
     # failed at "Checkout the Go reader (for the format schema cross-check)" and skipped every step behind
@@ -152,7 +152,7 @@ jobs:
         with:
           repository: downpipes-io/downpipe
           path: downpipe
-          # downpipe is now public (flipped); this checkout is anonymous and pinned to the current public release tag (v0.3.1 is the first tag on the recreated public repository; v0.3.0 exists only in the private archive) rather than dropped, so the cross-implementation validators against the Go reference still run in the public export
+          # downpipe is now public (flipped 2026-09-07); this checkout is anonymous and pinned to the current public release tag (v0.3.1 is the first tag on the recreated public repository; v0.3.0 exists only in the private archive) rather than dropped, so the cross-implementation validators against the Go reference still run in the public export
           ref: v0.3.1
           persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -219,12 +219,12 @@ jobs:
   # Dependabot events are handed the DEPENDABOT secret scope rather than the Actions one, so
   # WORKSPACE_READ_TOKEN arrives EMPTY on every Dependabot pull request and "Require the cross-repo token"
   # failed before either gate read a line. This repository had NINE open Dependabot pull requests on
-  # and every one was red for a reason no dependency bump could cause.
+  # 2026-08-06 and every one was red for a reason no dependency bump could cause.
   #
   # A permanently red job teaches the reader that red here means nothing, and it makes a Dependabot pull
   # request that is red for a REAL reason indistinguishable from the standing one.
   #
-  # This is control-plane's construct, landed there and ported to console the same week. It is
+  # This is control-plane's construct, landed there 2026-08-04 and ported to console the same week. It is
   # copied rather than re-invented so the repositories cannot drift into different answers to one question.
   #
   # It does NOT weaken the fail-closed behaviour on a normal push. The probe reads only whether the secret
@@ -236,7 +236,7 @@ jobs:
   push-dedupe:
     # WHY THIS EXISTS. Every change here lands as a pull request and then as a squash merge to main, and the
     # ruleset's strict status-check policy means the branch was up to date with main when it merged, so the
-    # merge commit's TREE is byte-identical to the pull request head's tree. Measured from the org
+    # merge commit's TREE is byte-identical to the pull request head's tree. Measured 2026-09-11 from the org
     # billing ledger: the merge run re-graded that identical tree for the full cost of `validate` and
     # `runtime` on every one of 65 merges in ten days. This job answers one question on a push to main: has
     # a successful pull-request run of THIS workflow already graded this exact tree, with the gated jobs
@@ -309,7 +309,7 @@ jobs:
     # and require it here, not to teach the validator to skip everywhere unconditionally. It also makes CI
     # measure the same suite a developer measures, which the coverage floors are calibrated against.
     name: Coverage (c8 over validators, gating)
-    # SCHEDULE AND DISPATCH ONLY (see the `on:` block for the measurement), and behind
+    # SCHEDULE AND DISPATCH ONLY since 2026-09-11 (see the `on:` block for the measurement), and behind
     # `validate`: the same chain is run there uninstrumented, so a red validator is reported by the cheaper
     # job and this one does not spend 31 minutes repeating it.
     needs: [validate]
@@ -341,7 +341,7 @@ jobs:
         with:
           repository: downpipes-io/downpipe
           path: downpipe
-          # downpipe is now public (flipped); this checkout is anonymous and pinned to the current public release tag (v0.3.1 is the first tag on the recreated public repository; v0.3.0 exists only in the private archive) rather than dropped, so the cross-implementation validators against the Go reference still run in the public export
+          # downpipe is now public (flipped 2026-09-07); this checkout is anonymous and pinned to the current public release tag (v0.3.1 is the first tag on the recreated public repository; v0.3.0 exists only in the private archive) rather than dropped, so the cross-implementation validators against the Go reference still run in the public export
           ref: v0.3.1
           persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -380,7 +380,7 @@ jobs:
 
   stamp-idempotency:
     # Mutation test for the reset-before-hash fix in scripts/stamp-build-id.mjs (test/validate-stamp-
-    # idempotency.ts, landed). It was deliberately left OUT of `npm run validate` because it
+    # idempotency.ts, landed 2026-07-31). It was deliberately left OUT of `npm run validate` because it
     # spawns real `wrangler deploy --dry-run` builds rather than pure functions, and the existing
     # Reproducibility check workflow does NOT cover the property it guards: that workflow's two builds
     # both start from a fresh clone, so neither ever reuses in-place build-stamp.ts state the way
@@ -436,7 +436,7 @@ jobs:
       # THREE OUTCOMES OUT OF A COMMAND THAT HAS TWO, and this step was one line until it cost a night.
       # `npm audit` exits 1 both when it finds an advisory at or above --audit-level and when it never
       # reached the advisory endpoint at all, so the exit code alone cannot say which happened. On
-      # run 31266196222 on main logged `read ECONNRESET` against registry.npmjs.org and
+      # 2026-08-09 run 31266196222 on main logged `read ECONNRESET` against registry.npmjs.org and
       # `npm error audit endpoint returned an error`, exited 1, and reddened main with a dependency
       # verdict it had not formed. Two other runs at the SAME 40-character sha, 31264913802 and
       # 31264908120, were green in this job, which is what makes it a transport fault rather than the
@@ -450,7 +450,7 @@ jobs:
       #
       # THE EXIT CODE HAD TO BE MADE TO DEPEND ON THE THING IT GRADES, which the bare line did not. Two
       # ways it could reach 0 without having graded the production tree were measured rather than
-      # imagined, both:
+      # imagined, both on 2026-08-09:
       #
       #   A lockfile declaring no production dependencies prints "found 0 vulnerabilities" and exits 0
       #   WITH THE REGISTRY POINTED AT A DEAD PORT. Nothing was asked and nothing was answered, and the
@@ -553,7 +553,7 @@ jobs:
           done
           echo "REFUSED: npm audit could not reach the advisory endpoint on any of 3 attempts, so this step established nothing about the production tree."
           exit 1
-      # EVERY tree, graded against.github/dependency-advisories.json. Until the line above was
+      # EVERY tree, graded against .github/dependency-advisories.json. Until 2026-08-08 the line above was
       # this repository's only dependency channel, and `--omit=dev` drops the build tree, so the job was
       # green while the build tree carried seven advisories, five of them high. All seven were closed the
       # same day by npm overrides that left wrangler, miniflare and workerd untouched. The gate reads its
@@ -622,7 +622,7 @@ jobs:
           curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${VERSION}/gitleaks_${VERSION}_linux_x64.tar.gz" -o /tmp/gitleaks.tgz
           tar -xzf /tmp/gitleaks.tgz -C /tmp gitleaks
           # --log-opts scopes the scan to commits AFTER 50455d68, and that exclusion is deliberate,
-          # bounded and documented rather than a silenced rule. Commit 2a380907 swept a
+          # bounded and documented rather than a silenced rule. Commit 2a380907 (2026-06-08) swept a
           # throwaway identity.key, signer.pub and archive/ into the tree via `git add -A`; 50455d68
           # removed them 69 minutes later and added root-anchored ignores. The key was generated
           # locally by a write-archive test run, so nothing needs rotating, and history is not being
@@ -634,7 +634,7 @@ jobs:
           # written because of it. Every rule still fires on every path in every commit since.
           #
           # Commits before the remediation are outside this range. They were scanned in full by this
-          # job while it was running normally, up to.
+          # job while it was running normally, up to 2026-06-21.
           /tmp/gitleaks git . --config .gitleaks.toml --redact --no-banner --exit-code 1 --log-opts="50455d68..HEAD"
 
   dependency-review:
@@ -749,7 +749,7 @@ jobs:
         with:
           repository: downpipes-io/downpipe
           path: downpipe
-          # downpipe is now public (flipped); this checkout is anonymous and pinned to the current public release tag (v0.3.1 is the first tag on the recreated public repository; v0.3.0 exists only in the private archive) rather than dropped, so the cross-implementation validators against the Go reference still run in the public export
+          # downpipe is now public (flipped 2026-09-07); this checkout is anonymous and pinned to the current public release tag (v0.3.1 is the first tag on the recreated public repository; v0.3.0 exists only in the private archive) rather than dropped, so the cross-implementation validators against the Go reference still run in the public export
           ref: v0.3.1
           persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -812,16 +812,16 @@ jobs:
         run: npm run lint:crossrepo-typecheck
 
   tsdoc:
-    # TSDoc presence lint (guardrails B8-6). GATING, over its declared scope.
+    # TSDoc presence lint (guardrails B8-6). GATING as of 2026-07-30, over its declared scope.
     #
     # It was advisory and permanently RED: continue-on-error, absent from the ci-success needs list,
     # and 125 of 394 in-scope exports undocumented (crypto 2, format 52, dest 71) as measured on
-    # . An advisory job that is always red teaches a reader that red here means nothing,
+    # 2026-07-27. An advisory job that is always red teaches a reader that red here means nothing,
     # which is worse than not running it. The 125 were documented, so the precondition the old
     # comment named, zero offenders in scope, is now actually met and the job blocks.
     #
     # THE SCOPE IS STILL src/crypto, src/format AND src/dest, and that is a deliberate stopping
-    # point rather than an oversight. Measured with the same heuristic: widening
+    # point rather than an oversight. Measured 2026-07-30 with the same heuristic: widening
     # SCOPE_DIRS to "src" would put 3,075 further undocumented exports across 336 files in scope,
     # concentrated in admin (1,655 of 1,835), sched (561 of 568), seal (252 of 319) and sources
     # (217 of 224). That is a documentation programme, not a lint fix.
@@ -886,7 +886,7 @@ jobs:
         working-directory: engine
 
       # THE FIELD CATALOGUE CITES THIS REPO, 246 times out of 923. Editing a validator here moves those
-      # citations, and until nothing noticed: the gate that grades them runs in internal-docs CI,
+      # citations, and until 2026-07-30 nothing noticed: the gate that grades them runs in internal-docs CI,
       # which a change confined to the engine never triggers. It now records the TEXT of each cited line and
       # fails when the line stops matching, so a citation that slid onto another real line is caught instead
       # of being read as evidence.
@@ -933,7 +933,7 @@ jobs:
       #      gate in internal-docs is red for an unrelated reason.
   ci-success:
     name: CI Success
-    # The "tsdoc" (TSDoc presence) job is listed here. It was excluded while it was
+    # The "tsdoc" (TSDoc presence) job is listed here as of 2026-07-30. It was excluded while it was
     # advisory and permanently red; its scope is now at zero offenders, so a regression blocks. See
     # its header for the scope it covers and the criterion for widening it. The "quality"
     # (madge + knip) job is gating and is included below.

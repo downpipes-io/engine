@@ -50,7 +50,7 @@ async function main(): Promise<void> {
     ["sign", "verify"],
   )) as CryptoKeyPair;
   const rsaSpki = new Uint8Array(await crypto.subtle.exportKey("spki", rsa.publicKey));
-  // Valid.. (NOW = is inside).
+  // Valid 2026-01-01 .. 2036-01-01 (NOW = 2026-06-13 is inside).
   const certPem = await buildCertPem(rsaSpki, rsa.privateKey, "idp.example.com", "20260101000000Z", "20360101000000Z");
 
   // A second, unrelated key (attacker / non-pinned).

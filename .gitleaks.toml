@@ -23,7 +23,7 @@ description = "Deliberate non-secret test fixtures and example values."
 # silently, because this untargeted block already exempted the whole path regardless of what the
 # rule-scoped allowlist below said. Re-verify with `gitleaks detect --config .gitleaks.toml` (and
 # again with `paths` here temporarily widened) before ever broadening this list.
-# : github-app-token, stripe-access-token and private-key added after the first real CI run
+# 2026-07-26: github-app-token, stripe-access-token and private-key added after the first real CI run
 # in five weeks surfaced them. Each is a synthetic fixture under test/: a PUBLIC signer.pub in the
 # flipped-tag conformance vector (github-app-token matches its base64 shape), Stripe-shaped strings in
 # five evidence fixtures that exist to prove redaction, and the destsim throwaway TLS cert whose own
@@ -38,7 +38,7 @@ paths = [
   # `gitleaks dir` run honest too.
   '''^\.worktrees/''',
   '''^\.stryker-tmp/''',
-  # The stray archive/ artefacts from the same `git add -A` incident described under the
+  # The stray archive/ artefacts from the same 2026-06-08 `git add -A` incident described under the
   # custom rule below. History is deliberately not rewritten, so the commit is still reachable. Safe
   # to exempt by path because /archive/ is root-anchored in .gitignore (line 12), so it cannot be
   # re-committed without an explicit `git add -f`.
@@ -53,7 +53,7 @@ regexes = [
 # Positive-detection rule for the product's own break-glass identity / signer-private key format
 # (label + base64url payload; see src/crypto/keys.ts LABEL_IDENTITY / LABEL_SIGNER_PRIVATE). Added
 # after a real identity.key + signer.pub pair was briefly committed and pushed to history on
-# (commit 2a380907, removed 69 minutes later by 50455d68, history not rewritten): gitleaks'
+# 2026-06-08 (commit 2a380907, removed 69 minutes later by 50455d68, history not rewritten): gitleaks'
 # upstream rules don't fire on this space-delimited label+blob shape (no PEM armor, no key=/key:
 # operator before the blob), so a repeat of that mistake with a REAL key would otherwise pass both
 # the pre-commit hook and the blocking CI job undetected.

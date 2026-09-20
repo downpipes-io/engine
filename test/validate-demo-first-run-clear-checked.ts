@@ -10,7 +10,7 @@
 // already-provisioned guard is blind and every subsequent "first install" silently RE-KEYS the estate for
 // real, which is the one thing that guard exists to prevent.
 //
-// Measured on harness-crud: POST /admin/keys/install returned 200 and the keys were genuinely
+// Measured on harness-crud 2026-07-29: POST /admin/keys/install returned 200 and the keys were genuinely
 // written, yet GET /admin/status kept reporting signer=false breakGlass=false ready=false across two runs. A
 // later POST /admin/setup/acknowledge cleared the stale marker and the keys appeared at once, which is what
 // proved the install had always landed and only this clear had been lost.

@@ -129,7 +129,7 @@ function tbsChildren(): { serial: number[]; sigAlg: number[]; issuer: number[]; 
 function main(): void {
   // ---- UTCTime, with the RFC 5280 two-digit-year pivot ----------------------------------------
   {
-    // notBefore, notAfter -> UTCTime year "49" pivots to 2049.
+    // notBefore 2020-01-01, notAfter 2049-12-31 23:59:59 -> UTCTime year "49" pivots to 2049.
     const pem = buildCert(utcTime("200101000000Z"), utcTime("491231235959Z"));
     ok("UTCTime: notAfter '49' -> 2049-12-31T23:59:59Z", certNotAfter(pem) === Date.UTC(2049, 11, 31, 23, 59, 59));
   }

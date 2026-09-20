@@ -1,5 +1,5 @@
 // Deploy-time key provisioning (the front-loaded deploy, owner feedback
-// : "design this to be front loaded with everything it needs").
+// 2026-06-11: "design this to be front loaded with everything it needs").
 //
 // Run by scripts/deploy.sh on a FRESH deployment (when SIGNER_PRIVATE is not yet
 // set): it generates the full default key set ON THE DEPLOYER'S OWN MACHINE —

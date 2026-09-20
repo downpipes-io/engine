@@ -8,7 +8,7 @@
 // not see the header the token ends up in. Both are here, told apart by host inside one fetch stand-in, and
 // EVERY request to either is recorded, so an assertion can grade the wire rather than the outcome.
 //
-// WHAT WAS ALSO DONE LIVE, and what this file is therefore NOT claiming to be. this exact
+// WHAT WAS ALSO DONE LIVE, and what this file is therefore NOT claiming to be. On 2026-08-25 this exact
 // client was driven against a real Azure storage account (australiaeast) with a real service principal
 // holding Storage Blob Data Contributor: put, get, exists, a 17 MiB block-staged putStream, list, a
 // conditional write and delete all succeeded under a bearer token, one token served all 22 storage
@@ -259,7 +259,7 @@ async function failureIsLegible(): Promise<void> {
   const restore = install(mock);
   try {
     // The body is the shape Entra actually returns for a wrong client secret, confirmed live on
-    // against the real identity plane.
+    // 2026-08-25 against the real identity plane.
     mock.script = [{ status: 401, body: JSON.stringify({ error: "invalid_client", error_description: "AADSTS7000215: Invalid client secret provided. Ensure the secret being sent in the request is the client secret value." }) }];
     const source = new AzureEntraTokenSource(CREDS, COMMERCIAL);
     const msg = await message(() => source.bearer());
@@ -453,7 +453,7 @@ function directoryValidation(): void {
   // is refused rather than encoded and hoped for.
   ok("a tenant carrying a path segment is refused", validateAzureEntraDirectory({ tenantId: "contoso.com/evil", clientId: CLIENT }) === null);
   ok("a tenant carrying a dot-segment is refused", validateAzureEntraDirectory({ tenantId: "..", clientId: CLIENT }) === null);
-  // THE MULTI-TENANT ALIASES. Measured by mutation: removing the alias check from
+  // THE MULTI-TENANT ALIASES. Measured by mutation on 2026-08-25: removing the alias check from
   // validateAzureEntraDirectory leaves these four assertions GREEN, because a bare "common" is also not a
   // GUID and not a dotted domain, so the tenant pattern already refuses it. The alias set is therefore
   // DEFENCE IN DEPTH in the validator and load-bearing only in the REJECTION message, which is graded

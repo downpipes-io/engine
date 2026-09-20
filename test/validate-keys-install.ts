@@ -469,7 +469,7 @@ async function main(): Promise<void> {
 
   console.log("\n-- R-10: the keys-installed append SURVIVES the Durable Object reset the secret PUTs cause --");
   {
-    // THE DEFECT THIS PINS, reproduced live on a keyless estate. A first POST /admin/keys/install
+    // THE DEFECT THIS PINS, reproduced live on a keyless estate 2026-07-31. A first POST /admin/keys/install
     // returned 200, all four secrets were genuinely written, and NO keys-installed row of any outcome reached
     // the chain, which stayed contiguous either side (so nothing was appended and rolled back: the append
     // never arrived). Each Cloudflare secret PUT rolls a NEW WORKER VERSION -- the versions API stamped one
@@ -558,7 +558,7 @@ async function main(): Promise<void> {
     // re-key installs paced past the limiter with wrangler tail attached", this comment says 8, and both
     // then say ONE was lost. So the measured rate is one loss somewhere in 8 to 12, not the 1-in-8 a
     // reader takes from this line alone. It changes no assertion below, which are all deterministic and
-    // injected; it changes what a reader may claim about the LIVE rate. Noticed while
+    // injected; it changes what a reader may claim about the LIVE rate. Noticed 2026-08-12 while
     // adjudicating the superseded branch origin/r10-key-ceremony-audit-across-secret-write,
     // whose own body reports a THIRD figure for the earlier round: seven installs across three keyless
     // estates, one lost. A race is only as well characterised as its denominator, and this one is not.

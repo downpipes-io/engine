@@ -1,4 +1,4 @@
-// FIX-ROUND corpus scenarios: genuine-fault proofs for every diagnosis gap closed in the
+// FIX-ROUND corpus scenarios (2026-07-02): genuine-fault proofs for every diagnosis gap closed in the
 // fix round — the backup-overdue P1 gap, the status DO-opts keystones, the restore-test reason routing,
 // changeKind correlation, thaw-needed, config-integrity history/snapshot, the scheduler tail
 // (state-inconsistent + the new cron-false-green arms), seal-loop budget starvation, the unmarked-account

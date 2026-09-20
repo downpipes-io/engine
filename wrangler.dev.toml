@@ -1,4 +1,4 @@
-# DEV deploy config — one of the owner-run instance environments (ENVIRONMENTS-ARCHITECTURE.md):
+# DEV deploy config — one of the owner-run instance environments (ENVIRONMENTS-ARCHITECTURE-2026-07-07.md):
 # the integration surface: deploys straight from origin/main.
 # SAME Cloudflare account as the other owner surfaces. The engine has NO public route; the dev console
 # reaches it over the ENGINE service binding, so Cloudflare Access on the console hostname gates everything.
@@ -34,7 +34,7 @@ EMAIL_FROM = "no-reply@downpipes.io"
 # UPDATE_CHANNEL_URL is deliberately NOT set here for this environment. This env follows the
 # INTERNAL (pre-release) channel, whose manifest lives at an UNGUESSABLE URL so pre-release builds
 # never sit at a public name a customer could fetch and manually apply
-# (ENVIRONMENTS-ARCHITECTURE.md section 5). The URL is installed as a per-worker SECRET
+# (ENVIRONMENTS-ARCHITECTURE-2026-07-07.md section 5). The URL is installed as a per-worker SECRET
 # (survives config deploys, stays out of git and version listings):
 #   npx wrangler secret put UPDATE_CHANNEL_URL --name downpipe-engine-dev
 # The current URL is recorded in this environment's key-kit folder (internal-channel-url.txt).

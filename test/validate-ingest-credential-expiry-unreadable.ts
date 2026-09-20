@@ -220,7 +220,7 @@ async function main(): Promise<void> {
     { label: "empty string", value: "", readable: false, expired: false },
     { label: "absent field", value: undefined, readable: false, expired: false },
     // MEASURED, NOT ASSUMED. Date.parse is LENIENT where the ISO grammar is not: "2026-08-" resolves to local
-    // midnight and "0" to 31 December 1999, so a TRUNCATED stored expiry does not produce the
+    // midnight on 1 August 2026 and "0" to 31 December 1999, so a TRUNCATED stored expiry does not produce the
     // corrupt state at all -- it produces a silently DIFFERENT, past date, which reads as expired and
     // therefore fails CLOSED. Only a wholly unparseable value reaches the fail-open state this validator
     // exists for, and these two doses hold that line rather than assuming "malformed implies NaN". Both are

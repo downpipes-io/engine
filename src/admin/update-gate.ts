@@ -53,7 +53,7 @@ export interface SettleProbe {
   attempts: StepLog[];
 }
 
-// probeSettleVerdict is the POST-SWAP-TOLERANT verdict read the settle path uses (incident:
+// probeSettleVerdict is the POST-SWAP-TOLERANT verdict read the settle path uses (incident 2026-07-03:
 // the first live apply promoted a healthy 0.1.2 and settle's immediate canary flight hit the isolate
 // swap's DO-reset window, came back not-alive, and rolled back a healthy update ~2.2s after promote).
 // The rules, in order:

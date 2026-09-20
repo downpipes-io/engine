@@ -226,7 +226,7 @@ export async function run(ctx: Ctx): Promise<void> {
   // deploy + canary, so the gate-MECHANISM is proven in PROOF 6 above; here we prove the DIRECTION mapping the
   // route uses to decide whether to gate at all.)
   {
-    // KEEP verdicts (these GATE in the route). Under the OPTIMISTIC settle a verified promote
+    // KEEP verdicts (these GATE in the route). Under the OPTIMISTIC settle (2026-07-07) a verified promote
     // is KEPT unless there is positive evidence of a bad build, so EVERY non-dead verdict keeps -- a singing
     // canary, OR an inconclusive flight whatever the baseline and whatever the self-check (a flight that
     // cannot COMPLETE in the post-swap window is not evidence of regression; only a dead canary is).

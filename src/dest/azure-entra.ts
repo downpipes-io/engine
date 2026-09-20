@@ -65,7 +65,7 @@ export interface AzureEntraCloud {
  * dest/provider.ts admits three storage suffixes. Only one of them has an entry here:
  *
  *   core.windows.net        the commercial cloud. Both values below were driven against a real storage
- *                           account and a real service principal: the token endpoint
+ *                           account and a real service principal on 2026-08-25: the token endpoint
  *                           returned a bearer token for the storage scope, and the storage account
  *                           accepted that token on put, get, head, delete, block staging, block-list
  *                           commit, list and a conditional write.

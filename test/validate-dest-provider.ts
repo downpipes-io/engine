@@ -2,7 +2,7 @@
 //
 // Google Cloud Storage has worked as a downpipes destination for as long as the S3-compatible arm has
 // existed, because its XML API is S3-interoperable and authenticated with the identical SigV4 scheme.
-// Driven live against a real bucket with this repo's own signer, every call the engine
+// Driven live against a real bucket on 2026-08-24 with this repo's own signer, every call the engine
 // makes succeeded: PUT 200, GET 200 byte-correct, HEAD 404 on a missing key, DELETE 204, and multipart
 // initiate/upload/complete all 200. What was missing was never the wire. It was the NAME, and therefore
 // every sentence the product says about such a destination.
@@ -54,7 +54,7 @@ function derivation(): void {
 // THE MATCHER IS TESTED HERE. THE WIRE IS NOT. Nobody on this side holds an Azure US Government or Azure
 // China subscription, so no request has ever been made to either, and this file makes no claim that one
 // would succeed. What it grades is the pure function: which client an endpoint in those clouds is routed
-// to. Before the answer was the S3 arm, where SigV4 could never authenticate an Azure account,
+// to. Before 2026-08-25 the answer was the S3 arm, where SigV4 could never authenticate an Azure account,
 // so the engine refused a store it could otherwise have written to. That is a classification defect, it is
 // fully decidable without a credential, and it is what these vectors settle.
 //
@@ -88,7 +88,7 @@ function sovereignAzure(): void {
   }
 
   console.log("a cloud that is NOT in the list stays the residual:");
-  // Microsoft Cloud Germany closed in. It is deliberately absent, and this line is what says
+  // Microsoft Cloud Germany closed in October 2021. It is deliberately absent, and this line is what says
   // the absence is a decision rather than an oversight.
   ok("the retired Microsoft Cloud Germany suffix is not admitted", providerForEndpoint("https://acct.blob.core.cloudapi.de") === "s3");
   ok("an invented Azure-shaped suffix is not admitted", providerForEndpoint("https://acct.blob.core.azurecloud.example") === "s3");
@@ -96,7 +96,7 @@ function sovereignAzure(): void {
 
 function unusable(): void {
   console.log("unusableEndpoint names a store we cannot write to at all:");
-  // Azure BLOB moved out of this set when it gained its own client and signer. The two
+  // Azure BLOB moved out of this set on 2026-08-25 when it gained its own client and signer. The two
   // Azure endpoint families are deliberately kept apart: the dfs one is a different protocol, not a
   // different host for the same one, so supporting Blob does not support Gen2.
   ok("an ADLS Gen2 endpoint is still refused by name", unusableEndpoint("https://acct.dfs.core.windows.net") === "azure-dfs");
@@ -137,7 +137,7 @@ function azureRefusals(): void {
 
   // THE ASSERTION THAT MATTERS MOST HERE IS AN ABSENCE, exactly as it is for GCS below, and for the same
   // reason: the presence it replaces was wrong. Immutability was refused on every Azure endpoint until
-  // , on the argument that Azure's two primitives (a policy that is separately unlocked or
+  // 2026-08-25, on the argument that Azure's two primitives (a policy that is separately unlocked or
   // locked, plus an independent legal hold) could not be mapped onto one mode plus one window. They map:
   // governance is an unlocked policy and compliance is a locked one, and the mode is a header chosen per
   // write rather than a property of the container anybody has to guess at. The live probe
@@ -151,7 +151,7 @@ function azureRefusals(): void {
   ok("the AssumeRole reason points at the account key, which is what the form collects", /access key/i.test(assume), assume);
   ok("...and names the shared access signature too, which is now accepted in the same field", /shared access signature/i.test(assume), assume);
 
-  // ADDRESSING joined the set. Its reason has to say what the one Azure URL form IS, or an
+  // ADDRESSING joined the set on 2026-08-26. Its reason has to say what the one Azure URL form IS, or an
   // operator reading "there is nothing to choose" cannot tell whether their container is reachable at all.
   const addr = byField.get("addressing") ?? "";
   ok("the addressing reason names Azure's single URL form", /blob\.core\.windows\.net\/<container>/.test(addr), addr);
@@ -174,7 +174,7 @@ function gcsRefusals(): void {
   }
 
   // THE ASSERTION THAT MATTERS MOST HERE IS AN ABSENCE, because the presence it replaces was false.
-  // Immutability was refused for every GCS endpoint until, on the belief that Google Cloud
+  // Immutability was refused for every GCS endpoint until 2026-08-25, on the belief that Google Cloud
   // Storage has no S3 Object Lock. Measured against a real bucket, a GCS bucket created WITH per-object
   // retention answers the Object-Lock probe 200/Enabled, honours a COMPLIANCE lock header, and then
   // REFUSES a delete inside the window with 403. The engine's live probe already told those buckets apart

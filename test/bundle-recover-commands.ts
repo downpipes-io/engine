@@ -4,7 +4,7 @@
 // WHY THIS EXISTS. RECOVER.md is the highest-stakes published command surface in the product. It
 // travels inside every archive the engine writes, it is covered by the signed SHA384SUMS, and it is
 // what an operator reads at the moment they have nothing else: no console, no engine, and possibly
-// no vendor. Nothing drove it until, and it had two defects at once.
+// no vendor. Nothing drove it until 2026-08-04, and it had two defects at once.
 //
 //   1. The custody example printed TWO --share files:
 //

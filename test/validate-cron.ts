@@ -186,7 +186,7 @@ function testTimezone(): void {
 // ---- DST forward (spring-forward gap) ----------------------------------------------------
 function testDstForward(): void {
   {
-    // America/New_York springs forward at 02:00 -> 03:00 (02:00-02:59 do NOT exist).
+    // America/New_York springs forward on 2026-03-08 at 02:00 -> 03:00 (02:00-02:59 do NOT exist).
     const before = U("2026-03-08T05:00:00Z"); // 00:00 EST local on 3/8
     // A cron at 02:30 cannot match the skipped local minute on 3/8; it must fire at the next valid
     // instant: the FOLLOWING day's 02:30 local (the rule: a non-existent local time fires at the next
@@ -206,7 +206,7 @@ function testDstForward(): void {
 // ---- DST back (fall-back overlap) --------------------------------------------------------
 function testDstBack(): void {
   {
-    // America/New_York falls back at 02:00 -> 01:00 (01:00-01:59 occur TWICE).
+    // America/New_York falls back on 2026-11-01 at 02:00 -> 01:00 (01:00-01:59 occur TWICE).
     const before = U("2026-11-01T04:00:00Z"); // 00:00 EDT local on 11/1
     // The rule: take the FIRST (earlier UTC) occurrence of an ambiguous local time. 01:30 EDT is
     // 05:30Z; 01:30 EST (the 2nd occurrence) is 06:30Z. We expect the earlier one.
@@ -268,7 +268,7 @@ function testBlackout(): void {
     const b2b = { timeZone: "UTC", blackoutWindows: [{ startMinute: 120, endMinute: 180 }, { startMinute: 180, endMinute: 240 }] };
     ok("blackout: back-to-back windows defer past BOTH to 04:00", deferPastBlackouts(U("2026-06-17T02:30:00Z"), b2b) === U("2026-06-17T04:00:00Z"));
 
-    // weekday-filtered window: only Wednesday (dow 3). is Wed, is Thu.
+    // weekday-filtered window: only Wednesday (dow 3). 2026-06-17 is Wed, 2026-06-18 is Thu.
     const wed = { timeZone: "UTC", blackoutWindows: [{ days: [3], startMinute: 120, endMinute: 240 }] };
     ok("blackout: day-filtered window defers ON the named weekday", deferPastBlackouts(U("2026-06-17T02:30:00Z"), wed) === U("2026-06-17T04:00:00Z"));
     ok("blackout: day-filtered window does NOT defer on another weekday", deferPastBlackouts(U("2026-06-18T02:30:00Z"), wed) === U("2026-06-18T02:30:00Z"));
@@ -289,7 +289,7 @@ function testComposed(): void {
     // 02:30 UTC cron whose fire lands in a 02:00-04:00 blackout ends up at 04:00.
     const sched = { timeZone: "UTC", blackoutWindows: [{ startMinute: 120, endMinute: 240 }] };
     const from = U("2026-06-17T10:00:00Z");
-    const cronFire = nextFireAfter("30 2 * * *", from, scheduleTimeZone(sched));
+    const cronFire = nextFireAfter("30 2 * * *", from, scheduleTimeZone(sched)); // 2026-06-18T02:30Z
     const deferred = deferPastBlackouts(cronFire, sched);
     ok("composed: cron 02:30 deferred out of [02:00,04:00) -> 04:00 next day", deferred === U("2026-06-18T04:00:00Z"));
   }

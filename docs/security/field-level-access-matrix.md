@@ -3,7 +3,7 @@
 **Standard:** OWASP ASVS 5.0 - V8.1.2 ("Authorization documentation defines field-level access
 restrictions (read and write) based on consumer permissions and resource attributes")
 **Scope:** the engine's admin API (src/admin)
-**Date:**
+**Date:** 2026-09-13
 
 This document is the field-level authorization record V8.1.2 asks for: for every sensitive field
 or field group the admin API exposes, who may read it and who may write it, expressed as the

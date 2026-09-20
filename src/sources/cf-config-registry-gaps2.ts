@@ -1,11 +1,11 @@
-// Part 4 of the Cloudflare configuration surface registry: the OPENAPI-GAP DEPTH sweep.
+// Part 4 of the Cloudflare configuration surface registry: the OPENAPI-GAP DEPTH sweep (2026-07-26).
 // Part 3 (cf-config-registry-gaps.ts) closed product areas the registry did not touch AT ALL. This module
 // closes the second, less visible gap: areas the registry DID touch, but only shallowly. Having one
 // endpoint in an area made the coverage look complete when it was not. Magic Transit had 64 GET
 // operations against our 11, Access 53 against 13, Workers 45 against 8, Gateway 26 against 7.
 //
 // Same discipline as part 3: every surface here was PROBED LIVE against a real Cloudflare account on
-// before being registered, and endpoints the probe refused are recorded rather than silently
+// 2026-07-26 before being registered, and endpoints the probe refused are recorded rather than silently
 // dropped. Catalogues are excluded by the same scope boundary as before, and there are a lot of them in
 // this sweep: gateway/app_types (1,575 entries), tokens/permission_groups (379),
 // iam/permission_groups (100), gateway/categories (34), alerting available_alerts (27),

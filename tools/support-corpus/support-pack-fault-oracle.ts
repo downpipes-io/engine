@@ -3,7 +3,7 @@
 //   node tools/support-corpus/support-pack-fault-oracle.ts [--only <substring>] [--self-test] [--diff <n>]
 //
 // The requirement: the support pack has to have all the answers. So for every defect in the numbered
-// boundaries-and-accumulation defect table -- if a customer hit it and sent a
+// boundaries-and-accumulation defect table (2026-08-11) -- if a customer hit it and sent a
 // pack, would the pack identify the fault or look clean?
 //
 // WHAT MAKES THIS DIFFERENT FROM THE FIRST PASS. An earlier pass scored 9 of 22 by READING the generator and
@@ -72,7 +72,7 @@ export type Verdict = "DIAGNOSABLE" | "PARTIAL" | "SILENT" | "NOT-APPLICABLE";
 // Normalisation: everything that moves between two runs of the SAME world, and nothing else.
 
 const ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
-/* * Epoch-millisecond range: to. Wide enough for every stamp, narrow enough to miss counts. */
+/** Epoch-millisecond range: 2017-07-14 to 2096-10-02. Wide enough for every stamp, narrow enough to miss counts. */
 const EPOCH_LO = 1_500_000_000_000;
 const EPOCH_HI = 4_000_000_000_000;
 

@@ -104,7 +104,7 @@ function corsHeaders(req: Request, env: Env): Record<string, string> {
 //
 // IT DOES NOT BREAK THE CONSOLE, and that is the question worth answering before adding it here, because
 // the console calls the engine from a DIFFERENT origin and a header that blocked it would break every
-// deployment. MEASURED in headless Chrome against two local origins, one fetching the other:
+// deployment. MEASURED 2026-09-11 in headless Chrome against two local origins, one fetching the other:
 //   CORP same-origin  -> CORS-mode fetch OK,      no-cors <img> BLOCKED
 //   CORP cross-origin -> CORS-mode fetch OK,      no-cors <img> LOADED
 //   CORP absent       -> CORS-mode fetch OK,      no-cors <img> LOADED

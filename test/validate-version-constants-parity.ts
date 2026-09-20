@@ -4,7 +4,7 @@
 // 1. ENGINE_VERSION vs package.json. ENGINE_VERSION is what the engine reports to the update check and
 //    what checkUpdates compares against the vendor-signed recommendedVersion (updateAvailable is
 //    recommendedVersion !== ENGINE_VERSION). package.json's version is what the release is cut and
-// published as. Nothing connected them: both read 0.1.9 by coincidence, and a release
+//    published as. Nothing connected them: on 2026-08-04 both read 0.1.9 by coincidence, and a release
 //    that bumped one and not the other would have shipped an engine that either never sees an update it
 //    should take, or reports one it has already taken, with no gate anywhere raising a word.
 //
@@ -13,9 +13,9 @@
 //    string is a KEY-DERIVATION LABEL, so a label at the wrong version derives different keys, and an
 //    archive written with one set cannot be read by an engine built with another.
 //
-// This is not hypothetical, and it is why this gate exists rather than a comment.
+//    This is not hypothetical, and it is why this gate exists rather than a comment. As of 2026-08-04
 //    the live update channel at update.downpipes.io still serves engine 0.1.9 bytes whose eleven labels
-// all read downpipe/1.0, the format retired by the semver cutover, while this source tree
+//    all read downpipe/1.0, the format retired by the 2026-07-12 semver cutover, while this source tree
 //    reads downpipe/0.1.0. The cutover is hard, with no dual-accept: checkFormatVersion (src/format/
 //    structural-gates.ts) refuses downpipe/1.0 outright. A per-label typo produces exactly that class of
 //    break, one label at a time and silently, since nothing else in the tree reads these strings back.

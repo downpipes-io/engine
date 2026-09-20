@@ -5,7 +5,7 @@
 // ------------
 // updateAvailable was `recommended !== ENGINE_VERSION`. Inequality, not strictly-newer, in a module that
 // declares compareSemver and never called it there. Measured live on the `updfault` harness estate on
-// by another pass: engine 0.2.0 against a channel recommending 0.1.10, updateAvailable true,
+// 2026-08-13 by another pass: engine 0.2.0 against a channel recommending 0.1.10, updateAvailable true,
 // and a dry-run apply answering "the recommended version 0.1.10 is not newer than the running engine 0.2.0
 // ... Nothing was changed".
 //

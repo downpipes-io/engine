@@ -22,7 +22,7 @@ import { nowIso } from "./support-shared.ts";
 // The signer's ML-DSA secret is zeroed after signing, matching signedSupportBundle's idiom, so a
 // caller must pass a freshly loaded signer.
 //
-// Split out of support.ts (band-on-ticket landing): a pure, self-contained leaf with
+// Split out of support.ts on 2026-09-06 (band-on-ticket landing): a pure, self-contained leaf with
 // no dependency on buildSupportBundle's internals beyond its already-signed output, so moving it
 // costs nothing at the seam and buys support.ts back under the 1000-line default it would otherwise
 // have crossed by 43 lines. Every caller imports it from here now; support.ts re-exports nothing,

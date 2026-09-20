@@ -36,7 +36,7 @@ const BEACON_FAIL_CLASS_SET: ReadonlySet<string> = new Set(BEACON_FAIL_CLASSES);
 // "re-enter the credential" without this). It reuses the no-custody export slice (each dest secret already
 // projected to a WrappedSecret envelope or a reestablish marker -- never plaintext) and verifies ONE
 // envelope opens: the CLASS (ok / wrong-key / missing-key / malformed-key / no-envelopes) is the whole
-// signal. SECURITY (keys review, item 5b): the check goes through canOpenConfigSecret, which
+// signal. SECURITY (keys review 2026-07-02, item 5b): the check goes through canOpenConfigSecret, which
 // never decodes the plaintext to a string and zero-fills the transient buffer -- the probe holds a VERDICT,
 // never a value. (The same envelope is opened by resolveConfigSecret on every run/preflight in this same
 // isolate, so this adds no new exposure class; a canary-envelope refit was reviewed and rejected: legacy
@@ -627,7 +627,7 @@ export async function fetchDestResolution(env: Env, scheduler: DurableObjectStub
 // nothing about the key) + booleans. It closes the keys-bootstrap DATA-LOSS keystones the audit calls still-dark:
 //  - breakGlass.recipientFingerprint: cross-check the customer's recovery sheet - a valid PUBLIC break-glass key
 //    with a lost/wrong PRIVATE half is unrecoverable and otherwise invisible (breakglass-wrong-key-private-lost).
-// SEMANTICS (keys review, item 5a): this is the CURRENT env key = what the NEXT seal wraps to,
+//    SEMANTICS (keys review 2026-07-02, item 5a): this is the CURRENT env key = what the NEXT seal wraps to,
 //    derived through the SAME loadRecipientPublic parse + recipientFingerprint function the seal path uses
 //    (validate-support pins pack fingerprint === a real sealToRecipients wrap fingerprint, so the derivation
 //    can never silently diverge). It does NOT claim archives sealed BEFORE a key rotation wrap to this key -

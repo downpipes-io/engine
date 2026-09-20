@@ -219,7 +219,7 @@ async function proveChainVerifies(ctx: VersioningCtx): Promise<void> {
 
 // ---- PROOF 2b: the digest's LABEL names the MAC that was actually computed --------------------
 // WHY THIS PROOF EXISTS, and what it would have caught. The stored label read "edhmac384:" from the first
-// version of this feature until, over a MAC that is HMAC-SHA-256 and always was. The label was
+// version of this feature until 2026-09-10, over a MAC that is HMAC-SHA-256 and always was. The label was
 // rationalised in a comment as "engine-DO HMAC over a 384-bit-hashed body", which is true of the body
 // (contentHash is SHA-384) and false of the MAC the label sits on. The published cryptographic inventory
 // had to carry a standing warning that a reviewer grepping for 384 lands on a SHA-256 MAC.

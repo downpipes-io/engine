@@ -300,7 +300,7 @@ export function classifyRestoreFailure(e: unknown): string {
   // THIS IS A KNOWN DIVERGENCE FROM THE OFFLINE READER, NOT A SETTLED POSITION, and the justification that
   // used to sit here was a citation to reader behaviour that no longer exists. It read "exactly the
   // completeness category a deleted shard already codes (ExitIncomplete on the CLI)" and concluded a deleted
-  // segment is tamper-equivalent. the reader landed ExitDangling (13) at downpipe@e86b003,
+  // segment is tamper-equivalent. On 2026-08-05 the reader landed ExitDangling (13) at downpipe@e86b003,
   // "Stop telling an operator their data is corrupt when it is merely absent", on evidence: over one archive
   // with its seg object DELETED and one with a byte of that object FLIPPED, `verify --deep` printed
   // byte-identical verdicts and both exited 2. Its finding is that the two states have opposite remedies, and

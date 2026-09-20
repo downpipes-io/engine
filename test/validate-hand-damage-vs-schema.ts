@@ -29,7 +29,7 @@
 // validate-autoprove-bodies-vs-schema.ts. A gate that opts out when it cannot check reads as a pass, so
 // CI sets that variable.
 //
-// IT DID NOT UNTIL, and the line above said it did for as long as it was untrue. This file runs
+// IT DID NOT UNTIL 2026-07-29, and the line above said it did for as long as it was untrue. This file runs
 // inside `npm run validate`, and the only step that fetches the schema sits AFTER that in the workflow, so
 // on a runner the schema has never been on disk by the time this looks. It printed "SCHEMA CHECK SKIPPED"
 // and exited 0 on every CI run it has ever had, which is the exact failure the paragraph above describes,

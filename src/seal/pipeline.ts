@@ -422,7 +422,7 @@ async function appendRunlogBody(dest: Destination, signer: Signer, entry: Runlog
     // Canonical order: ascending index on every rewrite. Entries land at FINALISE time,
     // so concurrent runs interleave their appends; sorting keeps the stored document
     // deterministic and humanly scannable. Readers must not rely on it either way
-    // (SPEC 10, amended: line order is not load-bearing; the signature is).
+    // (SPEC 10, amended 2026-06-10: line order is not load-bearing; the signature is).
     entries.sort((a, b) => a.index - b.index);
     const { runlog, sig } = await signRunlog(entries, signer.edPrivate, signer.mldsaSecret);
     const res = existing

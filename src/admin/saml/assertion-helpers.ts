@@ -145,7 +145,7 @@ export function findChildInNs(el: XmlElement, local: string, ns: string, inScope
 }
 
 // ---- ISO 8601 / XSD dateTime parsing ----
-// SAML uses XSD dateTime (e.g., optionally with fractional seconds and/or a timezone
+// SAML uses XSD dateTime (e.g. 2026-06-13T01:02:03Z, optionally with fractional seconds and/or a timezone
 // offset). We decode the value, then Date.parse the explicit string. Date.parse on an EXPLICIT string is
 // permitted (it is deterministic for a given string); new Date()/Date.now() are NOT (they read the wall
 // clock). A value Date.parse cannot understand yields NaN, which we treat as a hard parse failure (fail

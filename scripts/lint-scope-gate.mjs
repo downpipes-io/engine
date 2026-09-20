@@ -100,7 +100,7 @@ if (typeof base.counts?.error !== "number" || typeof base.counts?.warning !== "n
 console.log(`lint-scope-gate: ${scanned} files scanned across ${DIRS.join(", ")}`);
 // THIS LINE IS PARSED BY ANOTHER REPOSITORY. harness/scripts/ratchet-headroom-gate.mjs registers this
 // gate and reads `errors N (pinned M...)` and `warnings N (pinned M...)` off this exact output to measure
-// how much slack the ratchet is carrying. Adding ", ENFORCED" here broke both of its probes,
+// how much slack the ratchet is carrying. Adding ", ENFORCED" here on 2026-08-29 broke both of its probes,
 // because they required the bracket to close straight after the number, and that gate REFUSED with exit 2
 // rather than reporting zero slack. Nothing warned the person editing this file, because the consumer is
 // in a sibling repository with no dependency path to here. Its regexes now tolerate a trailing qualifier,
@@ -111,7 +111,7 @@ console.log(`  infos ${counts.information} (pinned ${base.counts.information}, N
 // The ratchet covers errors and warnings ONLY. Information-severity diagnostics are counted, printed and
 // pinned, and a RISE in them does not fail: only a FALL is reported, as a prompt to re-pin. That asymmetry
 // is deliberate and it is stated in the output because it was not, and the silence misled. MEASURED
-// : a run printed "infos 1352 (pinned 1351)" and PASSED. The pin had gone stale under ten new
+// 2026-08-29: a run printed "infos 1352 (pinned 1351)" and PASSED. The pin had gone stale under ten new
 // files from another pass, and the line read as a third enforced count sitting one above its pin. A number
 // printed beside the word "pinned" claims to be held. If this ever becomes enforced, add "information" to
 // the loop below and re-pin in the same commit.

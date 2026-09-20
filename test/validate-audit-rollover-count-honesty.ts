@@ -21,7 +21,7 @@
 // WHAT THE ZERO COSTS ON SCREEN, which is why it is not cosmetic. console/src/screens/access-security/
 // audit-events.ts gated its rollover notice on `rolledOver === true && (count ?? 0) > 0`, so the zero fell
 // through to the plain "Chain intact ... recomputes cleanly from the earliest retained entry" surface --
-// the reading that file's own comment records as the defect it fixed, "identical on a log
+// the reading that file's own comment records as the defect it fixed on 2026-08-11, "identical on a log
 // that begins at entry 1 and on one whose first two thousand entries have been destroyed". An operator
 // looking at a destroyed audit history was told nothing had happened.
 //

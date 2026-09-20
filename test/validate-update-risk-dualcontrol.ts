@@ -15,7 +15,7 @@
 //     through to the token check and returns 400 "paste the token", NOT a 202, and still no deploy.
 // The 202-vs-400 distinction cleanly proves whether the gate was consulted, with zero Cloudflare calls.
 //
-// S12-R11: the same 202-vs-400 distinction now also proves the CUSTOMER's override of the
+// S12-R11 (2026-09-10): the same 202-vs-400 distinction now also proves the CUSTOMER's override of the
 // vendor's risk class. The risk class rides on the vendor-signed manifest, so until requireAllUpdateApproval
 // existed the vendor decided whether the customer's second-owner gate was consulted at all: a release marked
 // "routine" was never gated, whatever the customer wanted. Proofs 6 to 9 below drive that flag through its
@@ -71,7 +71,7 @@ const jwtPart = (obj: unknown): string => b64urlEncode(new TextEncoder().encode(
 // ---- The signed update channel (the engine verifies it under the pinned signer) ----
 // The fixture version is coupled to ENGINE_VERSION and the coupling is silent: updateAvailable is
 // recommendedVersion !== ENGINE_VERSION, so a fixture version that ever equals the running one turns every
-// W5 gate case below into a vacuous pass. It read "0.2.0" until, when the 0.1.9 -> 0.2.0 release
+// W5 gate case below into a vacuous pass. It read "0.2.0" until 2026-08-08, when the 0.1.9 -> 0.2.0 release
 // bump made the two equal and the whole file failed at once. Asserted at the top of main() now.
 const CHANNEL_URL = "https://update.downpipes.io/stable.json";
 const ARTEFACT_URL = "https://update.downpipes.io/engine-0.4.0.mjs";

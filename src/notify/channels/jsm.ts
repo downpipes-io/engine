@@ -1,6 +1,6 @@
 // The Jira Service Management / Opsgenie channel adapter (contract section 2.2). JSM (Jira Service
 // Management) absorbed Opsgenie's alerting engine, and the two accept the SAME Alert API shape today;
-// Opsgenie itself is sunsetting in, so this adapter is built against the JSM endpoint
+// Opsgenie itself is sunsetting in April 2027, so this adapter is built against the JSM endpoint
 // contract, which both providers honour identically now and for the foreseeable future. Unlike
 // PagerDuty's single trigger/resolve envelope, the Alert API is a POST-create / POST-close-by-alias
 // PAIR: a new or continuing condition CREATEs (or, re-POSTed with the same alias, de-duplicates onto)

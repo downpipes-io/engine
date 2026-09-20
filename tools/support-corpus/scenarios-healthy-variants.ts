@@ -6,21 +6,21 @@
 //
 // ## FINDINGS (designed behaviour that mis-serves a legitimately-healthy customer)
 //
-// FINDING F-HV1 (healthy.fresh-install) — PARTIALLY FIXED: plan-ceiling-exceeded now fires
+// FINDING F-HV1 (healthy.fresh-install) — PARTIALLY FIXED 2026-07-02: plan-ceiling-exceeded now fires
 //   only when some recorded tick has dispatched>0 (the fleet actually works), so a pristine day-one
 //   engine no longer gets the scary platform warning during the golden first-touch window. The
 //   remaining half stands by design: diagnose() still requires anyRun===true to reach HEALTHY, so a
 //   no-runs-yet fresh install reads INDETERMINATE + escalate (a human confirms "setup verified,
 //   awaiting first run") — the candidate NO-RUNS-YET/SETUP-OK reading remains future work.
 //
-// FINDING F-HV2 (healthy.recent-redeploy) — FIXED: deploy-identity-changed is now a
+// FINDING F-HV2 (healthy.recent-redeploy) — FIXED 2026-07-02: deploy-identity-changed is now a
 //   CORRELATOR — it fires only when the recent deploy coincides with something OFF (a not-verified
 //   source-bindings probe, a failed/stalled run, records incomplete/skipped, or a sources-detached
 //   event). A routine same-config redeploy with bindings verified and runs green reads HEALTHY and
 //   auto-posts. The owner-#1 chain is unaffected (roster-dropped-across-version-change + the
 //   bindings-probe-failed branch route it independently).
 //
-// FINDING F-HV3 (healthy.tier0-verify) — FIXED: tier0-verify-only no longer fires on
+// FINDING F-HV3 (healthy.tier0-verify) — FIXED 2026-07-02: tier0-verify-only no longer fires on
 //   tier0Cause="sample-off" (an INTENTIONAL operator knob; the pack's sealKnobs still show it for a
 //   human reviewer). break-glass / too-large still fire (states the operator may not have intended);
 //   see seal.tier0-only-break-glass.
@@ -95,7 +95,7 @@ const OBJECT_LOCK_ENFORCED_XML =
   "</ObjectLockConfiguration>";
 
 export const HEALTHY_VARIANT_SCENARIOS: Scenario[] = [
-  // F-HV1 (partially fixed): plan-ceiling-exceeded no longer cries wolf on a fleet that has
+  // F-HV1 (partially fixed 2026-07-02): plan-ceiling-exceeded no longer cries wolf on a fleet that has
   // never dispatched (its ticks show dispatched 0), so the fresh install keeps only the by-design
   // INDETERMINATE no-runs-yet reading (a human confirms "setup verified, awaiting first run").
   {
@@ -295,7 +295,7 @@ export const HEALTHY_VARIANT_SCENARIOS: Scenario[] = [
     ],
   },
 
-  // F-HV2 FIXED: deploy-identity-changed is now a correlator — a routine same-config
+  // F-HV2 FIXED 2026-07-02: deploy-identity-changed is now a correlator — a routine same-config
   // redeploy with bindings verified and runs green stays QUIET and the fleet reads clean HEALTHY.
   {
     id: "healthy.recent-redeploy",
@@ -459,7 +459,7 @@ export const HEALTHY_VARIANT_SCENARIOS: Scenario[] = [
     },
   },
 
-  // F-HV3 FIXED: an INTENTIONAL SEAL_VERIFY_SAMPLE=0 posture (verified Tier-0, cause
+  // F-HV3 FIXED 2026-07-02: an INTENTIONAL SEAL_VERIFY_SAMPLE=0 posture (verified Tier-0, cause
   // sample-off) no longer fires tier0-verify-only — the fleet reads clean HEALTHY; the knob stays
   // visible to humans in sealKnobs. break-glass/too-large still fire (seal.tier0-only-break-glass).
   {
@@ -516,7 +516,7 @@ export const HEALTHY_VARIANT_SCENARIOS: Scenario[] = [
   // (an SSO failure run 12 days back, an auth lockout 9 days back, a notify failure 10 days back —
   // also SUPERSEDED by newer successes, the item-17 self-healed discrimination — and a 6-week-old
   // IdP connection delete) or benignly pending (a digest due in 4 hours). None of the recency-bounded
-  // signals may re-gate HEALTHY. UPDATED: the old 2-day-expired cooldown-row fixture was
+  // signals may re-gate HEALTHY. UPDATED 2026-07-02: the old 2-day-expired cooldown-row fixture was
   // engine-unrealistic (reconcileAlerts DELETES the row on recovery and refreshes `at` on re-nudge),
   // and under the fixed genuinely-stuck rule it would rightly fire; the recovered incident's row is
   // now honestly ABSENT (deleted), and the benign ACTIVE-cooldown proof lives in

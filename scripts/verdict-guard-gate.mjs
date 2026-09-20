@@ -24,7 +24,7 @@
 // EVERY derived entry point, wherever it lives. Its defect is "this file silently did not run", which is
 // no less a defect in a build or deploy script, and narrowing it to test/ is exactly what let
 // scripts/stamp-build-id.mjs keep the retired shape while this gate reported a clean pass around it
-// (widened). That script is run by scripts/deploy.sh as
+// (widened 2026-08-04). That script is run by scripts/deploy.sh as
 // `node scripts/stamp-build-id.mjs || echo "artefact-hash stamp skipped ..."`, where the echo is the
 // operator's only warning and fires only on a non-zero exit, so a silent decline at exit 0 suppresses
 // the very message written to cover it.
@@ -116,7 +116,7 @@ if (direct.size === 0) die(2, "cannot check: the derivation found no directly-in
 
 // ---- decide which of them are validators, by shape ---------------------------------------------------
 // blankComments and blankCommentsAndStrings are shared with validator-reachability-gate.mjs and
-// crossrepo-typecheck-gate.mjs (scripts/lib/blank-comments.mjs), consolidated from three
+// crossrepo-typecheck-gate.mjs (scripts/lib/blank-comments.mjs), consolidated 2026-08-03 from three
 // independently-written copies of the same scan. See that module's header for the full attack history
 // (R-106 here, R-107 and R-109 in the other two gates) and the corpus-verification this function has had.
 // The enrolment check below used to test comment-blanked text (strings intact) with a bare substring/
@@ -209,7 +209,7 @@ const MAIN_MODULE_CHECK = new RegExp(
 // The canonicalisation must sit AT the comparison, not merely somewhere in the file. A file-wide
 // /realpathSync/ test is a false negative waiting to happen, and it was one: scripts/stamp-build-id.mjs
 // imports realpathSync from node:fs on line 53, so a file-wide exclusion cleared it no matter what the
-// comparison on line 205 actually said. Measured by putting the retired expression back in a
+// comparison on line 205 actually said. Measured 2026-08-04 by putting the retired expression back in a
 // file that still carried the import, against which the file-wide form reported a clean pass.
 const CANONICALISED = /realpathSync\s*\(|isEntryPoint\s*\(/;
 /**

@@ -3,7 +3,7 @@
 **Standard:** OWASP ASVS 5.0 - V14.1.1 / V14.1.2 / V14.2.4
 **Scope:** Downpipes engine, console, and offline downpipe CLI. The vendor control plane has its own
 inventory at `control-plane/docs/security/data-classification.md`, on the same four-level scheme.
-**Date:**
+**Date:** 2026-09-12
 
 This document is the sensitivity inventory the engine is assessed against. Section 1 defines the
 four protection levels, the regulations they answer to, and the rule for encoded data. Section 1.3

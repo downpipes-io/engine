@@ -7,7 +7,7 @@
 // files together is weaker than the other controls in this section: they are kept in step by hand and by the
 // port discipline each file's own header states, not by a check that reads both and compares them".
 //
-// MEASURED, and worse than the document said: `grep -rln "spec.go" scripts test` returned exactly
+// MEASURED 2026-09-10, and worse than the document said: `grep -rln "spec.go" scripts test` returned exactly
 // one file, src/format/version.ts itself, and none of the 40 gates in scripts/ named spec.go at all. Meanwhile
 // version.ts's own header asserted that the file "is checked against spec.go", so a reviewer reading the code
 // would conclude the check existed and stop looking. This validator is that check; the header now names it.

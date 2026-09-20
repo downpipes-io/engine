@@ -36,7 +36,7 @@ import { verdictReached } from "./lib/verdict-guard.ts";
 
 // The DOCUMENTED counts: the numbers prose may quote. They are pinned here so a registry change that
 // moves a number FAILS until this line and the prose are updated together.
-// NOTE: the total rose from 214 to 256 with the OpenAPI-gap sweep (cf-config-registry-gaps.ts,
+// NOTE 2026-07-26: the total rose from 214 to 256 with the OpenAPI-gap sweep (cf-config-registry-gaps.ts,
 // 42 surfaces), then to 314 with the DEPTH half of the same sweep (cf-config-registry-gaps2.ts, 58
 // surfaces in areas the registry touched only shallowly). The old 214 was built against Cloudflare's own tooling surface and so inherited that
 // tooling's boundary; diffing the registry against Cloudflare's published OpenAPI found 71 product areas

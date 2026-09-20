@@ -2,7 +2,7 @@
 
 **Standard:** OWASP ASVS 5.0 - V10.3.3, V10.5.2 (identity), V6.x (first-party MFA), V7.x (session lifecycle), V5.1.1 (file handling).
 **Scope:** Downpipes engine (TypeScript, Cloudflare Workers) and the offline `downpipe` CLI reader (Go).
-**Date:**
+**Date:** 2026-06-10
 
 This document is grounded in named source files. Where a control is delegated to an external
 system (Cloudflare Access, the IdP the operator federates into Access) or is not enforced in
@@ -279,7 +279,7 @@ The native session carries five time bounds. Each is a named constant in
 | Step-up freshness | `STEPUP_FRESH_MS` (`engine/src/admin/session.ts:84`) | 5 minutes | `stepUpCheck` admits a passkey session whose `iat` is younger than this without a fresh assertion (`engine/src/sched/scheduler-do-stepup.ts:223`). An `oidc` or `saml` session never qualifies. |
 | Step-up token | `STEPUP_TOKEN_TTL_MS` (`engine/src/admin/session.ts:90`) | 2 minutes | A minted step-up token is single use and consumed at the check. |
 
-**Comparison with NIST SP 800-63B, revision 4.** Revision 4 states its
+**Comparison with NIST SP 800-63B, revision 4 (August 2025).** Revision 4 states its
 reauthentication figures per assurance level: §2.2.3 for AAL2 and §2.3.3 for AAL3. The engine's
 bounds compare as follows.
 

@@ -1,7 +1,7 @@
 // Azure Blob immutability, expressed in the WORM vocabulary the rest of this engine already speaks.
 //
 // THIS MODULE REVERSES A REFUSAL, and the reasoning behind the refusal is worth keeping because it was
-// nearly right. Until every Azure endpoint refused the destination form's immutability field,
+// nearly right. Until 2026-08-25 every Azure endpoint refused the destination form's immutability field,
 // arguing that Azure carries TWO orthogonal primitives (a policy that is separately unlocked or locked,
 // plus an independent legal hold) where the form collects ONE mode plus one window, so any mapping would
 // be a guess. The two primitives are real. The conclusion did not follow.
@@ -54,7 +54,7 @@ export const AZURE_IMMUTABILITY_MODE: Record<WormMode, string> = { governance: "
  * form `x-ms-immutability-policy-until-date` requires.
  *
  * THE FORMAT IS THE WHOLE POINT OF THIS FUNCTION EXISTING SEPARATELY from the S3 one. S3 takes an
- * RFC 3339 instant ("") and Azure takes an RFC 1123 one ("Thu, 24 Sep 2026 00:00:00
+ * RFC 3339 instant ("2026-09-24T00:00:00Z") and Azure takes an RFC 1123 one ("Thu, 24 Sep 2026 00:00:00
  * GMT"). Sending either store the other's spelling is a rejected write, so the two are kept apart rather
  * than sharing a formatter with a flag.
  *
@@ -97,7 +97,7 @@ export function azureImmutabilityHeaders(worm: WormPolicy | undefined, now: Date
  *
  * IT IS NOT ON THE PUBLISHED REST REFERENCE PAGE FOR THAT OPERATION, which lists only the older
  * `x-ms-has-immutability-policy` (a container-SCOPE policy is set) and `x-ms-has-legal-hold`. It IS in the
- * official service specification for the Blob data plane at API version, which is the version
+ * official service specification for the Blob data plane at API version 2021-12-02, which is the version
  * this client pins on every request (AZURE_API_VERSION), described there as "Indicates whether version
  * level worm is enabled on a container". The two older headers answer a different question and cannot
  * stand in for it: a container may carry a container-scope immutability policy while refusing every

@@ -1,4 +1,4 @@
-// CAP-TRUNCATION corpus scenarios (, another pass): GENERATED FAULT PACKS for the three
+// CAP-TRUNCATION corpus scenarios (2026-08-12, another pass): GENERATED FAULT PACKS for the three
 // subject-keyed bounded records, defects 8, 9 and 10 of the boundary table.
 //
 // WHY THESE EXIST AS SCENARIOS RATHER THAN AS UNIT ASSERTIONS. One pass and another closed all

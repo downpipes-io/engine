@@ -3,7 +3,7 @@
 // the reference is a silent interop break, so this file is the single source of these
 // constants and is never edited without a vector regeneration.
 //
-// WHAT CHECKS IT, by name, because until this header said the file "is checked
+// WHAT CHECKS IT, by name, because until 2026-09-10 this header said the file "is checked
 // against spec.go" and NOTHING DID: `grep -rln "spec.go" scripts test` returned this file
 // alone, and none of the repo's gates named the Go reference at all. A reviewer reading the
 // old sentence would conclude the check existed and stop looking, which is worse than the
@@ -21,7 +21,7 @@ export const VERSION = "downpipe/0.1.0";
  * vendor-signed recommended version. Bumped per engine release.
  *
  * 0.1.9 was burned twice over and must never be re-published. The artefact the stable channel
- * served from carries ENGINE_VERSION "0.1.9" and writes the RETIRED downpipe/1.0
+ * served from 2026-07-04 carries ENGINE_VERSION "0.1.9" and writes the RETIRED downpipe/1.0
  * format, so one version number named two incompatible archive formats. 0.1.10 is burned as
  * well: the workspace's chaos-test rehearsal kit already ships an engine-0.1.10.mjs of different
  * bytes on its own rehearsal channel. This bump to 0.2.0 is the re-cut

@@ -5,7 +5,7 @@
 // WHAT THIS IS FOR. Merging a branch that changed dependencies leaves node_modules behind the lockfile.
 // The next gate run then fails with exit 127, which is the shell saying a binary is not there, and 127
 // looks exactly like a test failure in a chain of `npm run` steps. It cost time three separate times on
-// : astro, biome and the docs build each came back 127 after a merge, each read as a real
+// 2026-07-28: astro, biome and the docs build each came back 127 after a merge, each read as a real
 // failure for a moment, and each was one `npm install` away.
 //
 // The signal is npm's own record. node_modules/.package-lock.json is what npm wrote when it last

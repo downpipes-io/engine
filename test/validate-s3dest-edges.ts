@@ -287,7 +287,7 @@ async function drainBoundedEdges(): Promise<void> {
   }
 }
 
-// Part 12 (item 7, HARDENING.md): metered's bounded AbortController timeout. A black-holed
+// Part 12 (item 7, HARDENING-2026-07-05.md): metered()'s bounded AbortController timeout. A black-holed
 // destination (a fetch that never resolves on its own) must abort at fetchTimeoutMs rather than hanging the
 // pass forever; a request that completes comfortably inside the bound is unaffected (no spurious abort).
 // fetchTimeoutMs is overridden to a tiny value here so the test proves the abort actually fires without

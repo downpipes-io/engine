@@ -40,7 +40,7 @@ stryker.log
 # key and recovery sheet land here for the operator to move OFFLINE — never commit.
 recovery-kit/
 
-# --- Private key material — never commit. Fixtures under test/vectors/ are exempt. ---
+# --- Private key material — never commit (2026-06-17). Fixtures under test/vectors/ are exempt. ---
 *.key
 !test/vectors/**/*.key
 *.pem

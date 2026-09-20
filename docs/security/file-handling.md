@@ -2,7 +2,7 @@
 
 **Standard:** OWASP ASVS 5.0 - V5.1.1 (file handling documentation).
 **Scope:** the Downpipes console (TypeScript, a Cloudflare Worker serving a browser app), the engine (TypeScript, Cloudflare Workers), the control plane (TypeScript, Cloudflare Workers) and the offline `downpipe` CLI (Go).
-**Date:**
+**Date:** 2026-09-13
 **Gate:** `engine/test/validate-file-handling-doc.ts` reads this document and refuses when a cited line has moved, when a documented ceiling differs from the constant on its cited line, or when a console file picker in the field catalogue is not cited here.
 
 This document answers V5.1.1 for each feature that accepts a file: the permitted file types and expected extensions (section 2), the maximum size including the unpacked size (section 3), how a file is made safe to download and process (section 4), and what each surface does with a malformed, oversized or malicious file (section 5). Every claim carries a `repo/path:line` citation into the tree that enforces it.

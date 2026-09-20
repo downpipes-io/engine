@@ -752,7 +752,7 @@ async function probeObjectLock(): Promise<void> {
     }
   }
 
-  // AN AZURE SAS CARRIES ITS OWN DEATH, AND THE POSTURE NOW CARRIES THE READING. Wired,
+  // AN AZURE SAS CARRIES ITS OWN DEATH, AND THE POSTURE NOW CARRIES THE READING. Wired on 2026-08-26,
   // and the reason it needed wiring is the assertion worth keeping: AzureBlobDestination.sasExpiry() had
   // existed with three tests and a doc comment naming "a surface that warns before the day comes", and a
   // sweep of src/ found ZERO production callers. The reading was parsed, proven and dropped.
@@ -1118,7 +1118,7 @@ async function gatherWorm(): Promise<void> {
       // this one actually has a DEFAULT RETENTION RULE, which is what the signed immutability report's
       // strongest sentence rests on when no valid policy is armed (reports.ts). Here the rule is present.
       ok("worm: a lock-enabled bucket WITH a default retention rule reports defaultRetention true", slice?.defaultRetention === true);
-      // THE PROVIDER AXIS. The slice has to name WHICH STORE this is, because the four
+      // THE PROVIDER AXIS (2026-08-25). The slice has to name WHICH STORE this is, because the four
       // supported providers have four different immutability mechanisms and the check's remedy is chosen
       // from it. Without this field the branch in posture-checks.ts silently falls back to the S3 sentence
       // for every destination, which is the defect it was built to close, and nothing else would notice.
@@ -1130,7 +1130,7 @@ async function gatherWorm(): Promise<void> {
 
   // The R2 arm, and it is the one that matters: R2 is the single provider with NO remedy, so the slice
   // naming it is what stops the immutability check offering "re-create the bucket with Object-Lock
-  // enabled" about a bucket that can never have one. Measured: R2's S3 endpoint answers a
+  // enabled" about a bucket that can never have one. Measured 2026-08-25: R2's S3 endpoint answers a
   // lock-bearing PUT 501 NotImplemented.
   {
     const do_ = makeScheduler();

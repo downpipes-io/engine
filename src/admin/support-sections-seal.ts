@@ -630,7 +630,7 @@ async function gatherWormPosture(env: Env, scheduler: DurableObjectStub): Promis
   // the customer can fix, `not-implemented` means the store does not do Object-Lock at all, and `network` will
   // simply heal. `r2-binding-unsupported` is STRUCTURAL AND HAS NO REMEDY AT ALL: telling support to use the
   // S3 endpoint instead does not fix it either, and support reads this pack to
-  // diagnose a live customer. Measured, R2's S3 endpoint answers a PUT carrying
+  // diagnose a live customer. Measured 2026-08-25, R2's S3 endpoint answers a PUT carrying
   // x-amz-object-lock-mode: COMPLIANCE with 501 NotImplemented and its Object-Lock configuration GET with 404,
   // so that advice ends in a refused write on every archive rather than a working lock. No R2 destination can
   // enforce Object-Lock; moving to a store that does is the only thing that changes the reading. Sending a

@@ -1,13 +1,13 @@
 // The per-provider immutability vocabulary: what each store CALLS write-once retention, and what an
 // operator whose destination does not enforce it can actually DO about it.
 //
-// WHY THIS FILE EXISTS. Until one Amazon-shaped sentence was served to all four supported
+// WHY THIS FILE EXISTS. Until 2026-08-25 one Amazon-shaped sentence was served to all four supported
 // providers, on the destination-add refusal, the immutability posture check, the signed immutability
 // report and the support pack: "re-create the destination bucket with Object-Lock enabled". It is right
 // for Amazon S3. It is wrong for the other three, and on Cloudflare R2 it was worse than wrong, because
 // the remedy published beside it was "reach the bucket by its S3 endpoint", which R2 refuses outright.
 //
-// MEASURED against a real R2 bucket over https://<account>.r2.cloudflarestorage.com, signed
+// MEASURED 2026-08-25 against a real R2 bucket over https://<account>.r2.cloudflarestorage.com, signed
 // with this repo's own SigV4 signer:
 //
 //   GET /<bucket>/?object-lock=                 -> 404 ObjectLockConfigurationNotFoundError
@@ -80,7 +80,7 @@ export const IMMUTABILITY_STORE_NOUN: Readonly<Record<DestProvider, string>> = {
 /**
  * immutabilityRemedy is IMMUTABILITY_REMEDY made total over an UNKNOWN provider, which is a state every
  * caller has: the posture slice omits it when no destination could be resolved, and the report carries a
- * null destination kind. An unknown provider falls back to the S3 sentence, which is the pre
+ * null destination kind. An unknown provider falls back to the S3 sentence, which is the pre-2026-08-25
  * behaviour for every caller and is the widest true statement available when the store is not known.
  *
  * @param provider - the destination's provider, or null/undefined when it could not be resolved.
@@ -115,7 +115,7 @@ export function immutabilityStoreNoun(provider: DestProvider | null | undefined)
 /**
  * IMMUTABILITY_ENABLE_WHEN states WHEN each store's write-once mechanism can be turned on, which is the
  * fact an auditor reading the signed immutability report needs beside a not-in-force verdict. Amazon's
- * "only at bucket creation" was asserted on all four until, and it is right for two of them.
+ * "only at bucket creation" was asserted on all four until 2026-08-25, and it is right for two of them.
  */
 export const IMMUTABILITY_ENABLE_WHEN: Readonly<Record<DestProvider, string>> = {
   s3: "Object-Lock can only be enabled when a bucket is created.",

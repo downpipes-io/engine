@@ -60,7 +60,7 @@ const DECL_RE = /^export\s+(?:async\s+)?(function|class|interface|type|const|enu
 // FLOORS. The clean line below ("0 offenders across N exports") is the same sentence whether every
 // in-scope export carries a doc block or the scan read nothing at all, and the promotion note above
 // makes zero offenders the precondition for turning this job into a gate. So the emptiness has to be
-// impossible before that promotion can be honest. Measured over src/crypto, src/format
+// impossible before that promotion can be honest. Measured on 2026-07-29 over src/crypto, src/format
 // and src/dest: 58 files, 394 in-scope exports. The floors sit well under both, so ordinary deletion
 // does not trip them, while a renamed scope directory or a DECL_RE that stops matching does.
 const MIN_FILES = 25;

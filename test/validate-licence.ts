@@ -435,7 +435,7 @@ async function main(): Promise<void> {
   const invalidPinStatus = buildStatus({ LICENCE_TOKEN: good.token, LICENCE_SIGNER_PUBLIC: "!!!not-base64url!!!" } as unknown as Env, 0);
   ok("status: token + an invalid (but present) pin -> signerPinConfigured true (presence not validity)", invalidPinStatus.signerPinConfigured === true && invalidPinStatus.licenceSignerWarning === undefined);
 
-  // (e) LICENCE-BINDING-ON-CLAIM: status.cfAccountId, so the console can send it with a
+  // (e) LICENCE-BINDING-ON-CLAIM (2026-09-07): status.cfAccountId, so the console can send it with a
   // self-serve claim. Presence-safe: honestly omitted when CF_ACCOUNT_ID is unset or blank (the common
   // single-account deployment that never sets it), reported trimmed when it is set.
   const withAccountId = buildStatus({ CF_ACCOUNT_ID: "acct-123" } as unknown as Env, 0);
@@ -444,7 +444,7 @@ async function main(): Promise<void> {
   const blankAccountId = buildStatus({ CF_ACCOUNT_ID: "   " } as unknown as Env, 0);
   ok("status: a whitespace-only CF_ACCOUNT_ID reads as absent, not a blank string", blankAccountId.cfAccountId === undefined);
 
-  // (e-2) LICENCE-BINDING-ON-CLAIM FOLLOW-UP: the second source. No customer deployment ever
+  // (e-2) LICENCE-BINDING-ON-CLAIM FOLLOW-UP (2026-09-07): the second source. No customer deployment ever
   // writes CF_ACCOUNT_ID (not wrangler.toml, not the deploy script), so (e) above never fires for a stock
   // self-serve engine. verifiedCfAccountId is the engine's OWN proof, persisted in the scheduler DO the
   // first time an attach or an update-apply succeeds (see engine/src/sched/scheduler-do-account-config.ts
@@ -523,7 +523,7 @@ async function main(): Promise<void> {
   const acctUnknown = await verifyLicence({ LICENCE_TOKEN: acctTok.token, LICENCE_SIGNER_PUBLIC: pinnedPublic } as unknown as Env);
   ok("accountClaimMatchesEngine omitted when the engine account tag is unknown (honestly absent)", acctUnknown.valid === true && acctUnknown.accountClaimMatchesEngine === undefined);
 
-  // ---- LICENCE-BINDING-ON-CLAIM: boundAccounts membership, with the v1 fallback intact ----
+  // ---- LICENCE-BINDING-ON-CLAIM (2026-09-07): boundAccounts membership, with the v1 fallback intact ----
   // A self-serve token's `account` is a Stripe customer id, never a Cloudflare account. boundAccounts is
   // the list the engine's own account tag is actually checked against once it is present and non-empty.
   const boundTok = await mintToken(vendor, { account: "cus_stripe123", tier: "business-3", notAfter: future, features: [], boundAccounts: ["acct-a", "acct-b"] });
@@ -554,7 +554,7 @@ async function main(): Promise<void> {
   ok("boundAccounts: a non-string-array value fails the body closed (body-malformed), never ignored", malformedBoundResult.tier === "community" && malformedBoundResult.reasonCode === "body-malformed");
 
   // ---- PROOF 12: the SEVEN-TIER contract (estate-banded self-serve licensing) ----
-  // Pricing restart: business-1/-3/-10/-25 and msp are
+  // Pricing restart 2026-08-09: business-1/-3/-10/-25 and msp are
   // the known tiers, each verifying to its own granted tier exactly like enterprise always has; their band
   // + service entitlements ride as ordinary feature strings (opaque to the engine, never parsed or
   // enforced -- see docs/CONTROL-PLANE.md). The old starter/growth/business ids are DELETED, not aliased

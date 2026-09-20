@@ -183,7 +183,7 @@ export interface ImmutabilityData {
 // posture status, or "not-evaluated" when a mapped check id is not present in this report (defensive: a
 // mapping typo yields an honest not-evaluated, never a fabricated pass). note carries the owner's
 // override statement when one is recorded (e.g. "Pass (customer attested): MFA is enforced at our IdP -
-// attested by o@example.com, "), so an auditor reading the pack sees WHO graded the control,
+// attested by o@example.com, 2026-07-02"), so an auditor reading the pack sees WHO graded the control,
 // HOW and WHY, clearly labelled as the customer's determination and never a platform verification.
 export interface EvidencePackCheck {
   id: string;

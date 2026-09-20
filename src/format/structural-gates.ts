@@ -149,7 +149,7 @@ function isCanonicalVersionNumber(s: string): boolean {
  * exact failure this gate exists to prevent.
  *
  * WHY THERE IS NO BRANCH HERE FOR A MAJOR.MINOR LABEL. That was the identity scheme of a pre-release
- * lineage of this format, retired. No reader implementing it was ever published, none is
+ * lineage of this format, retired on 2026-08-08. No reader implementing it was ever published, none is
  * obtainable, and the update channel no longer offers an engine artefact that stamps one, so nothing a
  * person can install emits a two-component label. A branch softening case 2 for it would close by naming a
  * different reader build to go and fetch, and that build does not exist and will not be published: mid

@@ -75,7 +75,7 @@ export async function run(h: Harness, keys: Keys): Promise<void> {
 
   // Clock-skew at the boundary: a cert that expired 60s ago, with clockSkewSec=120 (so the +skew widen
   // covers it) -> ACCEPTED; with clockSkewSec=0 -> REJECTED. Build a cert whose notAfter is NOW - 60s. NOW is
-  // , so notAfter =.
+  // 2026-06-13T12:00:00Z, so notAfter = 2026-06-13T11:59:00Z.
   {
     const justExpired = await buildCertPem(rsaSpki, rsa.privateKey, "idp.example.com", "20260101000000Z", "20260613115900Z");
     const assertion = buildAssertion();

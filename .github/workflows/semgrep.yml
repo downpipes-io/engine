@@ -8,7 +8,7 @@
 # vacuous pass, a scan that never happened reporting exactly like a clean tree. The exit code is now
 # read and branched on deliberately.
 #
-# AND WHETHER ANYONE CAN READ THE RESULT. Measured on this repo: semgrep worked (256
+# AND WHETHER ANYONE CAN READ THE RESULT. Measured on this repo 2026-08-04: semgrep worked (256
 # rules over 533 files, 11 findings) and the SARIF landed nowhere. The upload to code scanning needs
 # GitHub Advanced Security, which is off on this private repo, so it failed with "Resource not
 # accessible by integration" on a step marked continue-on-error, the job read success, and the run's
@@ -25,7 +25,7 @@
 name: Semgrep
 
 on:
-  # No push trigger: 64 push runs in ten days of September, each about 3 billed minutes,
+  # No push trigger since 2026-09-11: 64 push runs in ten days of September, each about 3 billed minutes,
   # re-scanning main for what the pull request run and the weekly schedule already cover.
   pull_request:
     branches: [main]
@@ -78,6 +78,9 @@ jobs:
           fi
           echo "semgrep exited $rc (0 = clean, 1 = findings, both advisory here) and wrote $(wc -c < semgrep.sarif) bytes of SARIF"
       - name: Upload SARIF to code scanning (advisory; needs Advanced Security)
+        # Code scanning cannot accept an upload on a private repository (an owner decision: no GHAS
+        # there), so the step runs only where it can land. The public export runs it.
+        if: ${{ github.event.repository.private == false }}
         uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
         if: always()
         continue-on-error: true

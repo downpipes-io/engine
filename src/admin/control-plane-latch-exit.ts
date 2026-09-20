@@ -80,7 +80,7 @@ export async function manualReconcileTail(scheduler: { fetch: (u: string, i?: Re
 
 // nothingToConfirmMessage is the whole sentence for the apply-staged 409 that used to read "nothing is staged
 // for recovery; run the manual control-plane reconcile instead". That tail was PROVEN wrong live on
-// : an estate with two role rows and no staged record was answered it, and the manual reconcile
+// 2026-08-12: an estate with two role rows and no staged record was answered it, and the manual reconcile
 // refuses a non-empty role table at the sibling guard, so the engine was directing the operator at the one
 // route its own guard would not let them take.
 export async function nothingToConfirmMessage(scheduler: { fetch: (u: string, i?: RequestInit) => Promise<Response> }): Promise<string> {

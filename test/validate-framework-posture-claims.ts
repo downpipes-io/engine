@@ -1,7 +1,7 @@
 // A compliance capability may not assert unattended restore proof without naming the posture that provides it.
 //
 // WHY THIS EXISTS. `src/admin/frameworks.ts` maps regulatory controls to what this product does, and that
-// mapping is rendered into the SIGNED evidence pack a customer hands an auditor. six of those
+// mapping is rendered into the SIGNED evidence pack a customer hands an auditor. On 2026-07-28 six of those
 // capability strings offered "scheduled restore drills with a dated evidence log" as the thing satisfying a
 // recovery-testing obligation: CPS 234, Essential Eight ML1, DORA Art. 11, NIST CP-4, GDPR Art. 32 and SOC 2
 // A1.3.
@@ -88,7 +88,7 @@ ok(
 );
 
 // ---------------------------------------------------------------------------------------------------
-// SECOND RULE: a capability may not pair R2 with S3 Object Lock as one mechanism.
+// SECOND RULE (2026-08-25): a capability may not pair R2 with S3 Object Lock as one mechanism.
 //
 // R2 DOES NOT ENFORCE S3 OBJECT-LOCK ON ANY BUCKET, by any route. Measured that day against a real R2
 // bucket over its S3 endpoint with this repo's own signer: the lock-configuration GET answers 404

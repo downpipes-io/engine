@@ -9,7 +9,7 @@
 // Answering 401 for it was actively harmful. A rate limit and a session loss became indistinguishable to
 // every caller, so the console's isUnauthorised() signed the operator out on one: a throttled approvals
 // lookup ended a session in the middle of a restore. The harness hit the same thing from the other side and
-// banked rate limits as auth failures (an internal chaos-test finding,, POST /admin/roles 401 straight after minting
+// banked rate limits as auth failures (an internal chaos-test finding, 2026-07-28, POST /admin/roles 401 straight after minting
 // several personas).
 //
 // The load-bearing half of this file is the NEGATIVE: every OTHER deny must stay a bare { ok: false } with no
@@ -68,7 +68,7 @@ async function testEveryOtherDenyStaysBare(): Promise<void> {
 // only the VERDICT passes even if the router ignores the marker and still writes 401.
 //
 // This used to prove that by REGEX over router.ts, matching `status: 429` and `retry-after` inside the
-// verdict.throttled guard body. That mechanism was wrong twice over. It went red for a change
+// verdict.throttled guard body. That mechanism was wrong twice over. It went red on 2026-07-29 for a change
 // that was entirely correct (the literals moved into a shared builder so all four of the engine's 429s stop
 // drifting apart), which is a guard failing an improvement. And it could never have caught the drift that
 // change fixed, because a hand-built plaintext 429 with no content-type matches `status: 429` perfectly: the

@@ -14,7 +14,7 @@
 // fails in a way that reads like a permission problem:
 //
 //   the eleven standard fields are POSITIONAL, so an absent header is an empty LINE and not an omitted one
-// a zero Content-Length signs as EMPTY, never as "0" (the rule)
+//   a zero Content-Length signs as EMPTY, never as "0" (the 2015-02-21 rule)
 //
 // Run: node test/validate-azure-sharedkey.ts
 

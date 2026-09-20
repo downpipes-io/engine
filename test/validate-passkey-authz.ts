@@ -136,7 +136,7 @@ export async function run(): Promise<void> {
     ok("invite finish binds the INVITE email, not the client-claimed email", fin2.json.ok === true && fin2.json.email === "realtarget@example.com");
   }
 
-  // 21b. DEAD VOCABULARY: `invite-redeem-refused-already-enrolled` was a declared auth-signal
+  // 21b. DEAD VOCABULARY (2026-07-12): `invite-redeem-refused-already-enrolled` was a declared auth-signal
   // member with NO producer -- the pack promised to say "the invitee already has a passkey" and nothing could
   // ever put it there. THE TICKET: an admin invites someone who is already enrolled (they were stood up by
   // another route, or the admin simply re-invited them). The invitee completes the whole WebAuthn gesture and

@@ -601,7 +601,7 @@ async function main(): Promise<void> {
       ok("CONTROL: the exact current label is still accepted", !refuses("downpipe/0.1.0"));
       ok("CONTROL: a multi-digit patch is still accepted (downpipe/0.1.10)", !refuses("downpipe/0.1.10"));
 
-      // ---- the two-component label, retired rather than served -------------------------------
+      // ---- the two-component label, retired rather than served (2026-08-08) -------------------------------
       // It used to be refused as a FORMAT MISMATCH, on the ground that a released engine of ours wrote it
       // and the bytes were intact. That ground is gone: the 1.x lineage was retired rather than carried,
       // nothing implementing it was published, no reader for it is obtainable, and the update channel no

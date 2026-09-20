@@ -69,7 +69,7 @@ export const blankComments = (src) => {
 // raw source and with blankComments's output).
 //
 // WHY THIS EXISTS, and why it is a SEPARATE function rather than a flag on blankComments (engine-guard-
-// attack,, consolidated from three independently-written copies -- verdict-guard-
+// attack, 2026-08-03, consolidated 2026-08-03 from three independently-written copies -- verdict-guard-
 // gate.mjs, validator-reachability-gate.mjs, crossrepo-typecheck-gate.mjs -- into this one).
 //
 // verdict-guard-gate.mjs's enrolment check used to test comment-blanked text (strings intact) with a bare

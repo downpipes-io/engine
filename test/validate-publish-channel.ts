@@ -83,7 +83,7 @@ interface ReleaseFixtureOpts {
   corruptArtefact?: boolean;
   // slsa-github-generator@v2.1.0's real *.intoto.jsonl wraps the DSSE envelope inside a Sigstore
   // bundle ({mediaType, verificationMaterial, dsseEnvelope:{payload,...}}) instead of a bare
-  // envelope; this fixture shape reproduces exactly that, found live.
+  // envelope; this fixture shape reproduces exactly that, found live 2026-09-06.
   wrapInSigstoreBundle?: boolean;
 }
 
@@ -218,7 +218,7 @@ try {
 
   // V7b: the real slsa-github-generator@v2.1.0 shape wraps the DSSE envelope inside a Sigstore
   // bundle; the ceremony must ingest that exactly as it does the bare-envelope shape above. Found
-  // live (--from-release-dir refused every real release with "carries no DSSE payload"
+  // live 2026-09-06 (--from-release-dir refused every real release with "carries no DSSE payload"
   // until this shape was read too).
   const wrappedDir = writeReleaseFixture(tmp, { version: "0.0.2", component: "engine", artefactBytes: engineBytes, wrapInSigstoreBundle: true });
   const v7b = run(["--version", "0.0.2", "--key-file", keyPath, "--allow-unsequenced", "--from-release-dir", wrappedDir, "--url", "https://u.example/e.mjs", "--provenance-out-dir", provOut], { PUBLISH_CHANNEL_COSIGN: stubPass });

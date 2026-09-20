@@ -251,7 +251,7 @@ async function main(): Promise<void> {
   // ============================================================================================
   // 8b. sampleRate IS REFUSED WHEN OUT OF BOUND, NOT CLAMPED AND COERCED INTO ONE.
   //
-  // (.) The route ran
+  // (2026-08-09.) The route ran
   // Math.max(1, Math.min(100, Math.trunc(x))) with a 100 fallback for anything non-numeric, so 0 became 1, a
   // billion became 100, 50.9 became 50 and "abc" became 100 -- and the session then reported back the rate
   // the ENGINE chose as though the operator had asked for it. That rate is stamped onto the attested record

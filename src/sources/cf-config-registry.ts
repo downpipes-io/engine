@@ -51,7 +51,7 @@ function attachGenerated(surfaces: CfConfigSurface[]): CfConfigSurface[] {
 export const CF_CONFIG_SURFACES: CfConfigSurface[] = attachGenerated([
   ...CF_CONFIG_SURFACES_CORE,
   ...CF_CONFIG_SURFACES_EXPANDED,
-  // The OpenAPI-gap sweep. Appended LAST so every pre-existing surface keeps its index and
+  // The 2026-07-26 OpenAPI-gap sweep. Appended LAST so every pre-existing surface keeps its index and
   // the core/expanded ordering is untouched; only the totals move.
   ...CF_CONFIG_SURFACES_GAPS,
   // The DEPTH half of the same sweep: areas the registry touched only shallowly.

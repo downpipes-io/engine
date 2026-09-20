@@ -268,7 +268,7 @@ export function SiemPushMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
       const endpoint = typeof req.endpoint === "string" ? req.endpoint.trim() : "";
       const v = isAllowedWebhookUrl(endpoint);
       if (!v.ok) throw new Error(`push destination endpoint invalid: ${v.reason}`);
-      // Defence in depth for the router's own check (POSTCONDITION): absent/null is false, and a
+      // Defence in depth for the router's own check (POSTCONDITION-2026-08-11): absent/null is false, and a
       // present non-boolean throws rather than collapsing to false. The router refuses this before the DO is
       // reached on the live path, so this branch stands behind a replayed dual-control approval; it is here
       // because a flag that decides whether the credential rides in the URL must never be inverted silently

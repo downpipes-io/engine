@@ -100,7 +100,7 @@ async function validateAndProbeDestConfig(env: RouterCtx["env"], rawConfig: unkn
   }
   // An endpoint that is a real, well-known object store we CANNOT write to is refused here by name, and
   // its ONE member is now the ADLS Gen2 `dfs` endpoint: Azure BLOB became a supported destination on
-  // and is dispatched to its own client, so it never reaches here. The dfs endpoint was
+  // 2026-08-25 and is dispatched to its own client, so it never reaches here. The dfs endpoint was
   // already refused, because it speaks a different wire protocol and answers the probe's very first call
   // 403. What the operator then got was "check the bucket name, the endpoint and that the credentials
   // allow object read and write on that bucket", which sends them to audit a credential that was never
@@ -168,7 +168,7 @@ async function validateAndProbeDestConfig(env: RouterCtx["env"], rawConfig: unkn
   // Google Cloud Storage reaches us through its S3-interoperable XML API, so it shares every wire path
   // with s3.ts and needs no writer of its own. Azure does not: it has its own client and its own signer.
   // What they share is that neither can honour a storage class named in Amazon's vocabulary, nor an STS
-  // role. IMMUTABILITY IS NOT ON THAT LIST, and it was until: BOTH stores can honour a policy,
+  // role. IMMUTABILITY IS NOT ON THAT LIST, and it was until 2026-08-25: BOTH stores can honour a policy,
   // Google Cloud through a bucket created with per-object retention and Azure through version-level
   // immutability on the container, and both were MEASURED doing so. Whether a given bucket enforces it is
   // decided by the live probe, exactly as it is for every other store, rather than by a rule about the
@@ -176,7 +176,7 @@ async function validateAndProbeDestConfig(env: RouterCtx["env"], rawConfig: unkn
   //
   // This changes no outcome, only the sentence. Every field below already failed, loudly, before the
   // refusal existed: a storage class fails the write probe (GCS answers 400 InvalidStorageClass and the
-  // probe carries the class), measured against a real bucket. The old object-lock message
+  // probe carries the class), measured against a real bucket on 2026-08-24. The old object-lock message
   // told the operator to "create a new bucket with Object Lock enabled", which is Amazon's mechanism and
   // not Google Cloud's or Azure's, and a remedy that cannot be followed is worse than a plain refusal.
   //
@@ -193,7 +193,7 @@ async function validateAndProbeDestConfig(env: RouterCtx["env"], rawConfig: unkn
     const present: Record<string, boolean> = {
       storageClass: submitted.storageClass !== undefined,
       assumeRole: submitted.assumeRole !== undefined,
-      // addressing joins the map with AZURE_REFUSED_FIELDS's third entry. It is undefined
+      // addressing joins the map on 2026-08-26 with AZURE_REFUSED_FIELDS's third entry. It is undefined
       // unless the operator explicitly chose path or vhost, so this can never fire on a default and an
       // Azure destination saved before today is byte-identical.
       addressing: submitted.addressing !== undefined,
@@ -221,7 +221,7 @@ async function validateAndProbeDestConfig(env: RouterCtx["env"], rawConfig: unkn
   // probe would lock its own write-probe object and make deleteProbe falsely read "denied" on an ordinary
   // bucket.
   //
-  // A SUBMITTED-but-rejected policy is REFUSED here. It
+  // A SUBMITTED-but-rejected policy is REFUSED here (2026-08-09). It
   // used to be silently dropped: the destination stored, answered 200, reported itself verified, and carried
   // no immutability at all. A compliance control that is silently absent is worse than one that fails loudly,
   // and only an admin counter recorded it -- nothing the operator would ever see. An absent c.worm is not a
@@ -250,7 +250,7 @@ async function validateAndProbeDestConfig(env: RouterCtx["env"], rawConfig: unkn
   // the same function, before the same store call, and both write paths already persist the verdict.
   //
   // THE REMEDY IS BRANCHED BY PROVIDER, and it was one Amazon-shaped sentence for all four until
-  // : "create a new bucket with Object Lock enabled". Azure's mechanism is version-level
+  // 2026-08-25: "create a new bucket with Object Lock enabled". Azure's mechanism is version-level
   // immutability on the container or account, Google Cloud's is a bucket created with per-object
   // retention, and R2 has none at all by any route (see dest/worm-remedy.ts for the measurement). A
   // remedy an operator of that store cannot follow is worse than a plain refusal.

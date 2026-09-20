@@ -6,17 +6,17 @@
 //
 // Why this exists: validate-cron.ts already covers the DST spring-forward and fall-back edges of
 // nextFireAfter (the CRON firing). It does NOT cover those edges for the blackout deferral: its
-// testBlackout / testComposed cells all sit, a plain non-DST day. The window minutes are
+// testBlackout / testComposed cells all sit on 2026-06-17, a plain non-DST day. The window minutes are
 // interpreted as minutes-since-local-midnight in the schedule's IANA zone, and the deferral walks the
 // wall clock, so a DST transition is precisely where the window can silently go inert (a backup runs
 // inside a declared freeze) or over-run. This file fills that gap against schedule-window.ts directly.
 //
 // What this covers, table-driven over deferPastBlackouts / deferPastBlackoutsResolved:
-// - SPRING-FORWARD (America/New_York, ->03:00, 02:00-02:59 do NOT exist): a freeze
+//  - SPRING-FORWARD (America/New_York, 2026-03-08 02:00->03:00, 02:00-02:59 do NOT exist): a freeze
 //    01:30-03:30 that spans the missing hour must still cover the POST-gap side (03:15 local). The
 //    window must not go inert; a fire on either side of the gap defers to the window end, never fires
 //    inside the freeze;
-// - FALL-BACK (America/New_York, ->01:00, 01:00-01:59 occur TWICE): a freeze
+//  - FALL-BACK (America/New_York, 2026-11-01 02:00->01:00, 01:00-01:59 occur TWICE): a freeze
 //    01:00-02:00 must cover BOTH passes of the doubled hour and defer past both to 02:00 EST, so no
 //    fire in either occurrence is let through mid-freeze;
 //  - DAY-BOUNDARY (Australia/Sydney, UTC+11): a window evaluated in the schedule's zone whose local
@@ -61,7 +61,7 @@ type Cell = {
 // ---- Deferral across DST + the day boundary (table-driven) --------------------------------------
 function testDeferralTable(): void {
   const cells: Cell[] = [
-    // SPRING-FORWARD (EST UTC-5 -> EDT UTC-4). Freeze 01:30-03:30 local = minutes 90..210.
+    // SPRING-FORWARD 2026-03-08 (EST UTC-5 -> EDT UTC-4). Freeze 01:30-03:30 local = minutes 90..210.
     {
       name: "spring: 01:45 (PRE-gap) inside freeze defers to 03:30 local",
       tz: "America/New_York",
@@ -89,7 +89,7 @@ function testDeferralTable(): void {
       expectLocal: ["3/8/2026", "04:00:00"],
       expectClass: "ok",
     },
-    // FALL-BACK (EDT UTC-4 -> EST UTC-5). Freeze 01:00-02:00 local = minutes 60..120.
+    // FALL-BACK 2026-11-01 (EDT UTC-4 -> EST UTC-5). Freeze 01:00-02:00 local = minutes 60..120.
     {
       name: "fall-back: 01:30 FIRST occurrence (EDT) inside freeze, walks BOTH passes to 02:00 EST",
       tz: "America/New_York",

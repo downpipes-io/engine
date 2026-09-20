@@ -10,7 +10,7 @@
 // pack read as though no ceremony ever happened. That catch could never fire for the commonest form of the
 // loss, so the install handler believed it had audited.
 //
-// Found chasing a live first key install on harness-scratch that left no keys-installed row while
+// Found 2026-07-28 chasing a live first key install on harness-scratch that left no keys-installed row while
 // the SAME run wrote other audit events, so the pipeline was up and this one draft did not land.
 //
 // The check is that a real append carries a numeric seq. This file proves the DIFFERENCE that makes:

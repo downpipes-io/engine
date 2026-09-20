@@ -1,4 +1,4 @@
-// Part 3 of the Cloudflare configuration surface registry: the OPENAPI-GAP surfaces (the
+// Part 3 of the Cloudflare configuration surface registry: the OPENAPI-GAP surfaces (the 2026-07-26
 // coverage sweep). cf-config-registry.ts concatenates core + expanded + this list to form
 // CF_CONFIG_SURFACES. See cf-config-registry.ts for the full restoreTier / fail-open contract.
 //
@@ -16,7 +16,7 @@
 // is configuration, policy, access rules, routing and grants.
 //
 // EVERY SURFACE BELOW WAS PROBED LIVE before it was added, against a real Cloudflare account on
-// . The probe recorded the status, the payload shape and the item count for each endpoint, so
+// 2026-07-26. The probe recorded the status, the payload shape and the item count for each endpoint, so
 // the ones marked as read-verified returned a real 200 rather than a plausible-looking guess from the
 // schema. Six surfaces are included that returned 403 on that account: they are entitlement or
 // permission gates, not absent endpoints, and the adapter's fail-open contract turns each into a marker
