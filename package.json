@@ -351,7 +351,7 @@
   "devDependencies": {
     "@biomejs/biome": "^2.5.14",
     "@cloudflare/vitest-pool-workers": "^0.22.0",
-    "@cloudflare/workers-types": "^5.20260914.1",
+    "@cloudflare/workers-types": "^5.20260917.1",
     "@stryker-mutator/core": "^9.6.1",
     "@types/node": "^26.6.1",
     "@vitest/coverage-istanbul": "^4.1.9",
