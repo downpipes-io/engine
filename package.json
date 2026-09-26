@@ -362,7 +362,7 @@
     "typescript": "^6.0.3",
     "typescript-7": "npm:typescript@^7.0.2",
     "vitest": "^4.1.11",
-    "wrangler": "~4.134.0"
+    "wrangler": "~4.136.3"
   },
   "overrides": {
     "browserslist": "^4.28.8",
