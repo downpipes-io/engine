@@ -47,7 +47,7 @@
 // origin/main ref supports no conclusion about its currency, which is fine on a single-repo clone and is a
 // configuration fault in CI, where the ref is always there. CI sets it.
 //
-// House style: Australian English, no em dashes, no rule-of-three, no AI attribution.
+// House style: Australian English, no em dashes, no rule-of-three.
 //
 // CANONICAL COPY. This file is duplicated verbatim into each repo that needs it, because a repo cannot
 // import it from a sibling without reintroducing the dependency it exists to police. Keep the copies in

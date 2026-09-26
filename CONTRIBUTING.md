@@ -47,15 +47,6 @@ expected. Secrets plaintext lives only
 in isolate memory and is never logged, never written to an object, a manifest, Durable
 Object storage or any orchestration state.
 
-## Git hooks
-
-`npm install` (or `npm ci`) runs the `prepare` script automatically, which points
-`core.hooksPath` at the tracked `hooks/` directory. No manual step is needed on a fresh
-clone. The installed `pre-commit` and `commit-msg` hooks run
-`scripts/publishable-gate.mjs` over what you are about to commit, so a forbidden marker
-cannot be committed by accident. Run `git config core.hooksPath hooks` yourself if you
-ever need to reset it.
-
 ## What is out of scope here
 
 CI/CD and supply-chain hardening are added at the very end of the whole platform, not

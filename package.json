@@ -9,7 +9,6 @@
   "license": "Elastic-2.0",
   "description": "In-account Cloudflare Worker that backs up Workers KV, R2, Secrets Store and D1 to the downpipe/0.1.0 archive format. No custody: runs in the customer's own account, holds only public recipient keys plus the signer.",
   "scripts": {
-    "prepare": "git rev-parse --git-dir >/dev/null 2>&1 && git config core.hooksPath hooks || true",
     "deploy": "sh scripts/deploy.sh",
     "sync-bindings": "node scripts/sync-bindings.mjs",
     "validate:bindings-sync": "node test/validate-bindings-sync.ts",
