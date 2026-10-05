@@ -375,7 +375,7 @@
   "devDependencies": {
     "@biomejs/biome": "^2.5.14",
     "@cloudflare/vitest-pool-workers": "^0.22.0",
-    "@cloudflare/workers-types": "^5.20260928.1",
+    "@cloudflare/workers-types": "^5.20261002.1",
     "@stryker-mutator/core": "^10.0.0",
     "@typescript/typescript6": "^6.0.2",
     "@types/node": "^26.6.3",
