@@ -1,0 +1,8 @@
+{
+  "mode": "negative",
+  "exitCode": 2,
+  "phase": "open",
+  "labels": {
+    "signatureResult": "wrong-signer"
+  }
+}

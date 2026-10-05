@@ -1,0 +1,152 @@
+# Reproducibility check (DP-B): the standing, empirical proof behind every "deterministic build"
+# claim this repo makes. Two runner images (matrix) each build the release artefact TWICE, from
+# two different working paths (the workspace checkout and a fresh clone under RUNNER_TEMP). Each
+# leg fails when its two builds differ. Each leg then uploads its digest as a small artefact, and
+# the cross-image-compare job fails when the digests from the two images differ.
+#
+# Why an artefact and not a job output: a matrix job has one set of outputs, and each leg writes
+# to the same set. The value that survives is whichever leg wrote last, so a compare job cannot
+# read both legs from outputs. One artefact per leg, named by its runner image, keeps both.
+#
+# test/validate-repro-cross-image.ts parses this file and fails when the compare job is missing,
+# does not need the matrix job, or does not fail on a planted digest mismatch. It also fails on a
+# continue-on-error, or an if: other than success(), on either job or any of their steps.
+#
+# The claim discipline: VERIFY.md may say "rebuild it yourself and compare"
+# only while this workflow is green. If it starts failing, fix the drift or scope the docs claim
+# back; never ship the claim on hope.
+name: Reproducibility check
+
+on:
+  pull_request:
+    paths:
+      - "src/**"
+      - "scripts/build-release.mjs"
+      - "package.json"
+      - "package-lock.json"
+      - "wrangler.toml"
+      - ".github/workflows/reproducibility-check.yml"
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "scripts/build-release.mjs"
+      - "package.json"
+      - "package-lock.json"
+      - "wrangler.toml"
+      - ".github/workflows/reproducibility-check.yml"
+  schedule:
+    # Weekly re-proof: the lockfile pins the toolchain, so the residual drift source is the
+    # runner image itself; catch that between releases, not during one.
+    - cron: "30 17 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "22"
+
+jobs:
+  rebuild-and-compare:
+    name: Build twice, two paths (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-22.04]
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with: { egress-policy: audit }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with: { node-version: "${{ env.NODE_VERSION }}" }
+      - name: Build A (workspace path)
+        run: |
+          set -euo pipefail
+          npm ci
+          node scripts/build-release.mjs --allow-dirty --out "${RUNNER_TEMP}/a.mjs" > "${RUNNER_TEMP}/a.json"
+          cat "${RUNNER_TEMP}/a.json"
+      - name: Build B (fresh clone at a different path)
+        # A fresh clone plus its own npm ci: different $PWD, different node_modules inode layout,
+        # same lockfile. Anything path- or install-order-shaped in the bundle fails the compare.
+        run: |
+          set -euo pipefail
+          git clone --quiet "file://${GITHUB_WORKSPACE}" "${RUNNER_TEMP}/repro-b"
+          cd "${RUNNER_TEMP}/repro-b"
+          npm ci
+          node scripts/build-release.mjs --allow-dirty --out "${RUNNER_TEMP}/b.mjs" > "${RUNNER_TEMP}/b.json"
+          cat "${RUNNER_TEMP}/b.json"
+      - name: Compare
+        run: |
+          set -euo pipefail
+          A=$(node -p "require('${RUNNER_TEMP}/a.json').sha384")
+          B=$(node -p "require('${RUNNER_TEMP}/b.json').sha384")
+          echo "A: $A"
+          echo "B: $B"
+          if ! cmp -s "${RUNNER_TEMP}/a.mjs" "${RUNNER_TEMP}/b.mjs"; then
+            echo "::error::release build is NOT reproducible on ${{ matrix.os }}: the same commit produced different bytes from two paths. Do not publish a channel from this commit; find the drift (embedded path, timestamp, unpinned tool) first."
+            exit 1
+          fi
+          [ "$A" = "$B" ]
+          echo "reproducible on ${{ matrix.os }}: $A"
+          mkdir -p "${RUNNER_TEMP}/digest"
+          printf '%s\n' "$A" > "${RUNNER_TEMP}/digest/${{ matrix.os }}.sha384"
+      - name: Upload this image's digest
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: repro-digest-${{ matrix.os }}
+          path: ${{ runner.temp }}/digest/${{ matrix.os }}.sha384
+          if-no-files-found: error
+          retention-days: 1
+
+  cross-image-compare:
+    # Needs the matrix job, so it runs only after both legs pass. A leg that fails already fails
+    # the workflow, and this job is then skipped.
+    name: Same digest on both runner images
+    needs: [rebuild-and-compare]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      # The number of matrix legs above. The compare refuses a different count of digests, so a
+      # leg that uploaded nothing cannot pass as agreement.
+      EXPECTED_LEGS: "2"
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with: { egress-policy: audit }
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: repro-digest-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/digests
+      - name: Compare digests across runner images
+        run: |
+          set -euo pipefail
+          dir="${RUNNER_TEMP}/digests"
+          found=0
+          first=""
+          drift=0
+          for f in "$dir"/*.sha384; do
+            [ -f "$f" ] || continue
+            found=$((found + 1))
+            d=$(tr -d '[:space:]' < "$f")
+            echo "$(basename "$f" .sha384): $d"
+            if ! printf '%s' "$d" | grep -Eq '^[0-9a-f]{96}$'; then
+              echo "::error::$(basename "$f") does not hold a sha384 hex digest."
+              exit 1
+            fi
+            if [ -z "$first" ]; then first=$d; elif [ "$d" != "$first" ]; then drift=1; fi
+          done
+          if [ "$found" -ne "$EXPECTED_LEGS" ]; then
+            echo "::error::found $found runner-image digests, expected $EXPECTED_LEGS. A leg did not upload its digest."
+            exit 1
+          fi
+          if [ "$drift" -ne 0 ]; then
+            echo "::error::release build is NOT reproducible across runner images: each image agrees with itself, but the images produce different bytes. Do not publish a channel from this commit; find the runner-dependent input first."
+            exit 1
+          fi
+          echo "same digest on all $found runner images: $first"

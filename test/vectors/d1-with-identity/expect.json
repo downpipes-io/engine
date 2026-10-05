@@ -1,0 +1,11 @@
+{
+  "mode": "positive",
+  "records": [
+    {
+      "name": "prod-db",
+      "valueB64": "eyJkb3ducGlwZUQxRHVtcCI6MSwidGFibGVzIjpbeyJuYW1lIjoidXNlcnMiLCJyb3dzIjpbWzEsImFkYSJdXX1dfQ",
+      "database": "4f9a2c1e-8b3d-4e5f-9a70-1c2d3e4f5a6b",
+      "account": "acct-d1-identity"
+    }
+  ]
+}

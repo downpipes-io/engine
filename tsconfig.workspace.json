@@ -1,0 +1,30 @@
+{
+  // Type-check of the test surface WITH the sibling repos beside this one, the way a workspace checkout has
+  // them. tsconfig.test.json cannot do this job: it runs in the single-repo `quality` CI job, where
+  // ../console does not exist, so a validator that imports across the repo boundary fails there with TS2307
+  // "cannot find module". Those validators are excluded there and included here instead, and this config is
+  // run by `npm run typecheck:workspace` inside the Cross-repo gates job, which checks out the siblings.
+  //
+  // scripts/crossrepo-typecheck-gate.mjs holds the two configs to that split, in both directions: a test file
+  // that imports a sibling repo must be out of tsconfig.test.json and in this one, and nothing may be excluded
+  // from tsconfig.test.json unless it imports a sibling repo. Without that gate the exclusion is just a place
+  // to hide a type error.
+  "extends": "./tsconfig.test.json",
+  "compilerOptions": {
+    // DOM joins the base "ES2023" + "WebWorker". The console is browser code: its key ceremony reaches
+    // src/lib/client-diag/ring.ts, which touches `document`. Engine sources do not gain anything they can
+    // reach at runtime from this, because workerd has no DOM and src/ is type-checked without it by
+    // `npm run typecheck` and `npm run typecheck:test`. It is here so the CONSOLE half of a cross-repo
+    // validator type-checks in its own terms rather than being read as broken.
+    "lib": ["ES2023", "WebWorker", "DOM"]
+  },
+  // Must stay a SUPERSET of tsconfig.test.json's include, which crossrepo-typecheck-gate.mjs enforces in
+  // this direction too: a file the single-repo config type-checks and this one drops is a file the workspace
+  // job silently stops checking. scripts and tools are here because tsconfig.test.json took them in when
+  // test/, scripts/ and tools/ were brought inside the linter's world, and leaving them out dropped 12 files.
+  "include": ["src", "test", "scripts", "tools"],
+  // Only the vitest-pool-workers tree, for the reason tsconfig.test.json gives: it runs in a real workerd
+  // isolate with the "cloudflare:test" virtual module, a different type environment, and is typed by
+  // `npm run test:vitest`. Everything tsconfig.test.json excludes is deliberately BACK IN scope here.
+  "exclude": ["test/vitest"]
+}

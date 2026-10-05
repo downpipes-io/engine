@@ -1,0 +1,14 @@
+{
+  "//why": "tsconfig.json is include:[\"src\"], so until this file existed NOTHING under test/, scripts/ or tools/ was typechecked, and that is where every validator lives. Proven rather than inferred with `npx tsc --noEmit --listFiles`: 402 files under src/, 0 under test/. A type-level completeness guard placed in an unchecked directory is inert, which is why the completion guard test/lib/verdict-guard.ts is a RUNTIME assertion.",
+  "//types": "These directories run on Node, not in workerd, so they need @types/node and the DOM lib rather than the WebWorker-only shape src/ compiles against. Without that the same run reports 987 spurious TS2591 'cannot find name process' diagnostics, and that noise is how a scope hole gets reverted.",
+  "//allowJs": "allowJs brings the 40 .mjs files under scripts/, tools/ and test/ INTO the program. Without it tsc refused to read them at all, so `import { x } from '../scripts/thing.mjs'` in a .ts validator resolved to `any` and reported TS7016, and every callback parameter typed by that import fell out as an implicit any behind it. That is a scope hole of the same family as the one this file was written to close, one level down: the checker covered the .ts validators but not the .mjs modules they are built on, so the seam between them was unchecked in BOTH directions. Measured rather than assumed: allowJs alone resolves 4 of the 7 errors this config reported and introduces ZERO new ones (839 files read, 3 errors remaining, all three real). checkJs is NOT set and that is a named residual, not an oversight: turning it on reports 839 errors inside the .mjs bodies themselves (445 TS7006, 98 TS2339, 94 TS7053), which is a separate change set. What allowJs buys today is the BOUNDARY: an .mjs export used at the wrong type from a .ts file is now a type error where it used to be silently any.",
+  "//excluded": "test/vitest/** is excluded and that exclusion is a REPORTED residual, not a fix. Those two files are run by vitest with the workers pool, not as validator processes, and they carry 2 real pre-existing errors this file surfaced: test/vitest/destsim-pull-storm.test.ts(28,18) and (29,14), both TS2339 'Property SCHEDULER does not exist on type Env'. Cloudflare.Env is declared empty by @cloudflare/workers-types for the project to merge into, and no such merge exists here. Merging it from src/env.d.ts was attempted from three declaration sites and did not take, so the cause is not yet understood and is left named rather than cast away.",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM"],
+    "types": ["node", "@cloudflare/workers-types"],
+    "allowJs": true
+  },
+  "include": ["src", "test", "scripts", "tools"],
+  "exclude": ["test/vitest"]
+}

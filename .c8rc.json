@@ -1,0 +1,22 @@
+{
+  "//": "Coverage gate for the engine. The bespoke node validators under test/ (npm run validate) are the engine's real test surface; this instruments them with c8 (V8 coverage maps cleanly through Node's type-stripping). The workerd vitest-pool suite is a runtime smoke test and is not the coverage source.",
+  "//thresholds": "RATCHET. Statements, lines and functions are floored at 90, the project standard; branches sit just under the measured figure. On 2 October 2026 a full local run (545 members, Node 22, every member under plain node) measured 97.38 statements, 97.38 lines, 97.91 functions and 89.06 branches. The earlier figures (60.30 statements and 32.37 functions on 26 July, 30.99 functions on 2 October) were measured with four tsx members in the chain and are not valid: see //known-variance. After the first green coverage run on the hosted runner, raise each floor to within 1 point of the LOWER of the local and runner figures. Never lower them.",
+  "//known-variance": "CAUSE FOUND 2 October 2026. Four members of validate:chain ran as `npx tsx` (no TypeScript feature needed it: they pass with the same assertion counts under plain node, and tsx was not even a dependency, so npx fetched it outside the lock). c8 merges the raw V8 ranges of all processes by file URL and then applies a source map to the merged ranges when any process recorded one. The tsx processes recorded maps for every src/ file they loaded, so the plain-node ranges for those files were mapped to the wrong positions: each function appeared twice, once with the plain-node hits at a wrong place and once at its real place with only the tsx hits. Re-reporting the same run without the four tsx coverage files moved functions from 30.99 to 97.83. The runner and local runs disagreed (74.6 against 60.30 statements); the same mechanism is the likely cause, but it was not measured on the runner. scripts/coverage-loader-guard.mjs now refuses (exit 2) a member launched under a loader, and any coverage file that carries a source map for a repo file.",
+  "//excluded": "src/sched/scheduler-do.ts (10,034 lines) and src/admin/router.ts (3,002 lines) are carved out pending the P3 decomposition: testing them to 90 now would be obsoleted by the split. Type-only modules (env.d.ts, types.ts, *-types.ts) are carved out because they hold no executable statement, so counting them only dilutes the figure; they were 1,874 uncovered statements of pure noise.",
+  "include": ["src/**/*.ts"],
+  "exclude": [
+    "src/sched/scheduler-do.ts",
+    "src/admin/router.ts",
+    "src/env.d.ts",
+    "src/**/types.ts",
+    "src/**/*-types.ts"
+  ],
+  "all": true,
+  "reporter": ["text-summary", "json-summary"],
+  "reports-dir": "coverage/c8",
+  "check-coverage": true,
+  "lines": 90,
+  "statements": 90,
+  "functions": 90,
+  "branches": 89
+}

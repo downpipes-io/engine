@@ -1,0 +1,14 @@
+{
+  "//": "Pinned diagnostic counts for the directories that no lint chain covered before scripts/lint-scope-gate.mjs. Ratchet these DOWN; the gate refuses any increase. Re-pin only with --write-baseline after a genuine reduction.",
+  "dirs": [
+    "test",
+    "scripts",
+    "tools"
+  ],
+  "filesScanned": 787,
+  "counts": {
+    "error": 21,
+    "warning": 107,
+    "information": 1432
+  }
+}

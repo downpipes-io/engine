@@ -1,0 +1,18 @@
+{
+  "mode": "positive",
+  "records": [
+    {
+      "name": "k1",
+      "valueB64": "Zmlyc3QgcGFja2VkIHZhbHVl"
+    },
+    {
+      "name": "k2",
+      "valueB64": "c2Vjb25kIHBhY2tlZCB2YWx1ZSwgbG9uZ2Vy"
+    },
+    {
+      "name": "k3",
+      "valueB64": "dGhpcmQ"
+    }
+  ],
+  "segCount": 1
+}

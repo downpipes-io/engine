@@ -1,0 +1,3 @@
+{"downpipeId":"dp_dupindex","index":1,"prevRunId":null,"recordCount":1,"runId":"01ARZ3NDEKTSV4RRFFQ69G5FAV","status":"superseded","time":"2026-06-06T12:00:30.000Z"}
+{"downpipeId":"dp_dupindex","index":3,"prevRunId":"01ARZ3NDEKTSV4RRFFQ69G5FAV","recordCount":1,"runId":"01ARZ3NDEKTSV4RRFFQ69G5FB0","status":"active","time":"2026-06-06T12:00:30.000Z"}
+{"downpipeId":"dp_dupindex_other","index":3,"prevRunId":null,"recordCount":1,"runId":"01DUPL1CATE000000000000000","status":"active","time":"2026-06-06T12:00:31.000Z"}

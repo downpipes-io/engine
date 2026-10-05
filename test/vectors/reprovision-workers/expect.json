@@ -1,0 +1,10 @@
+{
+  "mode": "positive",
+  "records": [
+    {
+      "name": "api-worker/content",
+      "valueB64": "ZXhwb3J0IGRlZmF1bHQgeyBmZXRjaCgpIHsgcmV0dXJuIG5ldyBSZXNwb25zZSgib2siKSB9IH0",
+      "account": "acct-workers"
+    }
+  ]
+}

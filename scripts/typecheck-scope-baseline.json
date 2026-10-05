@@ -1,0 +1,4 @@
+{
+  "//": "Pinned typecheck diagnostic count for test/, scripts/ and tools/ with checkJs ON. Ratchet DOWN; the gate refuses any increase. Re-pin only with --write-baseline after a genuine reduction.",
+  "errors": 897
+}

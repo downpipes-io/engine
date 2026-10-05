@@ -1,0 +1,12 @@
+{
+  "mode": "positive",
+  "records": [
+    {
+      "name": "object-c",
+      "valueB64": "cmVjb3ZlciBtZSB3aXRob3V0IENsb3VkZmxhcmUgYW5kIHdpdGhvdXQgdGhlIHZlbmRvcg"
+    }
+  ],
+  "labels": {
+    "breakGlassVerified": true
+  }
+}

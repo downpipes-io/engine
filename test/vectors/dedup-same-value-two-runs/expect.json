@@ -1,0 +1,26 @@
+{
+  "mode": "positive",
+  "runId": "01ARZ3NDEKTSV4RRFFQ69G5FB0",
+  "records": [
+    {
+      "name": "shared",
+      "valueB64": "aWRlbnRpY2FsLW5vbi1zZWNyZXQtdmFsdWUtc2hhcmVkLWFjcm9zcy10d28tcnVucw"
+    }
+  ],
+  "segCount": 1,
+  "also": [
+    {
+      "mode": "positive",
+      "runId": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+      "records": [
+        {
+          "name": "shared",
+          "valueB64": "aWRlbnRpY2FsLW5vbi1zZWNyZXQtdmFsdWUtc2hhcmVkLWFjcm9zcy10d28tcnVucw"
+        }
+      ],
+      "options": {
+        "allowStale": true
+      }
+    }
+  ]
+}

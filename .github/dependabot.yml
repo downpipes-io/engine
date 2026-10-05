@@ -1,0 +1,34 @@
+version: 2
+# Version updates run on Saturday evening, Melbourne time, so no pull request opens on a weekday.
+updates:
+  - package-ecosystem: npm
+    directory: "/"
+    schedule: { interval: weekly, day: saturday, time: "20:00", timezone: "Australia/Melbourne" }
+    # Majors blocked upstream, each with its mechanism and a review date (release playbook,
+    # section 5). Dependabot otherwise reopens the same PR every week; the block is re-checked
+    # on the date, not on its schedule.
+    ignore:
+      # vitest 5 and its coverage provider: @cloudflare/vitest-pool-workers 0.22 peers vitest ^4.1,
+      # and this repository's tests run under that pool. Review this hold at each pool release.
+      - dependency-name: vitest
+        versions: [">=5.0.0"]
+      - dependency-name: "@vitest/coverage-istanbul"
+        versions: [">=5.0.0"]
+      # wrangler 4.141.0 and later send a Durable Object code update strategy on every deploy, deferred
+      # with a 300-second maximum delay, when the config sets none. Cloudflare's changelog says an update
+      # previously reached active Durable Objects at once. The engine deploys three Durable Objects, so a
+      # Worker on new code could call a Durable Object on old code for up to five minutes after a deploy.
+      # Held at 4.140 until that window is judged safe or wrangler.toml sets a strategy.
+      - dependency-name: wrangler
+        versions: [">=4.141.0"]
+    groups:
+      npm-security-updates:
+        applies-to: security-updates
+        patterns: ["*"]
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule: { interval: weekly, day: saturday, time: "20:00", timezone: "Australia/Melbourne" }
+    groups:
+      github-actions-security-updates:
+        applies-to: security-updates
+        patterns: ["*"]
