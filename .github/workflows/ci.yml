@@ -70,7 +70,7 @@ jobs:
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with: { node-version: "${{ env.NODE_VERSION }}" }
       - run: npm ci
       - name: tsc --noEmit
@@ -125,7 +125,7 @@ jobs:
           # pinned to the public downpipe release tag that the private source checks out, so the cross-implementation validators against the Go reader run here too
           ref: v0.3.5
           persist-credentials: false
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with: { node-version: "${{ env.NODE_VERSION }}" }
       - run: npm ci
         working-directory: engine
@@ -286,7 +286,7 @@ jobs:
           # pinned to the public downpipe release tag that the private source checks out, so the cross-implementation validators against the Go reader run here too
           ref: v0.3.5
           persist-credentials: false
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with: { node-version: "${{ env.NODE_VERSION }}" }
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with: { go-version-file: downpipe/go.mod, cache: false }
@@ -314,7 +314,7 @@ jobs:
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with: { node-version: "${{ env.NODE_VERSION }}" }
       - run: npm ci
       - name: wrangler bundle (dry-run, no upload)
@@ -352,7 +352,7 @@ jobs:
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with: { node-version: "${{ env.NODE_VERSION }}" }
       - run: npm ci
       - name: Two consecutive stamps against one checkout must be byte-identical (npm run validate:stamp-idempotency)
@@ -372,7 +372,7 @@ jobs:
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with: { node-version: "${{ env.NODE_VERSION }}" }
       - run: npm ci
       # The simplest possible statement of the production rule, kept as its own step. The gate below is a
@@ -540,7 +540,7 @@ jobs:
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with: { node-version: "${{ env.NODE_VERSION }}" }
       - run: npm ci
       - name: biome lint (0 errors / 0 warnings / 0 infos required)
@@ -637,7 +637,7 @@ jobs:
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with: { node-version: "${{ env.NODE_VERSION }}" }
       - run: npm ci
       - name: SchedulerDO concurrency invariants and the first drives in real workerd
@@ -664,7 +664,7 @@ jobs:
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with: { node-version: "${{ env.NODE_VERSION }}" }
       - run: npm ci
       - name: Alert keepalive and denied-apply audit drives in real workerd
@@ -691,7 +691,7 @@ jobs:
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with: { node-version: "${{ env.NODE_VERSION }}" }
       - run: npm ci
       - name: Worker fetch entrypoint in real workerd (vitest-pool-workers)
@@ -710,7 +710,7 @@ jobs:
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with: { node-version: "${{ env.NODE_VERSION }}" }
       - run: npm ci
       - name: crypto/format property vectors
@@ -750,7 +750,7 @@ jobs:
           # pinned to the public downpipe release tag that the private source checks out, so the cross-implementation validators against the Go reader run here too
           ref: v0.3.5
           persist-credentials: false
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with: { node-version: "${{ env.NODE_VERSION }}" }
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with: { go-version: "1.26.5" }
@@ -775,7 +775,7 @@ jobs:
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with: { node-version: "${{ env.NODE_VERSION }}" }
       - run: npm ci
       - name: Type-check the test surface (tsconfig.test.json includes test/, src-only typecheck does not)
@@ -836,7 +836,7 @@ jobs:
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with: { node-version: "${{ env.NODE_VERSION }}" }
       - run: npm ci
       - name: TSDoc on public exports in src/crypto, src/format, src/dest
