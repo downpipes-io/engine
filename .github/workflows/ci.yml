@@ -66,7 +66,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
@@ -109,7 +109,7 @@ jobs:
     timeout-minutes: 90
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
         with: { egress-policy: audit }
       # Both repos are checked out into named subdirectories of GITHUB_WORKSPACE, matching the
       # e2e-writer-reader job further down this file. The Go reader used to use `path: ../downpipe`,
@@ -272,7 +272,7 @@ jobs:
     timeout-minutes: 90
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { path: engine, persist-credentials: false }
@@ -310,7 +310,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
@@ -348,7 +348,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
@@ -368,7 +368,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
@@ -536,7 +536,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
@@ -552,7 +552,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false, fetch-depth: 0 }
@@ -604,7 +604,7 @@ jobs:
     if: github.event_name == 'pull_request' && github.event.repository.private == false
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
@@ -633,7 +633,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
@@ -660,7 +660,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
@@ -687,7 +687,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
@@ -706,7 +706,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
@@ -733,7 +733,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
         with: { egress-policy: audit }
       - name: Checkout engine
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -771,7 +771,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
@@ -832,7 +832,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
