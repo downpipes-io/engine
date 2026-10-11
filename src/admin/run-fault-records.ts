@@ -25,7 +25,8 @@
 // documented allow-list, header, request id, endpoint, bucket, object key or customer value can pass.
 
 import type { DestClassifierArm, DestFault } from "../dest/classify.ts";
-import { DEST_ANOMALIES, DEST_FAULT_SHAPES, DEST_OPS, S3_ERROR_CODES, type StrandedAborts, sanitiseStrandedAborts } from "../dest/fault-log.ts";
+import { DEST_ANOMALIES, DEST_FAULT_SHAPES, DEST_KEY_CLASS_SET, DEST_OPS, S3_ERROR_CODES, type StrandedAborts, sanitiseStrandedAborts } from "../dest/fault-log.ts";
+import { destinationIdOf } from "../sched/destinations.ts";
 import { MARKER_ATTRIBUTION_MAX_PER_KIND, MARKER_KEYS } from "../seal/marker.ts";
 import {
   CF_SELECTOR_MODES,
@@ -176,12 +177,17 @@ export interface DestFaultRow {
   arm: string;
   requestIdPresent: boolean;
   wormChecksumComplaint: boolean;
+  /** The closed class of object a refused native R2 write was aimed at (never the key). */
+  keyClass?: string;
   count: number;
 }
 
 /** One downpipe's most recent destination fault + degradation snapshot. */
 export interface DestFaultsEntry {
   at: number;
+  /** WHICH destination the faulting run was writing to (the customer's own opaque destination id, as in
+   * runs[].destinationId). Absent when the run had no resolved id (an env-only estate). */
+  destinationId?: string;
   total?: number;
   overflow?: number;
   faults?: DestFaultRow[];
@@ -401,9 +407,10 @@ export function sanitiseSourceFaults(raw: unknown, now: number): SourceFaultsEnt
  * @param faults - the posted DestFaultSnapshot (untrusted).
  * @param io - the posted DestIoSnapshot (untrusted).
  * @param now - epoch ms to stamp.
+ * @param destinationId - the destination the run wrote to (untrusted; shape-gated).
  * @returns the bounded entry, or null when the destination behaved cleanly.
  */
-export function sanitiseDestFaults(faults: unknown, io: unknown, now: number): DestFaultsEntry | null {
+export function sanitiseDestFaults(faults: unknown, io: unknown, now: number, destinationId?: unknown): DestFaultsEntry | null {
   const entry: DestFaultsEntry = { at: clampCount(now, Number.MAX_SAFE_INTEGER) };
 
   const f = (typeof faults === "object" && faults !== null ? faults : {}) as { total?: unknown; overflow?: unknown; faults?: unknown };
@@ -422,6 +429,7 @@ export function sanitiseDestFaults(faults: unknown, io: unknown, now: number): D
     // Every closed field must be a member. A drifted row is dropped whole rather than half-carried: a fault
     // named by its op but not its cause sends support to the wrong subsystem.
     if (op === undefined || s3Code === undefined || fault === undefined || arm === undefined) continue;
+    const keyClass = gated(rr.keyClass, DEST_KEY_CLASS_SET);
     rows.push({
       op,
       httpStatus: clampCount(rr.httpStatus, 999),
@@ -430,6 +438,7 @@ export function sanitiseDestFaults(faults: unknown, io: unknown, now: number): D
       arm,
       requestIdPresent: rr.requestIdPresent === true,
       wormChecksumComplaint: rr.wormChecksumComplaint === true,
+      ...(keyClass !== undefined ? { keyClass } : {}),
       count: Math.max(1, clampCount(rr.count)),
     });
   }
@@ -468,7 +477,12 @@ export function sanitiseDestFaults(faults: unknown, io: unknown, now: number): D
   if (minRate > 0) ioOut.minEffectiveRatePerSec = minRate;
   if (Object.keys(ioOut).length > 0) entry.io = ioOut;
 
-  return Object.keys(entry).length > 1 ? entry : null;
+  // The destination id rides only on an entry that already carries evidence (it never creates one), and only
+  // in the shape of a destination id, so a URL or a bucket name cannot ride.
+  if (Object.keys(entry).length <= 1) return null;
+  const destId = destinationIdOf(destinationId);
+  if (destId !== undefined) entry.destinationId = destId;
+  return entry;
 }
 
 // capAggregate keeps an aggregate to the RUN_FAULT_DOWNPIPES_MAX most-recently-stamped downpipes, so a large
@@ -512,9 +526,9 @@ export function applySourceFaults(prior: SourceFaults | undefined, downpipeId: s
  * @param now - epoch ms.
  * @returns the new aggregate.
  */
-export function applyDestFaults(prior: DestFaults | undefined, downpipeId: string, faults: unknown, io: unknown, now: number): DestFaults {
+export function applyDestFaults(prior: DestFaults | undefined, downpipeId: string, faults: unknown, io: unknown, now: number, destinationId?: unknown): DestFaults {
   const agg: DestFaults = { ...(prior ?? {}) };
-  const entry = sanitiseDestFaults(faults, io, now);
+  const entry = sanitiseDestFaults(faults, io, now, destinationId);
   if (entry === null) return capAggregate(agg);
   agg[downpipeId] = entry;
   return capAggregate(agg);

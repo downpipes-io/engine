@@ -72,9 +72,9 @@ export const SESSION_SLIDE_MS = 15 * 60 * 1000;
 
 // STEPUP_FRESH_MS: a PASSKEY session authenticated within this window satisfies a
 // step-up (re-authentication) requirement for a sensitive action WITHOUT a separate fresh-factor proof - it
-// just authenticated with a UV WebAuthn assertion. This covers a just-logged-in passkey session AND a
-// recovery-code sign-in (the break-glass operator's recent factor, minted as method "passkey", so they are
-// never locked out of a sensitive action). An OIDC or SAML session does NOT get this exemption:
+// just authenticated with a UV WebAuthn assertion. A session a recovery code minted does NOT get this
+// exemption (the code is one factor spent to get in, so it presents a fresh passkey assertion first), and
+// neither does an OIDC or SAML session:
 // the engine cannot verify the factor the IdP used and iat is the engine's callback instant, not the IdP's
 // auth_time, so it is treated as single-factor and must present a passkey assertion; the one exception is
 // enrolling its first passkey (stepUpCheck's "enrol-passkey" purpose). An OLDER passkey session must present
@@ -138,7 +138,7 @@ export interface SessionPayloadV3 {
   email: string; // the verified, canonical email (display/audit; the pending-invite bind keys on it on first auth); "" for a token session, which has none
   subject: string; // the STABLE principal the role table keys on (passkeySubject/oidcSubject/samlSubject)
   connId?: string; // the IdP-connection id for oidc/saml (the idpEpoch axis + the honest provider); absent for passkey
-  tfp?: string; // the adminTokenFingerprint of the ADMIN_TOKEN a token session was exchanged from; token sessions only
+  tfp?: string; rec?: true; // tfp: the adminTokenFingerprint a token session was exchanged from (token sessions only); rec: set only on a session a recovery code minted
   epoch: number; // the per-email session epoch AT ISSUE (the DO also checks the per-subject and per-connection axes)
   sid?: string; // the per-session id; absent only on a token minted before ids existed, which then cannot be ended singly
   iat: number; // issued-at, epoch ms
@@ -171,8 +171,8 @@ export interface VerifiedSession {
   lastSeen: number;
   // sid is the per-session id, or null for a token minted before ids existed (V2, or an early V3).
   sid: string | null;
-  // tokenFp is the adminTokenFingerprint a token session carries; null for every other method.
-  tokenFp: string | null;
+  // tokenFp is the adminTokenFingerprint a token session carries (null otherwise); recovered is true for a session a recovery code minted, kept across every slide.
+  tokenFp: string | null; recovered: boolean;
 }
 
 // SESSION_EMAIL_MAX bounds the email length inside a token body so a malformed or oversized value cannot
@@ -217,7 +217,7 @@ export interface SessionMintInput {
   subject: string; // the stable principal the caller computed
   connId?: string; // present for oidc/saml
   tokenFp?: string; // present for a token session: the adminTokenFingerprint of the exchanged ADMIN_TOKEN
-  epoch: number;
+  epoch: number; recovered?: boolean; // recovered: true when a recovery code minted the session; carried through every slide
   exp?: number; // optional IdP session upper bound (epoch ms)
   // slide: when present this is a SLIDE re-mint of an existing session (not a fresh login). signSession uses
   // the supplied iat and exp VERBATIM - preserving the original issue time and absolute cap - and only moves
@@ -259,7 +259,7 @@ export async function signSession(rawKey: Uint8Array, input: SessionMintInput, n
     email: input.email,
     subject: input.subject,
     ...(input.connId !== undefined ? { connId: input.connId } : {}),
-    ...(input.tokenFp !== undefined ? { tfp: input.tokenFp } : {}),
+    ...(input.tokenFp !== undefined ? { tfp: input.tokenFp } : {}), ...(input.recovered === true ? { rec: true as const } : {}),
     epoch: input.epoch,
     sid: input.slide?.sid ?? input.sid ?? mintSessionId(),
     iat,
@@ -408,7 +408,7 @@ interface SessionCommonFields {
 // upgrade is how a legacy cookie GAINS the idle bound it never had. What bounds a V2 token until then is its
 // absolute exp alone.
 function verifyV2Body(c: SessionCommonFields): VerifiedSession {
-  return { email: c.email, subject: passkeySubject(c.email), method: "passkey", connId: null, epoch: c.epoch, iat: c.iat, exp: c.exp, lastSeen: c.iat, sid: null, tokenFp: null };
+  return { email: c.email, subject: passkeySubject(c.email), method: "passkey", connId: null, epoch: c.epoch, iat: c.iat, exp: c.exp, lastSeen: c.iat, sid: null, tokenFp: null, recovered: false };
 }
 
 // verifyV3Body resolves a V3 token, which carries the SIGNED method + subject (+ optional connId). The subject
@@ -451,7 +451,7 @@ function verifyV3Body(p: Record<string, unknown>, c: SessionCommonFields, now: n
   // An oidc/saml session MUST carry a connId (the connection it was minted through, the idpEpoch axis);
   // a passkey V3 session MUST NOT (it has no connection). Either inconsistency is a malformed token.
   if ((method === "oidc" || method === "saml") && connId === null) return { fault: "session-fault-shape-invalid" };
-  if (method === "passkey" && connId !== null) return { fault: "session-fault-shape-invalid" };
+  if (method === "passkey" && connId !== null) return { fault: "session-fault-shape-invalid" }; if (p.rec !== undefined && (p.rec !== true || method !== "passkey")) return { fault: "session-fault-shape-invalid" };
   // lastSeen (idle timeout): a V3 token MUST carry a finite lastSeen. A missing/non-finite
   // value fails CLOSED - it can only be a pre-idle-upgrade token (the body is MAC-signed and cannot be
   // forged), so this is a one-time re-auth on the upgrade deploy, like a key rotation. Reject a session
@@ -470,7 +470,7 @@ function verifyV3Body(p: Record<string, unknown>, c: SessionCommonFields, now: n
     if (typeof sidRaw !== "string" || !/^[A-Za-z0-9_-]{22}$/.test(sidRaw)) return { fault: "session-fault-shape-invalid" };
     sid = sidRaw;
   }
-  return { email: c.email, subject, method, connId, epoch: c.epoch, iat: c.iat, exp: c.exp, lastSeen, sid, tokenFp };
+  return { email: c.email, subject, method, connId, epoch: c.epoch, iat: c.iat, exp: c.exp, lastSeen, sid, tokenFp, recovered: p.rec === true };
 }
 
 // slideDue reports whether an authenticated request should re-mint the session to refresh lastSeen: true when

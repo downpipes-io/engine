@@ -169,7 +169,7 @@ export async function run(): Promise<void> {
     // the flush delivers nothing and posts NO /notify/digest-sent and fetches NO /notify/channel.
     ok("cron: /notify/digest-due ran once after the restore-test pass (section 2)", paths.filter((p) => p === "/notify/digest-due").length === 1);
     ok("cron: no digest delivery round-trip when nothing is due (no /notify/digest-sent, no /notify/channel)", !paths.includes("/notify/digest-sent") && !paths.includes("/notify/channel"));
-    // ASVS V14.2.7 (retention prune) + 3-2-1 replication: TWO passes read the downpipe list once each —
+    // Retention prune + 3-2-1 replication: TWO passes read the downpipe list once each —
     // the retention prune (to find retention-configured downpipes) and the replication pass (to find
     // fan-out downpipes). The test downpipe has neither retention nor replicas, so BOTH return after
     // their read with NO planner/apply or replication round-trip (no /runlog-lock/*, no /audit), no deletion.
@@ -190,7 +190,7 @@ export async function run(): Promise<void> {
       // scheduled security-centre evaluation: the cheap per-tick due check (the full posture compute +
       // WORM probe only runs when the 6-hour interval has lapsed; see src/cron/posture-pass.ts).
       "/posture/evaluation-due", "/posture",
-      // run-history retention purge pass (ASVS V14.1.2): the per-tick age-based purge of the run-history
+      // run-history retention purge pass: the per-tick age-based purge of the run-history
       // ring past RUN_HISTORY_MAX_AGE_DAYS (src/cron/history-retention-pass.ts).
       "/history-retention-pass",
       // per-tick OUTCOME record (scheduler-liveness new-logging): the end-of-invocation false-green detector.

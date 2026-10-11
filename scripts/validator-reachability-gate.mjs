@@ -33,7 +33,6 @@ const ENFORCE = process.argv.includes("--enforce");
 const EXEMPT = new Map([
   ["validate-ramp-settle-console-client.ts", "reachable only via validate:workspace, which runs only in CI jobs that check out a sibling repository"],
   ["validate-posture-and-docs-parity.ts", "reads a sibling repository, so it is not part of validate:chain here"],
-  ["validate-logging-inventory.ts", "reads a sibling repository, so it is not part of validate:chain here"],
   ["validate-docs-session-parity.ts", "reads a sibling repository, so it is not part of validate:chain here"],
   ["validate-console-route-parity.ts", "reads a sibling repository, so it is not part of validate:chain here"],
   ["validate-console-keygen-roundtrip.ts", "reachable only via validate:workspace, which runs only in CI jobs that check out a sibling repository"],

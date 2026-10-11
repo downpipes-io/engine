@@ -294,6 +294,10 @@ export interface CompleteRunReq {
   // only ever lit for a fan-out replica via the replicate pass). It never advances holdsIndex (a down
   // destination proves nothing held), so a stale or duplicated failure can never rewind a proven copy.
   downDestinationIds?: string[];
+  // The destination a FAILED run was writing to (or, before one resolved, the pinned or default id), and the
+  // closed basis for it. Recorded on the failed row as failedDestinationId / failedDestinationBasis.
+  attemptedDestinationId?: string;
+  attemptedDestinationBasis?: string;
   // The verify-at-seal verdict the seal driver computed by reading the just-written
   // archive back and verifying it. Recorded on the successful history row and folded into the
   // per-downpipe lastSealVerify the posture seal-verification check reads. Optional: an older driver

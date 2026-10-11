@@ -120,15 +120,15 @@ export function azureAccountFromHost(hostOrUrl: string | undefined): string {
   return h.split(".")[0] ?? "";
 }
 
-/** bareHost strips a scheme and any path from a value that may be a full URL or already a bare host, and
- * lower-cases it. Every matcher here reads its output, so a caller passing "https://host/" and a caller
+/** bareHost strips a scheme, everything from the first "/", "?" or "#", and any userinfo, from a value that may be
+ * a full URL or already a bare host, and lower-cases it. Every matcher here reads its output, so a caller passing "https://host/" and a caller
  * passing "host" cannot get different answers. */
 function bareHost(hostOrUrl: string | undefined): string {
   if (typeof hostOrUrl !== "string") return "";
   return hostOrUrl
     .trim()
     .replace(/^https?:\/\//i, "")
-    .replace(/\/.*$/, "")
+    .replace(/[/?#].*$/, "").replace(/^.*@/, "")
     .replace(/:\d+$/, "")
     .toLowerCase();
 }

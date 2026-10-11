@@ -50,7 +50,6 @@
 // source typechecks + tests run with no build step); this step OVERWRITES it with the real digest at
 // build, like wrangler.deploy.toml. Commit it only in placeholder form.
 //
-//
 
 import { readFileSync, writeFileSync, mkdtempSync, rmSync, existsSync, readdirSync, realpathSync } from "node:fs";
 import { execFileSync } from "node:child_process";

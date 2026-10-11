@@ -102,7 +102,6 @@
 // outranks a pass. An uncaught throw exiting 1 would read as "finding found", and a stack trace read as a
 // finding has already cost this project a pass, so every failure path here ends at 2.
 //
-//
 
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";

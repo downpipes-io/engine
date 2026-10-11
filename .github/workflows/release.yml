@@ -70,6 +70,14 @@ jobs:
           fi
           git -c gpg.ssh.allowedSignersFile="${RUNNER_TEMP}/allowed_signers" verify-tag "$TAG"
           echo "tag $TAG verified against the main-branch signer roster"
+      - name: Tag commit must be on main
+        # The script is read from origin/main, never the tag's own tree, for the same reason as the
+        # roster above. It refuses a signed tag whose commit is not an ancestor of origin/main (for
+        # example a pull request head), so only a commit that reached main can build a release.
+        run: |
+          set -euo pipefail
+          git show origin/main:scripts/verify-tag-on-main.sh > "${RUNNER_TEMP}/verify-tag-on-main.sh"
+          bash "${RUNNER_TEMP}/verify-tag-on-main.sh" "${GITHUB_REF_NAME}"
       - name: Tag must equal the package version
         run: |
           set -euo pipefail

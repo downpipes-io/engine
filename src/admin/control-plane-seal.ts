@@ -16,7 +16,7 @@ import type { HybridRecipientPrivate } from "../crypto/kem.ts";
 import { sha384 } from "../crypto/primitives.ts";
 import { type HybridVerifier, type HybridVerifyVerdict, hybridSign, hybridVerify, hybridVerifyDetailed } from "../crypto/sign.ts";
 import { openStream, sealStream } from "../crypto/stream.ts";
-import { canonicalJSON } from "../format/canonjson.ts";
+import { canonicalJSON, NotCanonicalisableError } from "../format/canonjson.ts";
 import type { RecipientEntry, Signer } from "../format/writer-root.ts";
 import { assertNoPlaintextSecretInExport, type ControlPlaneExport, isControlPlaneExport, serialiseControlPlaneExport, signControlPlaneExport } from "./control-plane.ts";
 
@@ -102,6 +102,19 @@ export function serialiseSealedControlPlaneExport(s: SealedControlPlaneExport): 
   return canonicalJSON(s);
 }
 
+// sealedControlPlaneExportBytesOrNull is serialiseSealedControlPlaneExport for an UNTRUSTED parsed sealed
+// artefact: null where it has no canonical form (a non-integer configVersion, a lone surrogate), instead of a
+// throw. Such an artefact can never be one the signer signed.
+export function sealedControlPlaneExportBytesOrNull(s: SealedControlPlaneExport): Uint8Array | null {
+  try {
+    return serialiseSealedControlPlaneExport(s);
+  } catch (e) {
+    // site-fault-waiver: src/admin/control-plane-seal.ts:sealedControlPlaneExportBytesOrNull:catch:1 -- an artefact with no canonical form was never signed, and every caller records the altered-artefact refusal for the null
+    if (e instanceof NotCanonicalisableError) return null;
+    throw e;
+  }
+}
+
 // sealControlPlaneExport encrypts the plaintext export body to the given recipients and returns the sealed
 // artefact (WITHOUT the signature; the caller signs serialiseSealedControlPlaneExport(result)). A fresh random
 // 32-byte content key seals the body (one AES-GCM stream) and is itself sealed to each recipient. Defence in
@@ -157,6 +170,12 @@ export async function openSealedControlPlaneExport(
   sealed: SealedControlPlaneExport,
   priv: HybridRecipientPrivate,
 ): Promise<ControlPlaneExport> {
+  for (const w of sealed.capsule as unknown[]) {
+    const m = w as Record<string, unknown> | null;
+    if (typeof m !== "object" || m === null || typeof m.fingerprint !== "string" || typeof m.kemCiphertext !== "string" || typeof m.sealed !== "string") {
+      throw new Error("the sealed control-plane export has a malformed capsule member");
+    }
+  }
   const wraps: CapsuleWrap[] = sealed.capsule.map((w) => ({ fingerprint: w.fingerprint, kemCiphertext: b64urlDecode(w.kemCiphertext), sealed: b64urlDecode(w.sealed) }));
   const contentKey = await openCapsule(wraps, priv, EXPORT_CAPSULE_AAD);
   try {
@@ -205,7 +224,9 @@ export async function verifySealedControlPlaneSignatureDetailed(sealed: SealedCo
   } catch {
     return "sig-decode";
   }
-  return await hybridVerifyDetailed(verifier, serialiseSealedControlPlaneExport(sealed), bytes);
+  const canonical = sealedControlPlaneExportBytesOrNull(sealed);
+  if (canonical === null) return "ed25519-mismatch"; // never signed: an altered artefact, not a throw
+  return await hybridVerifyDetailed(verifier, canonical, bytes);
 }
 
 // ControlPlaneArtefact is the recovery artefact the cron writes for one export generation: the object body,

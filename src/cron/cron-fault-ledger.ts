@@ -1068,7 +1068,7 @@ export function applyCronHealth(prior: CronHealth | undefined, delta: unknown, n
   }
 
   // ---- the tick ring's HOLES ---------------------------------------------------------------------------
-  // The gap is derived from the DO's OWN clock against the previous recorded tick, never from a number the
+  // The gap is derived from the DO's OWN clock against the prior recorded tick, never from a number the
   // Worker sends: a wedged or hostile edge clock cannot fabricate (or conceal) a gap.
   const priorAt = base.tick.lastAt !== undefined ? Date.parse(base.tick.lastAt) : Number.NaN;
   const intervalMs = Number.isFinite(priorAt) ? Math.max(0, now - priorAt) : undefined;

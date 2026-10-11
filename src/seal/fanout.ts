@@ -313,7 +313,7 @@ export function zeroFanoutCounts(): CheckpointCounts {
   return zeroCounts();
 }
 
-// chunkLines splits a renumbered-line buffer into batches of at most `max` lines, so the coordinator can
+// chunkLines splits a reassigned-id line buffer into batches of at most `max` lines, so the coordinator can
 // persist the carried merge buffer as wrapped DO batches each under the ~128 KiB value cap (the buffer is
 // < shardMax lines, ~1.5 MB at the 5000 default, so it spans several batches).
 export function chunkLines(lines: Record<string, unknown>[], max: number): Record<string, unknown>[][] {
@@ -324,7 +324,7 @@ export function chunkLines(lines: Record<string, unknown>[], max: number): Recor
 
 // MergeState is the coordinator's sliced-merge checkpoint (the task's "checkpointed across merge slices"):
 // the FULL global-ordered scratch shard list, the read cursor into it, the next serial record/shard ids,
-// the serialised global Merkle frontier, and the FINAL shards sealed so far. The carried (renumbered, not
+// the serialised global Merkle frontier, and the FINAL shards sealed so far. The carried (reassigned-id, not
 // yet sealed) line buffer is NOT here -- like runSlice's openWrite, mergeStep returns it for the storage
 // owner to persist (the DO as wrapped batches, a validator in memory), so this state object stays bounded.
 export interface MergeState {
@@ -349,7 +349,7 @@ export function newMergeState(scratchShards: ShardEntry[], expectedRecordTotal?:
   return { scratchShards: [...scratchShards].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)), nextScratch: 0, globalRecordIndex: 0, finalShardIndex: 0, frontier: { count: 0, nodes: [] }, finalShards: [], ...(expectedRecordTotal !== undefined ? { expectedRecordTotal } : {}) };
 }
 
-// MergeStepResult mirrors SliceResult: the advanced state, the carried (not-yet-sealed) renumbered line
+// MergeStepResult mirrors SliceResult: the advanced state, the carried (not-yet-sealed) reassigned-id line
 // buffer for the owner to persist, and done. When done is true the final open shard is flushed and the
 // single signed root + bundle + RUNLOG are written; recordCount is the global record total the root declares.
 export interface MergeStepResult {
@@ -363,7 +363,7 @@ export interface MergeStepResult {
 // recomputes its Merkle-leaf recordHash from the line's OWN fields. It needs no key: keyNameHash (the
 // master-derived name MAC) is already in the line, and the leaf binds only (recordId, plaintextSha384,
 // keyNameHash, plaintextSize). Because every OTHER field (name, keyNameHash, sizes, segments, descriptors)
-// is value-/master-derived and unchanged, the renumbered line re-canonicalises BYTE-IDENTICALLY to the line
+// is value-/master-derived and unchanged, the reassigned-id line re-canonicalises BYTE-IDENTICALLY to the line
 // a serial seal would build for the same record at the same global position. Returns the new line + the
 // 48-byte leaf hash (folded into the global frontier).
 export async function renumberLine(line: Record<string, unknown>, globalRecordId: string): Promise<{ line: Record<string, unknown>; recordHash: Uint8Array }> {
@@ -435,7 +435,7 @@ export async function sealRangeOpenShard(deps: SliceDeps, cp: RunCheckpoint, mas
 
 // mergeStep advances the coordinator's sliced merge by one budget's worth of scratch shards. It reads each
 // scratch shard in global order, RENUMBERS its records to the serial global id, folds their leaf hashes into
-// the global frontier, and RE-GROUPS the renumbered lines into shardMax FINAL shards (the byte-identical
+// the global frontier, and RE-GROUPS the reassigned-id lines into shardMax FINAL shards (the byte-identical
 // serial grouping). It returns the advanced state + the carried (not-yet-sealed) line buffer (the owner
 // persists it, exactly as runSlice returns openWrite) + done. When all scratch is consumed it flushes the
 // final open shard, then builds and writes the SINGLE signed root + recovery bundle + RUNLOG entry -- the
@@ -490,7 +490,7 @@ export async function mergeStep(deps: SliceDeps, cp: RunCheckpoint, master: Uint
       await frontier.append(recordHash);
       globalRecordIndex++;
       // Re-group into the global shardMax grouping the serial path produces (NOT the per-range scratch
-      // grouping): flush a FINAL shard the instant shardMax renumbered lines have accumulated.
+      // grouping): flush a FINAL shard the instant shardMax reassigned-id lines have accumulated.
       if (buffer.length >= shardMax) await sealFromBuffer();
     }
     nextScratch++;
@@ -575,7 +575,7 @@ export async function mergeStep(deps: SliceDeps, cp: RunCheckpoint, master: Uint
     deps.signer,
     { index: cp.runlogIndex, runId: cp.runId, downpipeId: cp.downpipeId, time: nowIso(), recordCount: cp.counts.records, prevRunId: localPrev, status: "active" },
     lock,
-    { relinkLocalPrev: true },
+    { relinkLocalPrev: true, budget: deps.budget },
   );
 
   return { state: { ...advanced, finalShards, frontier: frontier.serialise() }, carriedLines: [], done: true, recordCount: globalRecordIndex };

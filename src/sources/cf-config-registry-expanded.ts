@@ -5,6 +5,7 @@
 
 import { writeSingleObject, writeSingleSetting } from "./cf-config-write-settings.ts";
 import { list, listCapped, listEnvelope, one, oneTolerating, paginate, type CfConfigSurface } from "./cf-config-core.ts";
+import { isPlainObject } from "./cf-config-shared.ts";
 // Support-pack fault evidence. These surfaces are the registry's only NESTED reads: a per-item expand (one
 // queue's consumers, one waiting room's rules) and a per-SUB-PART read (one bucket's lifecycle/lock/CORS).
 // Both classes of failure are invisible remotely: a sub-part that fails archives as `null`, byte-identical
@@ -406,11 +407,18 @@ export const CF_CONFIG_SURFACES_EXPANDED: CfConfigSurface[] = [
     id: "r2-bucket-config",
     scope: "account",
     restoreTier: "idempotent",
+    capturedNotRestorable:
+      "per-bucket R2 settings (CORS, lifecycle, bucket lock, custom domains, public r2.dev access, Sippy, event notifications) are captured, not restorable: the engine does not write bucket settings back. Re-apply each bucket's settings from the verified snapshot with the R2 API or dashboard",
     // R2 BUCKET-LEVEL config (NOT the objects, which the r2 data adapter captures): lifecycle, bucket
-    // lock / WORM retention posture, CORS, custom domains, Sippy, and event-notification rules, per bucket.
-    // Per-sub-call fail-open so one bucket's missing setting never voids the whole surface.
+    // lock / WORM retention posture, CORS, custom domains, public r2.dev access (the managed domain), Sippy,
+    // and event-notification rules, per bucket. Per-sub-call fail-open so one bucket's missing setting never
+    // voids the whole surface. Captured, not restorable: the surface has no write(), and capturedNotRestorable
+    // is the out-of-band reason the restore plan gives.
     read: async (api, ids, meter) => {
-      const buckets = (await paginate(api, `/accounts/${ids.accountId}/r2/buckets`, meter)) as Array<{ name?: string; id?: string }>;
+      // The live list answers {result: {buckets: [...]}}, so each page is ONE row holding the array
+      // (live shape). Unwrap it, or no bucket has a name and no per-bucket setting is read.
+      const rows = await paginate(api, `/accounts/${ids.accountId}/r2/buckets`, meter);
+      const buckets = rows.flatMap((r) => (isPlainObject(r) && Array.isArray(r.buckets) ? r.buckets : [r])) as Array<{ name?: string; id?: string }>;
       const out: unknown[] = [];
       for (const b of buckets) {
         const name = b?.name ?? b?.id;
@@ -435,12 +443,14 @@ export const CF_CONFIG_SURFACES_EXPANDED: CfConfigSurface[] = [
             cfg[part] = null;
           }
         }
-        meter?.spend(1);
-        try {
-          cfg.customDomains = await api.get(`/accounts/${ids.accountId}/r2/buckets/${name}/domains/custom`);
-        } catch (e) {
-          await subPartFault("cf-config/r2-bucket-config:customDomains", name, e);
-          cfg.customDomains = null;
+        for (const [part, path] of [["customDomains", "domains/custom"], ["publicAccess", "domains/managed"]] as const) {
+          meter?.spend(1);
+          try {
+            cfg[part] = await api.get(`/accounts/${ids.accountId}/r2/buckets/${name}/${path}`);
+          } catch (e) {
+            await subPartFault(`cf-config/r2-bucket-config:${part}`, name, e);
+            cfg[part] = null;
+          }
         }
         meter?.spend(1);
         try {

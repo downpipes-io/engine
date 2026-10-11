@@ -130,7 +130,7 @@ async function runSeal(ctx: CycleCtx, dest: PrefixedDestination, baseDest: Desti
       // The master is OWNED BY runCanaryCycle, not allocated here, so its single finally zeroises it on
       // every exit including the early ailing returns below. openAndVerify needs it after this function
       // returns (it is how a break-glass-only engine reads its own canary cell back), so zeroising it
-      // here -- as this function used to -- would defeat the whole read-back.
+      // here would defeat the whole read-back.
       master,
     };
     const summary = await runBackup([new CanarySource()], cfg, signer, dest, clock);

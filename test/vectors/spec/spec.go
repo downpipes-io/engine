@@ -6,7 +6,7 @@
 // conformance vectors all share (see CONTRIBUTING).
 //
 // A change to any constant here that pins a byte-level rule in
-// docs/format/SPEC.md is a new FORMAT VERSION, which while the format major is 0
+// the downpipe format specification is a new FORMAT VERSION, which while the format major is 0
 // means a MINOR bump: downpipe/0.1.0 becomes downpipe/0.2.0, not downpipe/1.0.0
 // (SPEC.md section 13). The minor is the compatibility unit, so the new identity is
 // one no existing reader implements, and a reader that reads both is retained code

@@ -203,7 +203,7 @@ async function proveChainVerifies(ctx: VersioningCtx): Promise<void> {
     // verifyConfigChain, so the proof does not rely solely on the engine verifying itself.
     const keys = sched.storage.rawKeys("confighist:");
     const versions = keys.map((k) => sched.storage.rawGet<ConfigVersion>(k)!);
-    const keyRec = sched.storage.rawGet<{ key: string }>("passkeySessionKey")!;
+    const keyRec = sched.storage.rawGet<{ key: string }>("configHistorySigningKey")!;
     const rawKey = b64urlDecode(keyRec.key);
     const independent = await verifyConfigChain(versions, rawKey);
     ok("an independent re-verification agrees the chain is intact", independent.intact === true);
@@ -236,7 +236,7 @@ async function proveDigestLabelNamesItsMAC(ctx: VersioningCtx): Promise<void> {
 
   // Independent recomputation: the same six chain-bound fields, canonicalised, under the same in-DO key,
   // through crypto.subtle directly. Nothing here imports the production digest function.
-  const keyRec = sched.storage.rawGet<{ key: string }>("passkeySessionKey")!;
+  const keyRec = sched.storage.rawGet<{ key: string }>("configHistorySigningKey")!;
   const rawKey = b64urlDecode(keyRec.key);
   const body = canonicalJSON({ id: head.id, at: head.at, author: head.author, summary: head.summary, contentHash: head.contentHash, parentHash: head.parentHash });
   const hmacKey = await crypto.subtle.importKey("raw", rawKey as unknown as ArrayBufferView<ArrayBuffer>, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);

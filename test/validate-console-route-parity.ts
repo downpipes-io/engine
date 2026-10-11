@@ -43,7 +43,6 @@
 // the defect through the real extractor, so a future edit that drops the blanking fails HERE, loudly, instead
 // of quietly restoring the blindness.
 //
-//
 
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";

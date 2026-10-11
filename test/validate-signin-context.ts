@@ -82,10 +82,9 @@ async function main(): Promise<void> {
     ok("a returning context is not new and refreshes lastAt", same.isNew === false && same.updated[0]?.lastAt === now + 1000);
     const other = evaluateSignInContext(first.updated, "198.51.100.0/24", now + 2000);
     ok("a different coarse context IS new", other.isNew === true && other.updated.length === 2);
-    // THIS ASSERTION USED TO PIN THE DEFECT. It read "an expired baseline prunes away, so the set re-baselines
-    // (no alert)" and asserted isNew === false, which is the inverted-alert state another pass measured: the
-    // unrecognised sign-in after a dormancy silently became the baseline and the operator's OWN next sign-in
-    // was the one that alerted. A lapsed baseline is now an alert AND a lapse. See validate-signin-baseline-lapse.ts.
+    // A LAPSED BASELINE ALERTS. If every stored row has aged out, the unrecognised sign-in after the dormancy is
+// an alert AND a lapse, so the operator's own next sign-in is not the one that alerts. See
+// validate-signin-baseline-lapse.ts.
     const expired = evaluateSignInContext([{ prefix: "203.0.113.0/24", lastAt: now - SEEN_CONTEXT_TTL_MS - 1 }], "198.51.100.0/24", now);
     ok("a LAPSED baseline (every row aged out) alerts and is flagged, and the set re-baselines", expired.isNew === true && expired.baselineLapsed === true && expired.updated.length === 1);
     const neverSeen = evaluateSignInContext([], "198.51.100.0/24", now);

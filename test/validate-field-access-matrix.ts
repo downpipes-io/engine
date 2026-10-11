@@ -34,7 +34,6 @@
 //     claim about what those bearers can and cannot reach is grounded in a running check, not
 //     prose alone.
 //
-//
 
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -123,7 +122,7 @@ const FIELD_ROWS: FieldRow[] = [
     expectRead: [],
     expectWrite: OPERATOR_UP,
     evidence: [
-      { file: "src/admin/router-pipelines.ts", line: 44, mustContain: "downpipe.write" },
+      { file: "src/admin/router-pipelines.ts", line: 43, mustContain: "downpipe.write" },
       { file: "src/admin/router-discovery.ts", line: 282, mustContain: "downpipe.write" },
     ],
   },
@@ -134,7 +133,7 @@ const FIELD_ROWS: FieldRow[] = [
     ownerReserved: false,
     expectRead: [],
     expectWrite: OPERATOR_UP,
-    evidence: [{ file: "src/admin/router-pipelines.ts", line: 98, mustContain: "downpipe.delete" }],
+    evidence: [{ file: "src/admin/router-pipelines.ts", line: 100, mustContain: "downpipe.delete" }],
   },
   {
     field: "Manual run trigger",
@@ -143,7 +142,7 @@ const FIELD_ROWS: FieldRow[] = [
     ownerReserved: false,
     expectRead: [],
     expectWrite: OPERATOR_UP,
-    evidence: [{ file: "src/admin/router-pipelines.ts", line: 144, mustContain: "run.trigger" }],
+    evidence: [{ file: "src/admin/router-pipelines.ts", line: 150, mustContain: "run.trigger" }],
   },
   {
     field: "Restore drill (recovery test)",
@@ -161,7 +160,7 @@ const FIELD_ROWS: FieldRow[] = [
     ownerReserved: false,
     expectRead: READ_ALL,
     expectWrite: [],
-    evidence: [{ file: "src/admin/router-restore.ts", line: 587, mustContain: "restore.dryrun" }],
+    evidence: [{ file: "src/admin/router-restore.ts", line: 589, mustContain: "restore.dryrun" }],
   },
   {
     field: "Restorability proof (blind restore test / keyless attest)",
@@ -171,8 +170,8 @@ const FIELD_ROWS: FieldRow[] = [
     expectRead: READ_ALL,
     expectWrite: [],
     evidence: [
-      { file: "src/admin/router-restore.ts", line: 633, mustContain: "restore.verify" },
-      { file: "src/admin/router-restore.ts", line: 908, mustContain: "restore.verify" },
+      { file: "src/admin/router-restore.ts", line: 635, mustContain: "restore.verify" },
+      { file: "src/admin/router-restore.ts", line: 916, mustContain: "restore.verify" },
     ],
   },
   {
@@ -182,7 +181,7 @@ const FIELD_ROWS: FieldRow[] = [
     ownerReserved: false,
     expectRead: [],
     expectWrite: OPERATOR_UP_PLUS_RESTORE_OP,
-    evidence: [{ file: "src/admin/router-restore.ts", line: 713, mustContain: "restore.request" }],
+    evidence: [{ file: "src/admin/router-restore.ts", line: 718, mustContain: "restore.request" }],
   },
   {
     field: "Restore apply (overwrite live data)",
@@ -194,7 +193,7 @@ const FIELD_ROWS: FieldRow[] = [
     // The second citation is the DO re-check on a downpipe edit that lets the cron retention pass delete
     // more (retentionWidensPrune). It has no router gate() call, like scheduledtest.config below.
     evidence: [
-      { file: "src/admin/router-restore.ts", line: 251, mustContain: "restore.apply" },
+      { file: "src/admin/router-restore.ts", line: 253, mustContain: "restore.apply" },
       { file: "src/sched/scheduler-do.ts", line: 428, mustContain: "restore.apply" },
     ],
   },
@@ -205,7 +204,7 @@ const FIELD_ROWS: FieldRow[] = [
     ownerReserved: false,
     expectRead: [],
     expectWrite: RESTORE_OP_UP,
-    evidence: [{ file: "src/admin/router-restore.ts", line: 813, mustContain: "restore.approve" }],
+    evidence: [{ file: "src/admin/router-restore.ts", line: 818, mustContain: "restore.approve" }],
   },
   {
     field: "Member/role table (read)",
@@ -214,7 +213,7 @@ const FIELD_ROWS: FieldRow[] = [
     ownerReserved: false,
     expectRead: READ_ALL,
     expectWrite: [],
-    evidence: [{ file: "src/admin/router-rbac.ts", line: 178, mustContain: "roles.read" }],
+    evidence: [{ file: "src/admin/router-rbac.ts", line: 182, mustContain: "roles.read" }],
   },
   {
     field: "Member/role table (grant/revoke)",
@@ -223,7 +222,7 @@ const FIELD_ROWS: FieldRow[] = [
     ownerReserved: false,
     expectRead: [],
     expectWrite: ACCESS_ADMIN_UP,
-    evidence: [{ file: "src/admin/router-rbac.ts", line: 44, mustContain: "roles.write" }],
+    evidence: [{ file: "src/admin/router-rbac.ts", line: 43, mustContain: "roles.write" }],
   },
   {
     field: "Account governance policy (break-glass retire, session termination, custom-role admin, control-plane export/import)",
@@ -233,7 +232,7 @@ const FIELD_ROWS: FieldRow[] = [
     expectRead: [],
     expectWrite: ACCESS_ADMIN_UP,
     evidence: [
-      { file: "src/admin/router-rbac.ts", line: 184, mustContain: "access.policy" },
+      { file: "src/admin/router-rbac.ts", line: 187, mustContain: "access.policy" },
       { file: "src/admin/router-identity.ts", line: 391, mustContain: "access.policy" },
     ],
   },
@@ -244,7 +243,7 @@ const FIELD_ROWS: FieldRow[] = [
     ownerReserved: false,
     expectRead: READ_ALL,
     expectWrite: [],
-    evidence: [{ file: "src/admin/router-rbac.ts", line: 298, mustContain: "audit.read" }],
+    evidence: [{ file: "src/admin/router-rbac.ts", line: 310, mustContain: "audit.read" }],
   },
   {
     field: "Trust roots and egress targets (key ceremony, destinations, IdP connections, SIEM/OTLP push)",
@@ -254,8 +253,8 @@ const FIELD_ROWS: FieldRow[] = [
     expectRead: [],
     expectWrite: OWNER_ONLY,
     evidence: [
-      { file: "src/admin/router-keys.ts", line: 420, mustContain: "keys.ceremony" },
-      { file: "src/admin/router-destinations.ts", line: 340, mustContain: "keys.ceremony" },
+      { file: "src/admin/router-keys.ts", line: 419, mustContain: "keys.ceremony" },
+      { file: "src/admin/router-destinations.ts", line: 351, mustContain: "keys.ceremony" },
       { file: "src/admin/router-identity.ts", line: 843, mustContain: "keys.ceremony" },
       { file: "src/admin/router-push.ts", line: 232, mustContain: "keys.ceremony" },
     ],
@@ -291,7 +290,7 @@ const FIELD_ROWS: FieldRow[] = [
     // caller who can hold one without the other is a composable custom role). The capability's
     // grant is still pinned in ROLE_CAPABILITIES (identity-rbac.ts), which is what row 6 above
     // checks cell-by-cell; here the citation is the DO re-check comment itself.
-    evidence: [{ file: "src/admin/router-pipelines.ts", line: 41, mustContain: "scheduledtest.config" }],
+    evidence: [{ file: "src/admin/router-pipelines.ts", line: 40, mustContain: "scheduledtest.config" }],
   },
   {
     field: "Reports (SLA / compliance projections)",
@@ -432,11 +431,11 @@ function main(): void {
   );
   ok(
     "support-credential minting is a bare owner-role check, not a Capability (so no custom role can ever inherit it)",
-    citationHolds({ file: "src/admin/router-status.ts", line: 383, mustContain: 'caller.role !== "owner"' }),
+    citationHolds({ file: "src/admin/router-status.ts", line: 384, mustContain: 'caller.role !== "owner"' }),
   );
   ok(
     "the ADMIN_TOKEN break-glass resolves unconditionally to the owner role",
-    citationHolds({ file: "src/sched/scheduler-do-rbac-authority.ts", line: 110, mustContain: 'role: "owner"' }),
+    citationHolds({ file: "src/sched/scheduler-do-rbac-authority.ts", line: 111, mustContain: 'role: "owner"' }),
   );
 
   console.log(failures === 0 ? "\nFIELD-ACCESS-MATRIX PASS" : `\n${failures} FAILURE(S)`);

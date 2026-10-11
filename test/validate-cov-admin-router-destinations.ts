@@ -843,12 +843,12 @@ async function main(): Promise<void> {
     const defR = await call(OWNER, "POST", "/admin/destinations/default", { id: id2 });
     ok("9a: POST /destinations/default with a known id makes it the default", defR.status === 200 && (await j(defR)).defaultId === id2);
     const defBad = await call(OWNER, "POST", "/admin/destinations/default", {});
-    ok("9b: POST /destinations/default with no id is refused by the DO (not 200)", defBad.status !== 200);
+    ok("9b: POST /destinations/default with no id is refused by the DO as an unknown destination (400)", defBad.status === 400 && (await j(defBad)).error === "no such destination");
 
     const rmR = await call(OWNER, "POST", "/admin/destinations/remove", { id: id2, force: true });
     ok("9c: POST /destinations/remove (force) removes the destination", rmR.status === 200 && !(((await j(rmR)).destinations as Array<{ id: string }>) ?? []).some((d) => d.id === id2));
     const rmBad = await call(OWNER, "POST", "/admin/destinations/remove", {});
-    ok("9d: POST /destinations/remove with no id is refused by the DO (not 200)", rmBad.status !== 200);
+    ok("9d: POST /destinations/remove with no id is refused by the DO as an unknown destination (400)", rmBad.status === 400 && (await j(rmBad)).error === "no such destination");
   }
 
   // ===== Phase 10: POST /email/test (no identity vs identity, EMAIL_FROM set vs unset). =====

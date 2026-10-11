@@ -18,9 +18,9 @@ export const ENGINE_DIR: string;
 /**
  * Overwrites the stamp file with the committed placeholder, unconditionally.
  *
- * This is the fix for the self-referential hash: the script used to digest whatever was already sitting in the
- * stamp file and then overwrite that same file with the result, so a second run in the same checkout hashed the
- * first run's output. Every hash-producing build now resets first.
+ * This keeps the hash from referring to itself: a run that digested whatever was already in the stamp file and
+ * then overwrote that file would hash the previous run's output on a second run in the same checkout. Every
+ * hash-producing build resets first.
  */
 export function resetStampToPlaceholder(stampPath?: string): void;
 

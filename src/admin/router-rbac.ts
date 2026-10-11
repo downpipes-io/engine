@@ -8,7 +8,7 @@ import type { AuditTarget } from "./audit.ts";
 import { roleInviteEmailSignalName } from "./auth-signals.ts";
 import { bumpAdminCounter, recordExportAttempt } from "./diag-counters.ts";
 import { callerCan } from "./identity.ts";
-import { callerHeaders, gate, jsonResponse, parseJsonBody, rateLimited, recordAudit } from "./router-core.ts";
+import { callerHeaders, gate, jsonResponse, parseJsonBody, peekObjectBody, rateLimited, readObjectBody, recordAudit } from "./router-core.ts";
 import { doURL, type RouterCtx, recordAuthSignalEdge } from "./router-helpers.ts";
 import { routeAuthChangeAlert } from "./router-notify.ts";
 import { inviteSenderConfigured, isRoleString, parseRoleEntry, sendRoleInvite, withholdMemberInvite } from "./router-sources.ts";
@@ -40,20 +40,22 @@ export async function handleRbac(ctx: RouterCtx): Promise<Response | null> {
     // Owner may grant or remove the owner role, so an access-admin cannot mint itself Owner) plus the
     // unchanged last-Owner and bootstrap semantics, inside the same read-modify-write.
     case "POST /roles": {
-      const body = (await req.json()) as { email?: string; role?: string; expiresAt?: string };
       const denied = gate(caller, "roles.write");
       if (denied) {
+        const peek = await peekObjectBody<{ email?: string; role?: string; expiresAt?: string }>(req);
         // Record the refused role write (a caller without roles.write attempting to grant). The DO
         // records the SUCCESS case at the commit point; the router records the DENIED case here because
         // it gates before forwarding. role defaults to viewer for the target when the attempted role is
         // malformed, so the entry is always a valid closed-union target.
         await recordAudit(scheduler, caller, sourceIp, "role-change", "denied", {
           kind: "role",
-          email: String(body.email ?? ""),
-          role: isRoleString(body.role) ? body.role : "viewer",
+          email: String(peek.email ?? ""),
+          role: isRoleString(peek.role) ? peek.role : "viewer",
         });
         return denied;
       }
+      const body = await readObjectBody<{ email?: string; role?: string; expiresAt?: string }>(req);
+      if (body instanceof Response) return body;
       const limited = await rateLimited(scheduler, caller);
       if (limited) return limited;
       // The DO re-checks Owner from the forwarded caller header (defence in depth), enforces the
@@ -122,16 +124,18 @@ export async function handleRbac(ctx: RouterCtx): Promise<Response | null> {
       return new Response(responseText, { status: roleResp.status, headers: { "content-type": "application/json" } });
     }
     case "POST /roles/delete": {
-      const body = (await req.json()) as { email?: string };
       const denied = gate(caller, "roles.write");
       if (denied) {
+        const peek = await peekObjectBody<{ email?: string }>(req);
         await recordAudit(scheduler, caller, sourceIp, "role-change", "denied", {
           kind: "role",
-          email: String(body.email ?? ""),
+          email: String(peek.email ?? ""),
           role: "viewer",
         });
         return denied;
       }
+      const body = await readObjectBody<{ email?: string }>(req);
+      if (body instanceof Response) return body;
       const limited = await rateLimited(scheduler, caller);
       if (limited) return limited;
       // The DO records the role-change audit event on a successful removal (offboarding), keyed to
@@ -180,20 +184,22 @@ export async function handleRbac(ctx: RouterCtx): Promise<Response | null> {
       return scheduler.fetch(doURL("/group-roles"), { method: "GET", headers: callerHeaders(caller) });
     }
     case "POST /group-roles": {
-      const body = (await req.json()) as { group?: string; role?: string };
       const denied = gate(caller, "access.policy");
       if (denied) {
+        const peek = await peekObjectBody<{ group?: string; role?: string }>(req);
         // Record the refused mapping write (a caller without access.policy mapping a group). The DO records
         // the SUCCESS case at the commit point; the router records the DENIED case here because it
         // gates before forwarding. The target carries only the group NAME + the attempted role
         // (defaulting to viewer when malformed), both redaction-safe.
         await recordAudit(scheduler, caller, sourceIp, "group-role-change", "denied", {
           kind: "grouprole",
-          group: String(body.group ?? ""),
-          role: isRoleString(body.role) ? body.role : "viewer",
+          group: String(peek.group ?? ""),
+          role: isRoleString(peek.role) ? peek.role : "viewer",
         });
         return denied;
       }
+      const body = await readObjectBody<{ group?: string; role?: string }>(req);
+      if (body instanceof Response) return body;
       const limited = await rateLimited(scheduler, caller);
       if (limited) return limited;
       // The DO re-checks Owner from the forwarded email + groups (defence in depth), enforces the owner CAP
@@ -202,16 +208,18 @@ export async function handleRbac(ctx: RouterCtx): Promise<Response | null> {
       return scheduler.fetch(doURL("/group-roles"), { method: "POST", body: JSON.stringify(body), headers: callerHeaders(caller) });
     }
     case "POST /group-roles/delete": {
-      const body = (await req.json()) as { group?: string };
       const denied = gate(caller, "access.policy");
       if (denied) {
+        const peek = await peekObjectBody<{ group?: string }>(req);
         await recordAudit(scheduler, caller, sourceIp, "group-role-change", "denied", {
           kind: "grouprole",
-          group: String(body.group ?? ""),
+          group: String(peek.group ?? ""),
           role: "viewer",
         });
         return denied;
       }
+      const body = await readObjectBody<{ group?: string }>(req);
+      if (body instanceof Response) return body;
       const limited = await rateLimited(scheduler, caller);
       if (limited) return limited;
       // The DO records the group-role-change audit event on a successful removal, keyed to the
@@ -241,20 +249,22 @@ export async function handleRbac(ctx: RouterCtx): Promise<Response | null> {
       return scheduler.fetch(doURL("/custom-roles"), { method: "GET", headers: callerHeaders(caller) });
     }
     case "POST /custom-roles": {
-      // Read the body ONCE (it is needed both for the denied-audit name and to forward to the DO).
-      const body = (await req.json()) as { name?: string };
+      // The gate runs before any body field is read. The body is read once: for the denied-audit name, or to forward to the DO.
       const denied = gate(caller, "access.policy");
       if (denied) {
+        const peek = await peekObjectBody<{ name?: string }>(req);
         // Record the refused create (a caller without access.policy composing a role). The DO records
         // the SUCCESS case at the commit point; the router records the DENIED case here because it gates
         // before forwarding. The target carries only the proposed name + a 0 count (no role was stored).
         await recordAudit(scheduler, caller, sourceIp, "custom-role-change", "denied", {
           kind: "customrole",
-          name: String(body.name ?? ""),
+          name: String(peek.name ?? ""),
           capabilityCount: 0,
         });
         return denied;
       }
+      const body = await readObjectBody<{ name?: string }>(req);
+      if (body instanceof Response) return body;
       const limited = await rateLimited(scheduler, caller);
       if (limited) return limited;
       // Forward the proposal (the once-read body) + caller so the DO re-resolves the creator's
@@ -264,16 +274,18 @@ export async function handleRbac(ctx: RouterCtx): Promise<Response | null> {
       return scheduler.fetch(doURL("/custom-roles"), { method: "POST", body: JSON.stringify(body), headers: callerHeaders(caller) });
     }
     case "POST /custom-roles/delete": {
-      const body = (await req.json()) as { name?: string };
       const denied = gate(caller, "access.policy");
       if (denied) {
+        const peek = await peekObjectBody<{ name?: string }>(req);
         await recordAudit(scheduler, caller, sourceIp, "custom-role-change", "denied", {
           kind: "customrole",
-          name: String(body.name ?? ""),
+          name: String(peek.name ?? ""),
           capabilityCount: 0,
         });
         return denied;
       }
+      const body = await readObjectBody<{ name?: string }>(req);
+      if (body instanceof Response) return body;
       const limited = await rateLimited(scheduler, caller);
       if (limited) return limited;
       // The DO records the custom-role-change audit event on a successful removal; an absent role is an

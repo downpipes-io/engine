@@ -22,7 +22,6 @@
 //   - Ground truth is the HARNESS's own oracle and its own before/after knowledge, never the engine verifying
 //     itself.
 //
-//
 
 import { handleAdmin } from "../src/admin/router.ts";
 import { auditHash, auditKey, AUDIT_PREFIX, verifyChain, type AuditDraft, type AuditEvent } from "../src/admin/audit.ts";

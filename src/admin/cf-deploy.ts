@@ -19,13 +19,16 @@
 //
 // TOKEN: the deploy token needs "Workers Scripts: Edit" on the engine's account (the dashboard
 // "Edit Cloudflare Workers" template grants it). It is used for these calls only and is never
-// stored or logged. The same scope reads the engine's settings, uploads a version, and deploys.
+// stored or logged. The same scope reads the engine's settings, uploads a version, deploys, and
+// reads a version's module bytes back; confirm the read-back scope against the live docs if the
+// account denies it, since this file cannot confirm it standalone.
 //
 // Cloudflare API shapes used (api.cloudflare.com/client/v4), confirm against the live docs:
 //   GET    /accounts/{a}/workers/scripts/{name}/deployments        -> list deployments (newest first)
 //   GET    /accounts/{a}/workers/scripts/{name}/settings           -> result.bindings (+ compat fields)
 //   POST   /accounts/{a}/workers/scripts/{name}/versions           -> multipart: metadata + module(s)
 //   POST   /accounts/{a}/workers/scripts/{name}/deployments        -> {strategy, versions:[{version_id,percentage}]}
+//   GET    /accounts/{a}/workers/workers/{name}/versions/{id}?include=modules -> result.modules[].content_base64
 
 import type { ArtefactMeta, DeployDriver, LiveVersionShare } from "./update-apply.ts";
 import { hexEncode } from "../crypto/bytes.ts";
@@ -328,14 +331,15 @@ export function makeCfDeployDriver(opts: {
 
     // fetchVersionModule (DP-D read-back) fetches the just-UPLOADED version's main module bytes back
     // from Cloudflare's own API, so the apply can prove the platform holds exactly the signed bytes
-    // BEFORE promotion. The response shape for version content has more than one historical spelling,
-    // so the parser is deliberately tolerant (modules[].content_base64, modules[].content, or
-    // resources.script.content) and THROWS a redaction-safe "unrecognised shape" error otherwise --
-    // which the gate reports as an honest "unavailable" verdict, and which the OA-3 sandbox
-    // experiment turns into a recorded fixture before enforce mode is ever enabled. Read-only: the
-    // same token the upload just used necessarily reads what it wrote.
+    // BEFORE promotion. It calls the WORKER-SCRIPT CONTENT endpoint (/workers/workers/.../versions/<id>),
+    // the one that returns module bytes in modules[].content_base64; the sibling metadata endpoint
+    // (/workers/scripts/.../versions/<id>) returns only metadata and resource descriptors, never bytes.
+    // The module is matched by name against mainModule, with a single-module fallback when the
+    // response holds exactly one. An unrecognised shape THROWS a redaction-safe "unrecognised shape"
+    // error, which the gate reports as an honest "unavailable" verdict rather than a false pass.
+    // Read-only: the same token the upload just used necessarily reads what it wrote.
     async fetchVersionModule(versionId: string, mainModule: string): Promise<Uint8Array> {
-      const url = `${CF_API}/accounts/${A}/workers/scripts/${S}/versions/${versionId}?include=modules`;
+      const url = `${CF_API}/accounts/${A}/workers/workers/${S}/versions/${versionId}?include=modules`;
       const resp = await fetchImpl(url, { headers: auth, redirect: "manual" });
       const body = (await resp.json().catch(() => null)) as {
         success?: boolean;
@@ -347,25 +351,15 @@ export function makeCfDeployDriver(opts: {
         throw new Error(`the uploaded version could not be read back (Cloudflare: ${why})`);
       }
       const result = body.result ?? {};
-      const resources = result.resources as { script?: { content?: unknown; modules?: unknown } } | undefined;
-      const rawModules = (result.modules ?? resources?.script?.modules) as unknown;
+      const rawModules = result.modules as unknown;
       if (Array.isArray(rawModules)) {
-        const modules = rawModules as Array<{ name?: unknown; content_base64?: unknown; content?: unknown }>;
+        const modules = rawModules as Array<{ name?: unknown; content_base64?: unknown }>;
         const m = modules.find((x) => x?.name === mainModule) ?? (modules.length === 1 ? modules[0] : undefined);
-        if (m !== undefined) {
-          if (typeof m.content_base64 === "string") {
-            return Uint8Array.from(atob(m.content_base64), (c) => c.charCodeAt(0));
-          }
-          if (typeof m.content === "string") {
-            return new TextEncoder().encode(m.content);
-          }
+        if (m !== undefined && typeof m.content_base64 === "string") {
+          return Uint8Array.from(atob(m.content_base64), (c) => c.charCodeAt(0));
         }
       }
-      const content = resources?.script?.content;
-      if (typeof content === "string") {
-        return new TextEncoder().encode(content);
-      }
-      throw new Error("the version read-back response shape was not recognised (keep the raw response as the OA-3 experiment fixture); read-back is unavailable for this apply");
+      throw new Error("the version read-back response shape was not recognised; read-back is unavailable for this apply");
     },
 
     // deployVersion makes a version THE LIVE DEPLOYMENT at 100%. It is used for BOTH directions: to PROMOTE

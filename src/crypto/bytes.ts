@@ -222,6 +222,16 @@ export function b64urlDecode(s: string): Uint8Array<ArrayBuffer> {
   return out;
 }
 
+/** b64urlDecode for untrusted text: the decoded bytes, or undefined when the text is not canonical base64url. */
+export function b64urlDecodeOrUndefined(s: string): Uint8Array<ArrayBuffer> | undefined {
+  try {
+    return b64urlDecode(s);
+  } catch {
+    // site-fault-waiver: src/crypto/bytes.ts:b64urlDecodeOrUndefined:catch:1 -- the undefined result is the answer, and the caller turns it into its own closed refusal
+    return undefined;
+  }
+}
+
 /**
  * Computes the SHA-256 digest of the given bytes and returns it as a lowercase hex string. Shared
  * by the SigV4 signer, the STS client and the S3 destination so the digest call lives in one place.

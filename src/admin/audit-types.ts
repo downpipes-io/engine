@@ -101,10 +101,12 @@ export const AUDIT_ACTIONS = [
   // a key or a signature). runlog-handover: a signer re-key's pre-check, hand-over pass, or held-key discard
   // (admin/rekey-runlog-handover.ts). The three ATTENDED Owner actions after step-up (admin/router-runlog.ts),
   // never automatic: runlog-resigned (signed the exact bytes of a RUNLOG that did not verify, or finished a pending
-  // hand-over), runlog-floor-reset (moved a floor down to the RUNLOG a bucket holds now), runlog-relinked
+  // hand-over), runlog-resumed (published an absent .sig again from the pending signature the engine made),
+  // runlog-floor-reset (moved a floor down to the RUNLOG a bucket holds now), runlog-relinked
   // (relinked ONE downpipe's anomalous chain in a RUNLOG that verifies, once, recording what it acknowledged).
   "runlog-handover",
   "runlog-resigned",
+  "runlog-resumed",
   "runlog-floor-reset",
   "runlog-relinked",
   // targeted operational-key ADD (the minimal upgrade path for a break-glass-only engine, the inverse of
@@ -615,10 +617,11 @@ export type AuditTarget =
   // classes, one per refused id; resigned and pending are counts. No key, signature or digest rides here.
   //   floor-reset: the attended floor reset; state is the refusal it cleared, lastGoodIndex/maxIndex the old/new floor.
   //   relink: state is the anomaly kind acknowledged, indexA/indexB its pair, downpipeId and chainEntries the chain.
+  //   resume: the attended call published an absent .sig again from the pending signature; digest and maxIndex as for resign.
   //   resign: the attended re-sign. state is the closed verdict the Owner saw (sig-absent, sig-invalid, or
   //   held-old for a hand-over), digest the first 24 hex of the SHA-384 of the RUNLOG bytes signed, maxIndex the
   //   highest index in them, lastGoodIndex the destination's confirmed floor (absent when none is recorded).
-  | { kind: "runlog-signature"; op: "handover-refused" | "handover" | "held-key-discarded" | "resign" | "floor-reset" | "relink"; destinationIds?: string[]; reasons?: string[]; resigned?: number; pending?: number; state?: string; digest?: string; maxIndex?: number; lastGoodIndex?: number; downpipeId?: string; indexA?: number; indexB?: number; chainEntries?: number }
+  | { kind: "runlog-signature"; op: "handover-refused" | "handover" | "held-key-discarded" | "resign" | "resume" | "floor-reset" | "relink" | "relink-refused"; destinationIds?: string[]; reasons?: string[]; resigned?: number; pending?: number; state?: string; digest?: string; maxIndex?: number; lastGoodIndex?: number; downpipeId?: string; indexA?: number; indexB?: number; chainEntries?: number }
   | { kind: "key-ceremony"; step?: string; cause?: string; cfStatusClass?: string; cfCodes?: number[]; wrapped?: number; alreadyWrapped?: number; leftPlaintext?: number; failedClasses?: string[]; rewrapFault?: "census-failed" | "key-unusable" }
   // access-policy is deliberately FIELD-LESS by design, which loses the decisive field on every governance event
   // that uses it: an incident timeline cannot prove WHEN dual control was disarmed (a config-approval
@@ -689,7 +692,7 @@ export type AuditTarget =
       toDefaultId?: string;
       force?: boolean;
       uncoveredOriginRunCount?: number;
-      rejectReason?: "endpoint-not-https" | "missing-fields" | "invalid-config";
+      rejectReason?: "endpoint-not-https" | "missing-fields" | "invalid-config"; refusal?: import("./dest-save-refusal.ts").DestSaveRefusal; provider?: import("./dest-save-refusal.ts").DestRefusalProvider; probeClass?: import("./dest-save-refusal.ts").DestProbeFailClass; probeStatus?: number; regionHint?: string; pinnedDownpipeCount?: number; pinnedDownpipeIds?: string[]; atRiskRunCount?: number; // a REFUSED save, clear or remove (the last three: the downpipes that name the destination and the runs whose only proven copy is there, sched/dest-remove-refusal-audit.ts): the closed refusal class, the provider the endpoint names, and the live probe's closed failure class and HTTP status (dest-save-refusal.ts); never the endpoint, bucket, credential or sentence
       // WHICH downpipes lost their only proven copy on a FORCED removal. uncoveredOriginRunCount is the
       // magnitude and answers "how bad"; this answers "who", which is the question an incident timeline
       // actually has. The names are the customer's OWN downpipe labels (the redaction class downpipes[]

@@ -573,13 +573,12 @@ async function main(): Promise<void> {
   ok("boundAccounts: a non-string-array value fails the body closed (body-malformed), never ignored", malformedBoundResult.tier === "community" && malformedBoundResult.reasonCode === "body-malformed");
 
   // ---- PROOF 12: the SEVEN-TIER contract (estate-banded self-serve licensing) ----
-  // Pricing restart: business-1/-3/-10/-25 and msp are
+  // business-1/-3/-10/-25 and msp are
   // the known tiers, each verifying to its own granted tier exactly like enterprise always has; their band
   // + service entitlements ride as ordinary feature strings (opaque to the engine, never parsed or
-  // enforced -- see docs/CONTROL-PLANE.md). The old starter/growth/business ids are DELETED, not aliased
-  // (zero customers, zero minted tokens at the time of the rename; no-legacy). community stays the
-  // fail-open default. An unrecognised tier (proven earlier as "galactic", PROOF 11) is UNCHANGED by
-  // this widening: the known set is seven members, everything outside it is still future-tier.
+  // enforced). The ids starter, growth and business are not tiers, and are not aliased. community stays the
+  // fail-open default. An unrecognised tier (proven earlier as "galactic", PROOF 11) is
+  // unaffected: the known set is seven members, everything outside it is still future-tier.
   // The lists the control plane's tierToFeatures mints today (msp at 10 client estates), so the fixture
   // models the published offer: every Business band records the same next-business-day support.
   const bandFeaturesFor: Record<string, string[]> = {

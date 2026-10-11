@@ -167,8 +167,7 @@ async function main(): Promise<void> {
   ok("status operationalConfigured.public", status.operationalConfigured.public === true);
   ok("status operationalConfigured.private", status.operationalConfigured.private === true);
   ok("status destConfigured + destKind r2", status.destConfigured === true && status.destKind === "r2");
-  // Reference ENGINE_VERSION, never a literal (the 0.1.1 release fixed the update tests the same way;
-  // this literal was missed and has failed the chain since the version bump).
+  // Reference ENGINE_VERSION, never a literal, so a version bump does not fail the chain.
   ok("status engineVersion + service surfaced", status.engineVersion === ENGINE_VERSION && status.service === "downpipe-engine");
   ok("status ready (signer && break-glass && dest)", status.ready === true);
   const statusJSON = JSON.stringify(status);

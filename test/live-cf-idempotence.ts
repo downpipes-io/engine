@@ -7,19 +7,16 @@
 // what the operator asked for. It is the cheapest possible question to ask a writer and it catches a
 // whole class of defect that the round-trip harness does not.
 //
-// It exists because two defects hid from everything else on this branch:
+// It exists because two kinds of defect hide from every other test:
 //
-//   1. writeRulesets paginated the ruleset index at the registry default, which Cloudflare refuses above
-//      50, so the WRITE path of both flagship WAF surfaces threw on every account. The READ half had been
-//      fixed for exactly this. The write half was missed because the auto-prove sweep only covers
-//      GENERATED writers, and these two are hand-written and predate it, so they were carried as proven
-//      on a proof that never touched that line.
-//   2. writeSingleSetting assumed every zone setting carries its value under `value`. auto_origin_tls_kex
-//      carries it under `enabled` and refuses {value: ...} outright, so that surface skipped on every
-//      restore, including when nothing had changed.
+//   1. A writer that paginates the ruleset index at the registry default, which Cloudflare refuses above
+//      50, throws on every account on the WRITE path of both flagship WAF surfaces. The auto-prove sweep
+//      only covers GENERATED writers, and these two are hand-written, so only a live run touches that line.
+//   2. A writer that assumes every zone setting carries its value under `value` skips surfaces that do
+//      not. auto_origin_tls_kex carries it under `enabled` and refuses {value: ...} outright, so that
+//      surface would skip on every restore, including when nothing had changed.
 //
-// Both showed up here in one run, and neither could have shown up in a test that only exercises surfaces
-// with a synthesised create body.
+// Neither shows up in a test that only exercises surfaces with a synthesised create body.
 //
 // WHAT A FAILURE MEANS
 // --------------------

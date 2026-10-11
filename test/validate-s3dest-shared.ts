@@ -93,7 +93,7 @@ export function zeroStream(total: number, chunk: number): ReadableStream<Uint8Ar
 // A captured request: the bytes the destination handed to fetch, plus the normalised header
 // view, whether the body was a streaming body (which would force chunked Transfer-Encoding
 // with no Content-Length and is exactly the wire shape the fix must avoid), and the
-// redirect option passed in the RequestInit (V15.3.2).
+// redirect option passed in the RequestInit.
 export interface Captured {
   method: string;
   url: string;

@@ -9,12 +9,13 @@ import { getIdpConnectionRaw } from "../admin/oidc-store.ts";
 import { SESSION_KEY_BYTES, type SessionMintInput, signSession, slideDue, verifySession, verifySessionClassified, TOKEN_FINGERPRINT_PATTERN, TOKEN_SESSION_SUBJECT } from "../admin/session.ts";
 import { coarseSignInPrefix, evaluateSignInContext, type SeenContext } from "../admin/sign-in-context.ts";
 import { b64urlDecode, b64urlEncode } from "../crypto/bytes.ts";
-import { AuthError, OIDC_GROUPS_PREFIX, PASSKEY_SESSION_KEY_KEY, type SchedulerDOCtor, SESSION_EPOCH_PREFIX } from "./scheduler-do-base.ts";
+import { groupsOf, hasEmail, makeOidcGroupsRecord } from "./oidc-groups-record.ts";
+import { AuthError, OIDC_GROUPS_PREFIX, PASSKEY_SESSION_KEY_KEY, type SchedulerDOCtor, SESSION_EPOCH_PREFIX, SIGNIN_CONTEXT_PREFIX } from "./scheduler-do-base.ts";
 
-// SIGNIN_CONTEXT_PREFIX keys the per-operator coarse seen-context baseline (ASVS V6.3.5):
-// signinctx:<stable subject> -> SeenContext[] (a bounded, TTL-pruned list of /24 / /48 prefixes;
-// never a raw IP). One small record per operator; removed operators simply expire via the TTL.
-const SIGNIN_CONTEXT_PREFIX = "signinctx:";
+// The per-operator coarse seen-context baseline (ASVS V6.3.5) is signinctx:<stable subject> -> SeenContext[], a
+// bounded, TTL-pruned list of /24 / /48 prefixes and never a raw IP. The TTL runs only on that subject's next
+// sign-in, so role delete removes the record with the role (ASVS V14.2.7). The prefix is declared in
+// scheduler-do-keys.ts.
 
 import { mappingForConnection, nowMillisISO } from "./scheduler-helpers.ts";
 import { SESSION_REF_PREFIX, SESSION_REVOKED_PREFIX, type SessionRef } from "./scheduler-do-records.ts";
@@ -274,7 +275,7 @@ export function SessionMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
       // adoption FROM this key, so it must be materialised BEFORE the key it copies is deleted. Do it in this
       // order and an interruption between the two lines can only mean the sign-out did not happen; do it the
       // other way and it means a factor was lost, which is the strictly worse failure this order avoids.
-      await this.recoverySigningKey();
+      await this.recoverySigningKey(); await this.configHistorySigningKey(); // both adopt this key before it goes
       await this.state.storage.delete(PASSKEY_SESSION_KEY_KEY);
       await this.appendAudit({
         actorSubject: caller ? caller.subject : null, actorEmail: caller?.email ? caller.email : null,
@@ -503,7 +504,13 @@ export function SessionMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
       // so the existing subject-keyed role resolution (group->role) applies to a native-IdP caller unchanged.
       let groups: string[] = [];
       if (res.method === "oidc" || res.method === "saml") {
-        const snapshot = await this.state.storage.get<string[]>(`${OIDC_GROUPS_PREFIX}${res.subject}`);
+        const rawSnapshot = await this.state.storage.get<unknown>(`${OIDC_GROUPS_PREFIX}${res.subject}`);
+        const snapshot = groupsOf(rawSnapshot);
+        // A record without an address (the bare list, or one the alarm stamped) is upgraded here, with the
+        // address this verified session names, so an active person never reaches the 14 day deletion.
+        if (snapshot !== undefined && !hasEmail(rawSnapshot)) {
+          await this.state.storage.put(`${OIDC_GROUPS_PREFIX}${res.subject}`, makeOidcGroupsRecord(res.email, snapshot, Date.now()));
+        }
         // An SSO session whose group snapshot is MISSING silently loses every group-derived role for
         // that request -- the user is signed in and quietly demoted to their built-in floor, mid-session, with
         // no error. Count only: never a group name or a subject.
@@ -534,7 +541,7 @@ export function SessionMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
       if (slideDue(res.lastSeen, now)) {
         slidToken = await this.mintSessionRecorded(
           key,
-          { method: res.method, email: res.email, subject: res.subject, ...(res.connId !== null ? { connId: res.connId } : {}), ...(res.tokenFp !== null ? { tokenFp: res.tokenFp } : {}), epoch: res.epoch, slide: { iat: res.iat, exp: res.exp, ...(res.sid !== null ? { sid: res.sid } : {}) } },
+          { method: res.method, email: res.email, subject: res.subject, ...(res.connId !== null ? { connId: res.connId } : {}), ...(res.tokenFp !== null ? { tokenFp: res.tokenFp } : {}), ...(res.recovered ? { recovered: true } : {}), epoch: res.epoch, slide: { iat: res.iat, exp: res.exp, ...(res.sid !== null ? { sid: res.sid } : {}) } },
           now,
         );
       }
@@ -606,7 +613,7 @@ export function SessionMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
         }
         await this.state.storage.delete(k);
       }
-      const token = await this.mintSessionRecorded(key, { method: mintMethod, email, subject, ...(connId !== undefined ? { connId } : {}), epoch, slide: { iat: verified.iat, exp: verified.exp, ...(verified.sid !== null ? { sid: verified.sid } : {}) } }, now);
+      const token = await this.mintSessionRecorded(key, { method: mintMethod, email, subject, ...(connId !== undefined ? { connId } : {}), ...(verified.recovered ? { recovered: true } : {}), epoch, slide: { iat: verified.iat, exp: verified.exp, ...(verified.sid !== null ? { sid: verified.sid } : {}) } }, now);
       await this.appendAudit({
         actorSubject: caller ? caller.subject : null, actorEmail: email, actorMethod: caller ? caller.method : "passkey",
         sourceIp: caller?.sourceIp ?? null, action: "session-terminate", outcome: "success", target: { kind: "access-policy" },

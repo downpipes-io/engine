@@ -38,7 +38,6 @@
 // self-consistent, complete, and invisible to every gate and every other reader. A tracked JSON file cannot
 // go missing quietly, because `git status` shows the row and CI reads the file.
 //
-//
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";

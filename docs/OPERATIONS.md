@@ -48,8 +48,8 @@ the compute layer. Know the scope before you depend on it for recovery.
 - A Cloudflare account with Workers PAID, Durable Objects, and R2 enabled. Activate
   Workers Paid BEFORE deploying: the deploy itself fails without it (the engine sets
   `[limits] cpu_ms`), and the free plan's 50-subrequest cap would break runs regardless.
-- A custom domain for the engine (and one for the console). The engine is custom-domain only; the
-  `workers.dev` route is disabled by policy.
+- An address for the console: a custom domain (recommended for production) or a `workers.dev`
+  hostname. The engine has no public hostname by default (`workers_dev = false`).
 - `wrangler` authenticated against the account (`npx wrangler whoami`).
 - The console deployed (it serves the key ceremony and the readiness check).
 
@@ -58,9 +58,7 @@ Validate all of this before deploying rather than hoping: `downpipe preflight
 verifies the chosen one is on an active zone, and reports Secrets Store headroom, the
 Workers plan, Logpush and R2 (read-only, operator token). After deploying,
 `GET /admin/preflight` (the console onboarding reads it) PROBES the runtime
-prerequisites live, including that the cron genuinely ticks. The full entitlement
-matrix, the large-environment (sliced runs) guide, SIEM log delivery and the support
-model are in docs/SCALE-AND-ENTERPRISE.md.
+prerequisites live, including that the cron genuinely ticks.
 
 ## Step 1: deploy the engine
 
@@ -89,6 +87,14 @@ it to your console's custom domain):
 [vars]
 CONSOLE_ORIGIN = "https://<your-console-domain>"
 ```
+
+The Security Centre reads the hostname of `CONSOLE_ORIGIN` and grades the `console-on-workers-dev` check
+(low). It fails when the hostname ends in `.workers.dev`, because the edge TLS floor and cipher suites are
+then Cloudflare's platform defaults rather than settings you control on your zone, and the console has no
+hostname of your own for Cloudflare Access. It passes on any other https hostname. When `CONSOLE_ORIGIN` is
+unset, unparseable or not https, the check is not raised. To clear it, serve the console from a custom
+domain on a zone you control and set `CONSOLE_ORIGIN` to it, then set Minimum TLS 1.2 on that zone (free)
+and, optionally, the Modern cipher suite preset (it needs Cloudflare Advanced Certificate Manager).
 
 ## Step 2: the admin token (ONE-TIME bootstrap, then dispose of it)
 
@@ -523,7 +529,7 @@ exports, and record the final audit export (with its head hash) as the closing e
 
 ## Design rules for operators
 
-- Custom domains only, never `workers.dev`.
+- Serve the console on a custom domain in production; a `workers.dev` hostname is for a first run.
 - The break-glass private key is yours alone: store it offline, never paste it anywhere, and retain old
   keys after a rotation (archives sealed before a rotation need the old key).
 - Treat `ADMIN_TOKEN` as a ONE-TIME bootstrap credential: once your Owner passkey or Cloudflare Access

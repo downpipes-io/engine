@@ -11,11 +11,71 @@ carry behaviour changes; operator-action upgrade steps live in
 The on-disk archive format carries its own frozen version (`downpipe/0.1.0`) that is
 independent of the engine version. A change to a byte-level rule of the archive
 format is a new format MINOR version (an incompatible format identity while the
-format major stays 0), specified normatively in the sibling
-`downpipe` repository at `docs/format/SPEC.md`, not an entry here. This changelog
+format major stays 0), specified normatively in the format specification of the
+`downpipe` reader repository, not an entry here. This changelog
 tracks the engine Worker, its scheduler Durable Object and the admin API.
 
-## [Unreleased]
+## [0.3.8] - 2026-10-11
+
+### Added
+
+- The audit action `runlog-resumed` records an Owner's attended `POST /runlog/resign` that publishes an absent `RUNLOG.sig` again from the engine's pending signature. The row names the destination, the digest prefix and the highest index, and the support pack lists it.
+- The support pack records a `sig-restored` RUNLOG anomaly when a deleted `RUNLOG.sig` is published again from the engine's pending signature.
+- The support pack shows each RUNLOG hand-over and relink. A refused relink writes an audit row that names its refusal.
+- A re-key that the RUNLOG pre-check refuses for a chain anomaly records a RUNLOG anomaly row in the support pack that names the anomaly.
+- A support pack replication row that is reachable but holds no run carries `copy: "none-yet"`: the destination has no restorable copy yet.
+- A failed run names its destination (`destinationId` and `destinationIdBasis`), and each destination fault names its destination. A refused destination save, and a refused clear or remove, records the refusal class and the blockers behind it in the support pack.
+- The support pack reports each destination's write facts (key class, `checksumRequired` and the region hint), the update channel state, and why an update channel fetch failed.
+- After an account recovery, the support pack states the Owner actions still pending.
+- The support pack's site-fault legend states the evidence each fault undermines.
+- The Security Centre grades a console served on a `workers.dev` hostname with a low-severity
+  "Console on your own domain" check (`console-on-workers-dev`), read from the hostname of `CONSOLE_ORIGIN`.
+  It is not raised when `CONSOLE_ORIGIN` is unset, unparseable or not https.
+- The support pack keys section reports `operationalRetired.state` (`stale-key-held`, `applied` or `not-set`). For `stale-key-held`, an operational key is still bound after a strict re-key, and `action` names the `POST /admin/keys/break-glass-only` route that deletes it.
+- The signed update channel carries the release date of every release. A release is supported until
+  90 days after the next release ships. `GET /admin/updates` reports `supportedUntil` and
+  `supportStatus` (`supported`, `ending` or `end-of-life`) for the running version. The latest release
+  has no `supportedUntil`. See `docs/SUPPORTED-VERSIONS.md`.
+- The Cloudflare configuration backup captures per-bucket R2 settings. For each bucket, the `r2-bucket-config`
+  surface records CORS rules, lifecycle rules, bucket lock, custom domains, public r2.dev access (`publicAccess`),
+  Sippy and event notifications. The engine does not write bucket settings back: the restore plan marks them
+  captured, not restorable, and gives the manual step.
+
+### Changed
+
+- When a RUNLOG append refuses an index its destination already holds, the scheduler holds new runs, reads every configured destination's RUNLOG and moves the run counter past the highest index any of them holds. The support pack records a `counter-advanced-after-recovery` row with where the counter moved from and to, and the destination that held the highest index. The recovery seed also takes the highest verified index across the configured destinations.
+- A RUNLOG append refuses an index that another run in that destination's RUNLOG already holds, and the support pack records a `duplicate-index` anomaly. After a control-plane recovery the run counter can restart below the indices a second destination holds; such a run fails and does not write a duplicate index.
+- A RUNLOG append refuses an anti-rollback floor that reads back but is not a whole number above zero, with the integrity reason `floor-invalid`.
+- When two first backups race on one empty destination, the run that loses the create backs off and re-reads, and records no anomaly. If the signature has not landed when its attempts run out, an inline run parks and resumes.
+- The "Sources fan out to two destinations" posture check counts, for each downpipe, the destinations
+  that hold its latest successful run. A destination still catching up, or one whose copies keep
+  failing, counts once replication reports the run there.
+- The config history is signed under its own key, so a global sign-out leaves every stored history entry verifiable.
+- A deleted D1 source reads as deleted, not unavailable. An R2 bucket-lock refusal reads as `ObjectLocked`.
+- The SCIM service provider configuration states that a member who signs in through Cloudflare Access is removed from the Access policy in Access; a SCIM deprovision ends their sessions in the engine.
+
+### Fixed
+
+- Deleting a member's role, including a SCIM deprovision, deletes their sign-in network prefixes and their IdP group record with it.
+- An IdP group record names the address it was written for. Offboarding a member by address deletes it, including for a member who holds access only through an IdP group. A group record not refreshed for 90 days is deleted.
+- Replication copies the recovery bundle to every destination that holds runs. A destination reached only through replication verifies and restores with `--signer-fingerprint` like any other.
+- A seal verify that reads a RUNLOG while another run writes it records no integrity fault when the next read verifies.
+- Safe-apply reads the uploaded engine module back from Cloudflare and compares it with the signed digest before it promotes the version.
+- `GET /admin/status.artefactSha384` is the SHA-384 of the main module bytes the engine uploaded.
+- During a new destination's first sync, the other downpipes keep replicating their runs.
+- A RUNLOG writer waits for a held lock long enough to take its turn.
+
+### Security
+
+- A session that starts with a recovery code does not satisfy step-up; step-up needs a passkey, either an existing passkey or one enrolled after recovery.
+- The sign-in, break-glass bearer and recovery-code limiters key an IPv6 client by its /64 and an IPv4 client by its address.
+- Every engine response carries the same hardening headers on every path and status, including `cache-control: no-store`.
+- Admin write routes check the caller's access before they read the request body. A body that is not a JSON object gets 400, and a denied request always writes its audit row.
+- `/admin/health`, `/ready` and `/` answer 405 with `Allow: GET, HEAD` for any method other than GET, HEAD and OPTIONS.
+- Importing an estate needs both `keys.ceremony` and `access.policy`.
+- The engine chooses the store behind a destination endpoint from its host alone: a query, a fragment or userinfo cannot select a different store.
+- The parsers that read untrusted input refuse malformed input with their own errors: a count written with a fraction, an exponent, a sign or a leading zero, or a count key that differs only in case; a JSON null line in a RUNLOG or a shard; a root or update signature file that is not base64url; a config snapshot that is not JSON; a sealed control-plane export with a malformed capsule member; a control-plane import body with no canonical form; and a SCIM PATCH body of JSON null (400). An ID token key set without a `keys` array fails closed, and the export secret check is bounded by nesting depth.
+- Dependency install scripts are off, and the install guide uses `npm ci`.
 
 ## [0.3.7] - 2026-10-05
 
@@ -907,8 +967,6 @@ This release includes the 0.3.4 changes.
 
 ## [0.3.4] - 2026-09-17
 
-Not published to the update channel. These changes ship in 0.3.5.
-
 ### Changed
 
 - The syslog-over-TLS audit-export sink now refuses a private, loopback or link-local
@@ -1135,7 +1193,8 @@ Not published to the update channel. These changes ship in 0.3.5.
 - A native identity-provider bridge: OIDC, OAuth2 and a native SAML service
   provider across the supported providers.
 
-[Unreleased]: https://github.com/downpipes-io/engine/compare/v0.3.5...HEAD
+[0.3.8]: https://github.com/downpipes-io/engine/releases/tag/v0.3.8
+[0.3.7]: https://github.com/downpipes-io/engine/releases/tag/v0.3.7
 [0.3.5]: https://github.com/downpipes-io/engine/releases/tag/v0.3.5
 [0.3.4]: https://github.com/downpipes-io/engine/releases/tag/v0.3.4
 [0.3.3]: https://github.com/downpipes-io/engine/releases/tag/v0.3.3

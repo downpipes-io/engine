@@ -66,6 +66,9 @@ export interface CfConfigSurface {
   id: string; // the archived record name (e.g. "dns", "zone-settings")
   scope: CfScope; // "zone" needs a zoneId; "account" reads account-level config
   restoreTier: RestoreTier;
+  // capturedNotRestorable marks a surface the backup captures but no restore writes back, with the reason and
+  // the manual step. The restore plan gives it as the out-of-band reason (admin/restore-plan.ts).
+  capturedNotRestorable?: string;
   // read returns the surface's full config as a JSON-able value (one record's value bytes).
   // Every Cloudflare API call is a platform subrequest, so each read meters its calls.
   read(api: CfApi, ids: { accountId: string; zoneId?: string }, meter?: Meter): Promise<unknown>;

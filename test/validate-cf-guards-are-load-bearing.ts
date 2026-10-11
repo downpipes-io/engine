@@ -30,31 +30,25 @@
 //
 // SAFETY: IT MUTATES A SANDBOX, NEVER THE REAL TREE, AND THAT IS NOT A TIDINESS PREFERENCE
 // ----------------------------------------------------------------------------------------
-// This file used to edit the real src files in place and restore them, with every mutation inside a
-// try/finally. That was safe against ITSELF and unsafe against everything else, because the corruption was
-// visible to every other process sharing the checkout for as long as the window lasted.
+// This file mutates a sandbox copy of the tree and never edits the real src files. Editing the real files in
+// place, even inside a try/finally, would be safe against ITSELF and unsafe against everything else, because
+// the corruption would be visible to every other process sharing the checkout for as long as the window lasted.
 //
-// MEASURED, on a clone of this repo, not argued. Driving `node test/validate-cf-config-write-generated.ts`
-// in a loop while the OLD form of this file ran alongside it produced 26 reds in 126 runs, every one of
-// them the line "FAIL the configPlan.push is guarded by the resolved allow-list, not merely near a mention
-// of it". The same validator run 40 times with nothing else going was green 40 times, and green 5 of 5
-// immediately after the 26 reds. So the corruption made a validator SAY A SAFETY GUARD WAS MISSING when it
-// was there, and the accusation evaporated the moment anyone re-ran it to look.
+// The failure mode is a validator that SAYS A SAFETY GUARD IS MISSING when it is there, and the accusation
+// evaporates the moment anyone re-runs it to look.
 //
-// That is the worst debugging shape available. An intra-process race at least reproduces under load; this
-// one is inter-process through the filesystem, so isolating the accused validator is precisely the act that
-// destroys the evidence. The 26 reds cluster at the start of the run because guards 1 and 2 both neuter
-// src/admin/restore-plan.ts while spawning validate-restore.ts, which is the slowest gate here, so that one
-// file is corrupt for roughly 18 of the run's 28 mutated seconds.
+// That is the worst debugging shape available. An
+// intra-process race at least reproduces under load; an inter-process race through the filesystem does not,
+// because isolating the accused validator is precisely the act that destroys the evidence.
 //
-// The blast radius was never the six gates below. It was every reader of the seven mutated files: the other
-// validators that import them, a typecheck, an editor, a second process sharing the checkout. A lock would only
-// have covered the readers that agreed to take it, and a guard others opt into is the defect wearing a
-// helmet. Copying is the only remedy that covers a reader that has never heard of this file.
+// The blast radius would be every reader of the seven mutated files: the other validators that import them,
+// a typecheck, an editor, a second process sharing the checkout. A lock would only cover the readers that
+// agree to take it, and a guard others opt into is the defect wearing a helmet. Copying is the only remedy
+// that covers a reader that has never heard of this file.
 //
 // So: one temp copy of src, test and scripts per run, mutated and restored INSIDE the copy, with the gate
-// spawned at the copy's root. The real tree is opened read-only and never written, which is also why the
-// old "*** WAS NOT RESTORED ***" catastrophe path can no longer strand a developer's checkout.
+// spawned at the copy's root. The real tree is opened read-only and never written, so a failed run cannot
+// strand a developer's checkout.
 //
 // WHY THE BASELINE PASS BELOW IS NOT OPTIONAL. In a test whose verdict is "the gate died, so the guard is
 // load-bearing", ANY cause of death reads as ok. A sandbox missing a file the gate needs would therefore

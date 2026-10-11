@@ -65,8 +65,12 @@ console.log("Scenario A: owner-mint auto-gate + owner-approver rule close the la
 
   // THE ACCESS-ADMIN HOP, now BLOCKED (fix #2): a roles.write holder that is NOT an Owner cannot approve an
   // owner-conferring change, so the attacker cannot use its minted access-admin to approve the owner-mint.
+  // Aged past the dwell floor first: an unaged approve is refused 429 too-soon whoever approves, which would
+  // pass this check without the Owner-approver rule ever running. The positive control is the second Owner's
+  // approve of this same change below.
+  ageRecord(ctx.sched.storage, changeKey(mintId), "proposedAt", AGE_PAST_DWELL);
   const hop = await call("puppet-admin@acme.example", "POST", `/admin/config/changes/${mintId}/approve`);
-  ok("[A] an access-admin CANNOT approve an owner-grant (only an Owner may) -> the hop is closed", hop.status >= 400 && hop.status < 500);
+  ok("[A] an access-admin CANNOT approve an owner-grant (only an Owner may) -> the hop is closed", hop.status === 400 && /only an Owner may approve a change that removes the Owner role|only an Owner may approve/.test(await hop.text()));
   ok("[A] the puppet owner was NOT created (no manufacturable owner checker)", (await roleOf("puppet@acme.example")) !== "owner");
 
   // With no way to manufacture an Owner checker, the exfil cannot be approved by the attacker alone.

@@ -750,7 +750,7 @@ async function main(): Promise<void> {
       // ---- P3 drives: exercise the finer idp-auth signals BEFORE reading the aggregate. ----
       // (a) private-key-jwt-unsupported: a connection requesting private_key_jwt client auth is refused at config.
       const pkj = await doJson("POST", "/idp/conn/create", { proposal: { ...oidcProposal, id: "pkj", clientAuth: "private_key_jwt", secretRef: { mode: "do-plaintext" } } }, owner);
-      ok("create (private_key_jwt): refused at config time (not wired in this build)", pkj.ok === false && String(pkj.reason).includes("private_key_jwt"));
+      ok("create (private_key_jwt): refused at config time (not supported)", pkj.ok === false && String(pkj.reason).includes("private_key_jwt"));
       // (b) oidc-entra-multitenant-misconfig: a multitenant connection whose token tid is not in acceptedTenantIds.
       const mtCr = await doJson("POST", "/idp/conn/create", { proposal: { id: "entra-mt", kind: "oidc", label: "Entra Multitenant", presetId: "entra", enabled: true, issuer: MT_ISSUER_TEMPLATE, issuerSubstitution: "tid", acceptedTenantIds: [MT_ACCEPTED_TID], clientId: MT_CLIENT, secretRef: { mode: "do-plaintext" }, scopes: ["openid", "email", "profile"], idTokenSigAlgs: ["RS256"], pkce: "required", clientAuth: "client_secret_post", requireNonce: true, authorizationEndpoint: MT_AUTH, tokenEndpoint: MT_TOKEN, jwksUri: JWKS_URL }, secret: "mt-secret" }, owner);
       ok("create (multitenant): a {tenantid} issuer + issuerSubstitution 'tid' + acceptedTenantIds validates", mtCr.ok === true);

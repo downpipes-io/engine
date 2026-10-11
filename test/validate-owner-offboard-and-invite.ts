@@ -229,7 +229,7 @@ console.log("\nPart 2c: an accepted invite is not an invite");
   if (changeId !== null) {
     ageRecord(e.storage, `${CHANGE_PREFIX}${changeId}`, "proposedAt", APPROVAL_MIN_DWELL_MS + 1000);
     const self = await admin(e.env, "POST", `/config/changes/${changeId}/approve`, e.cookieA, {}, await freshStepUp(e.env, e.keyA, e.cookieA));
-    check(`A cannot approve it alone [got ${self.status}]`, self.status !== 200);
+    check(`A cannot approve it alone: refused by maker != checker [got ${self.status}]`, self.status === 400 && self.body.error === "cannot approve your own change");
   }
 }
 

@@ -1019,8 +1019,9 @@ export async function fetchDestFaults(scheduler: DurableObjectStub): Promise<Rec
   const j = (await r.json()) as Record<string, unknown>;
   const out: Record<string, unknown> = {};
   for (const [id, v] of Object.entries(typeof j === "object" && j !== null ? j : {}).slice(0, RUN_FAULT_DOWNPIPES_MAX)) {
-    const e = (typeof v === "object" && v !== null ? v : {}) as { at?: unknown; faults?: unknown; total?: unknown; overflow?: unknown; io?: unknown; strandedAborts?: unknown };
-    const entry = sanitiseDestFaults({ total: e.total, overflow: e.overflow, faults: e.faults, strandedAborts: e.strandedAborts }, e.io, clampInt(e.at, Number.MAX_SAFE_INTEGER) ?? 0);
+    const e = (typeof v === "object" && v !== null ? v : {}) as { at?: unknown; faults?: unknown; total?: unknown; overflow?: unknown; io?: unknown; strandedAborts?: unknown; anomalies?: unknown; redirectRegionHint?: unknown; overBoundBytes?: unknown; listPagesReached?: unknown; destinationId?: unknown };
+    // The anomaly half rides too: a wrong-region redirect or a cursorless listing otherwise leaves no trace in the pack.
+    const entry = sanitiseDestFaults({ total: e.total, overflow: e.overflow, faults: e.faults, strandedAborts: e.strandedAborts, anomalies: e.anomalies, redirectRegionHint: e.redirectRegionHint, overBoundBytes: e.overBoundBytes, listPagesReached: e.listPagesReached }, e.io, clampInt(e.at, Number.MAX_SAFE_INTEGER) ?? 0, e.destinationId);
     if (entry !== null) out[id.slice(0, 128)] = entry;
   }
   return out;

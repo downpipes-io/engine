@@ -204,7 +204,7 @@ export async function handleDiscovery(ctx: RouterCtx): Promise<Response | null> 
       } catch {
         // leave cfg null: the env token (if set) or tokenPresent:false answers, never a 500.
         // tokenPresent:false is a LIE when the token is merely UNREADABLE. "Discovery says no token but
-        // we set one" is this branch, and nothing in the pack can tell the two apart.
+        // one is set" is this branch, and nothing in the pack can tell the two apart.
         void bumpAdminCounter(scheduler, "degraded-read-discovery-config");
       }
       const envToken = typeof env.DISCOVERY_API_TOKEN === "string" ? env.DISCOVERY_API_TOKEN.trim() : "";

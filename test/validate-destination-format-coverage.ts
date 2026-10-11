@@ -575,10 +575,8 @@ async function main(): Promise<void> {
   for (const g of substituted) console.log(`  SUBSTITUTED: ${g.format} over ${g.sink} -- ${g.detail}`);
 
   // A PARSER-INDEPENDENT proof of what the s3 sink stores, so the verdicts above cannot be an artefact of the
-  // parser dispatch. This block is the one that FOUND the substitution: it used to assert that the object a
-  // splunk-hec destination is holding and the object an ndjson destination is holding were the SAME BYTES, and
-  // it passed, because putSiemBatchToS3 called shapeNdjson unconditionally. It now asserts the opposite, and
-  // asserts it AGAINST THE BYTES rather than against a structure: each stored object must equal, character for
+  // parser dispatch. It asserts that a splunk-hec destination and an ndjson destination hold DIFFERENT
+  // bytes, so a sink that shapes every format as ndjson fails here. It asserts AGAINST THE BYTES rather than against a structure: each stored object must equal, character for
   // character, what shapeForFormat produces for the format that was configured. A check that only asked
   // whether the object parsed, or whether the eight differed from one another, would pass against eight
   // wrong-but-distinct bodies; only the byte comparison pins which body belongs to which format.

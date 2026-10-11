@@ -12,7 +12,8 @@
 import { type AuthMethod, type CustomRole, type CustomRoleProposal, capabilitiesOfCustomRole, isConnId, isRole, isScimOffboardCaller, legacyRoleKey, type PendingRoleEntry, ROLE_CAPABILITIES, type Role, type RoleEntry, rolePendingKey, roleSubjectKey, validateCustomRole } from "../admin/identity.ts";
 import { checkOwnerRemoval, OwnerFloorRefusal, ownerRemovalRefusal, strandRefusal, wouldStrandDualControl } from "../admin/owner-floor.ts";
 import { recordAdminRefusal, recordAuthzRefusal, recordGovernanceRefusal } from "./sched-fault-ledger.ts";
-import { AuthError, CUSTOM_ROLE_PREFIX, type GroupRoleEntry, groupRoleKey, PASSKEY_USER_PREFIX, type SchedulerDOCtor } from "./scheduler-do-base.ts";
+import { deleteOidcGroupsForEmail } from "./oidc-groups-record.ts";
+import { AuthError, CUSTOM_ROLE_PREFIX, type GroupRoleEntry, groupRoleKey, OIDC_GROUPS_PREFIX, PASSKEY_USER_PREFIX, type SchedulerDOCtor, SIGNIN_CONTEXT_PREFIX } from "./scheduler-do-base.ts";
 import { nowMillisISO } from "./scheduler-helpers.ts";
 
 export function RbacMutationsMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
@@ -272,7 +273,11 @@ export function RbacMutationsMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
       //
       // `deleted` stays FALSE, because nothing was deleted: SCIM's removed-signal and the console's row both
       // read it and neither should be told a grant went away that never existed. The audit entry is the record.
+      //
+      // The group record of such a member is deleted here too. It names the address it was written for, so the
+      // delete finds it by address across the oidcgroups: prefix, whatever subject it is keyed by.
       if (!current) {
+        await deleteOidcGroupsForEmail(this.state.storage, OIDC_GROUPS_PREFIX, email);
         await this.bumpSessionEpoch(email);
         await this.appendAudit({
           actorSubject: caller ? caller.subject : null,
@@ -354,8 +359,10 @@ export function RbacMutationsMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
       // Sweeping outstanding invites at offboard time as well remains known, untracked debt.
       let deleted = false;
       if (boundCurrent !== undefined) {
-        deleted = (await this.state.storage.delete(roleSubjectKey(boundCurrent.subject))) || deleted;
+        deleted = (await Promise.all([roleSubjectKey(boundCurrent.subject), `${SIGNIN_CONTEXT_PREFIX}${boundCurrent.subject}`, `${OIDC_GROUPS_PREFIX}${boundCurrent.subject}`].map((k) => this.state.storage.delete(k)))).some(Boolean) || deleted;
       }
+      // A bound member's group record is found by address as well, so a record under an earlier subject goes too.
+      if ((await deleteOidcGroupsForEmail(this.state.storage, OIDC_GROUPS_PREFIX, email)) > 0) deleted = true;
       for (const k of this.pendingStorageKeysFor(email)) {
         deleted = (await this.state.storage.delete(k)) || deleted;
       }
@@ -364,10 +371,10 @@ export function RbacMutationsMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
       // so the trail reads "member was removed / dropped to no privilege" without a separate action
       // enum. Only recorded when a member actually existed and was removed.
       if (deleted) {
-        // OFFBOARDING TERMINATES SESSIONS (ASVS V7.4.2 / V7.4.1, the L1 must-fix). Removing the role does NOT
+        // OFFBOARDING TERMINATES SESSIONS (a must-fix). Removing the role does NOT
         // on its own invalidate a live session: per-request role re-resolution only DOWNGRADES the offboarded
         // member to viewer, leaving the inventory/audit/reports/roster/restore-dryrun read surface live for up
-        // to the 12h TTL (adversarially confirmed). Bump the revocation axes so the NEXT request from any of
+        // to the 12h TTL. Bump the revocation axes so the NEXT request from any of
         // their sessions fails closed at the verify-time gate: the per-email epoch counter, and (for a bound
         // member) the per-subject not-before instant, which also kills any oidc/saml session keyed on the
         // subject. Mirrors terminateUserSessions (7886/7891); the existing verify gate enforces both for free.

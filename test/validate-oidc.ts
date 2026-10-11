@@ -211,7 +211,7 @@ console.log("OIDC flow engine\n");
   }
   ok("guardedOidcFetch REFUSES a 3xx (SSRF guard: an internal-host redirect is never chased)", refusedRedirect);
   ok("guardedOidcFetch never fetches the redirect Location (internal host not chased)", internalFollowed === false && calls === 1);
-  // (b1) THE RESOLVE HALF (ASVS V1.3.6): a public-looking endpoint name whose DNS answer is internal passes
+  // (b1) THE RESOLVE HALF: a public-looking endpoint name whose DNS answer is internal passes
   // both literal screens, so only the resolve step can refuse it. Each internal answer is paired with the same
   // name answering a public address, which must still be fetched.
   for (const [dns, why] of [

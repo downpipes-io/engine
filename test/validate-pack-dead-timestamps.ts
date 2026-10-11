@@ -107,7 +107,7 @@ async function main(): Promise<void> {
     ok(`adminRouteErrors.lastAt drops text, 0, NaN, negative, fractional and unsafe values (${dropped} of ${drops.length})`, dropped === drops.length);
     let rrDropped = 0;
     for (const [, v] of drops) {
-      const rec = await fetchRecoveryStatus(stub({ "/recovery-refusals": { refusals: { total: 1, lastAt: v } } }));
+      const rec = await fetchRecoveryStatus(stub({ "/recovery-refusals": { refusals: { total: 1, lastAt: v } } }), {});
       if ((rec.recoveryRefusals as Record<string, unknown> | undefined)?.lastAt === undefined) rrDropped++;
     }
     ok(`recoveryRefusals.lastAt drops the same values (${rrDropped} of ${drops.length})`, rrDropped === drops.length);

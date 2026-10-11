@@ -43,7 +43,7 @@
 //
 // WHY DYNAMIC OVER A NESTED-QUANTIFIER PARSER, for the patterns that remain. The obvious static
 // rule -- flag a quantified group that itself contains a quantified sub-pattern -- was tried first
-// and rejected on this repo's own corpus: `/^[a-z]{2}(?:-[a-z]+)+-\d{1,2}$/` (src/dest/fault-log.ts:205,
+// and rejected on this repo's own corpus: `/^[a-z]{2}(?:-[a-z]+)+-\d{1,2}$/` (src/dest/fault-log.ts:207,
 // an AWS region code) nests `[a-z]+` inside a repeated group and is completely safe, because the
 // leading `-` in the outer group can never be produced by the inner `[a-z]+`, so every repetition
 // is forced apart and there is only ever one way to parse a given string. Telling that case apart
@@ -52,7 +52,7 @@
 // any ReDoS-specific package appears in package.json or package-lock.json). MEASURED rather than
 // argued: a naive "does the source contain two quantifiers, one nested in the other" rule flags
 // that exact AWS-region pattern and its siblings (today src/admin/run-fault-records.ts:98,
-// src/dest/fault-log.ts:209 and src/dest/sts.ts:56), none of which is unsafe by
+// src/dest/fault-log.ts:211 and src/dest/sts.ts:56), none of which is unsafe by
 // the definition above, so a naive static rule would have blocked or trained around a passing
 // check on day one. Executing the pattern against a real generated input and timing it answers the
 // only question that matters -- does this specific pattern's engine cost stay flat as the input
@@ -68,11 +68,23 @@
 // process ever got control back to notice. `child_process.spawnSync` with `timeout` and
 // `killSignal: "SIGKILL"` is the one mechanism that bounds a call this file cannot interrupt any
 // other way (the same reasoning scripts/run-gate-chain.mjs already applies one level up, to a
-// whole member rather than one regex). A child that is killed before printing PROBE-COMPLETE is
-// itself the finding: a linear-time pattern finishes the entire doubling schedule, up to
-// CEILING_N characters, in microseconds per step regardless of length (measured: a bounded pattern
-// stayed at 0.003ms from 10 to 320 filler characters), so failing to finish within
-// PROBE_TIMEOUT_MS is not ambiguous.
+// whole member rather than one regex). A linear-time pattern finishes the entire doubling schedule,
+// up to CEILING_N characters, in microseconds per step regardless of length (measured: a bounded
+// pattern stayed at 0.003ms from 10 to 320 filler characters).
+//
+// THE CAP FOLLOWS THE MACHINE, AND A KILL IS A FINDING ONLY ON A HEALTHY MACHINE. The cap also
+// covers the time Node takes to start the child. On a loaded machine that start alone can take
+// seconds. A fixed 3-second cap then killed safe patterns and reported them as ReDoS: on 29 Sep two
+// runs flagged src/admin/router-idp-web.ts, src/cron/siem-push-pass.ts, src/dest/s3.ts and
+// src/admin/secret-rotation.ts, and all four passed when the file ran alone. So this file measures
+// a BASELINE: the same child, spawned the same way, probing a trivially safe pattern. The cap is
+// capFor(baseline) = max(PROBE_FLOOR_MS, CAP_PER_BASELINE x baseline). A baseline over
+// BASELINE_HEALTHY_MS means the machine is too slow to measure. A kill then proves nothing, so the
+// sweep stops and exits 2 (CANNOT CHECK), never 1 and never 0. Load changes during a run, so a
+// start-of-run baseline goes stale. Each kill therefore re-measures the baseline at once. A healthy
+// re-measure earns one retry at the fresh cap. A second kill, again followed by a healthy
+// re-measure, is the finding. A planted `^(a+)+$` never finishes at any cap, so it is still caught.
+// test/validate-regex-safety-load.ts proves both halves with a child that is made slow to start.
 //
 // THE GENERATED INPUT is built from characters read out of the pattern itself
 // (candidateFillChars), not a fixed alphabet, because a filler character the pattern's own quantified
@@ -89,7 +101,8 @@
 // never needs to explore the other ways it could have been partitioned.
 //
 // BUDGET. Each candidate pattern is probed with up to 2 filler characters x 2 terminators = 4
-// child processes, each capped at PROBE_TIMEOUT_MS. MEASURED on this tree at the time this file was
+// child processes, each capped at capFor(baseline), plus one baseline child at the start of the run.
+// MEASURED on this tree at the time this file was
 // added: 92 of 467 distinct patterns carry an unbounded repetition and were probed; all 92 passed
 // in 25.5 seconds wall clock end to end (the whole file, including enumeration), and both planted
 // catastrophic patterns below (`^(a+)+$` and `(a|aa)+$`) were caught inside the first two doubling
@@ -120,7 +133,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type * as TS from "@typescript/typescript6";
-import { verdictReached, verdictSkipped } from "./lib/verdict-guard.ts";
+import { isEntryPoint, verdictReached, verdictSkipped } from "./lib/verdict-guard.ts";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(HERE, "..");
@@ -131,11 +144,21 @@ const SRC_DIR = path.join(ROOT, "src");
 // regardless of length, so this ceiling is never actually reached by the walltime budget on a
 // safe pattern -- it exists only to give the loop a defined end.
 const CEILING_N = 8192;
-// Per-probe hard wall-clock cap. A safe pattern's whole doubling schedule (11 steps, 8..8192)
-// finishes in low single-digit milliseconds; this is generous by three orders of magnitude and
-// still short enough that four probes per pattern across ~90 candidates finishes in well under a
-// minute.
-const PROBE_TIMEOUT_MS = 3000;
+// Per-probe hard wall-clock cap, lower bound. A safe pattern's whole doubling schedule (11 steps,
+// 8..8192) finishes in low single-digit milliseconds; this is generous by three orders of magnitude
+// and still short enough that four probes per pattern across ~90 candidates finishes in well under
+// a minute. The cap a probe gets is capFor(baseline), never less than this.
+export const PROBE_FLOOR_MS = 3000;
+// The cap grows with the measured baseline: a probe may take this many times as long as a trivially
+// safe pattern spawned the same way.
+export const CAP_PER_BASELINE = 4;
+// A baseline over this is a machine too slow to measure. It is a quarter of PROBE_CEILING_MS, so a
+// healthy baseline always gives a cap of at most the ceiling.
+export const BASELINE_HEALTHY_MS = 5000;
+// No probe and no baseline child ever runs longer than this.
+export const PROBE_CEILING_MS = CAP_PER_BASELINE * BASELINE_HEALTHY_MS;
+// The baseline pattern: no repetition at all, so its probe costs only the child's own start.
+const BASELINE_PATTERN = { source: "^a$", flags: "", fill: "a", term: "" };
 // A codepoint this repo's own character classes never accept (verified over every class literal
 // scanned below), used as a terminator to force a failed match at an anchor.
 const FOREIGN_TERMINATOR = "\u{1F4A5}";
@@ -414,52 +437,112 @@ function candidateFillChars(source: string): string[] {
 // One probe: spawn this same file with --probe, a fresh Node process per attempt so a pattern
 // that never returns from RegExp.test can only ever hang and be killed, never block this process.
 // ---------------------------------------------------------------------------------------------
-interface ProbeResult {
+export interface ProbeResult {
   completed: boolean;
   timedOut: boolean;
   signal: string | null;
   output: string;
+  elapsedMs: number;
 }
 
-function runProbe(source: string, flags: string, fill: string, term: string): ProbeResult {
+function runProbe(source: string, flags: string, fill: string, term: string, capMs: number): ProbeResult {
   const payload = Buffer.from(JSON.stringify({ source, flags, fill, term }), "utf8").toString("base64");
+  const t0 = performance.now();
   const r = spawnSync(process.execPath, [SELF, "--probe", payload], {
-    timeout: PROBE_TIMEOUT_MS,
+    timeout: capMs,
     killSignal: "SIGKILL",
     encoding: "utf8",
   });
+  const elapsedMs = performance.now() - t0;
   const output = r.stdout ?? "";
   return {
     completed: output.includes("PROBE-COMPLETE"),
     timedOut: r.error !== undefined && r.error !== null && (r.error as NodeJS.ErrnoException).code === "ETIMEDOUT",
     signal: r.signal ?? null,
     output,
+    elapsedMs,
   };
 }
 
-interface DynamicVerdict {
-  safe: boolean;
+// ---------------------------------------------------------------------------------------------
+// The baseline: how long this machine takes, right now, to spawn a probe child and run a trivially
+// safe pattern through the whole doubling schedule. See "THE CAP FOLLOWS THE MACHINE" above.
+// ---------------------------------------------------------------------------------------------
+export interface Baseline {
+  ms: number;
+  healthy: boolean;
+  detail: string;
+}
+
+export function measureBaseline(): Baseline {
+  const b = BASELINE_PATTERN;
+  const r = runProbe(b.source, b.flags, b.fill, b.term, PROBE_CEILING_MS);
+  const ms = Math.round(r.elapsedMs);
+  if (!r.completed) {
+    return {
+      ms,
+      healthy: false,
+      detail: `the baseline probe of /${b.source}/ did not finish within ${PROBE_CEILING_MS}ms (timedOut=${r.timedOut}, signal=${r.signal ?? "none"})`,
+    };
+  }
+  const healthy = ms <= BASELINE_HEALTHY_MS;
+  return {
+    ms,
+    healthy,
+    detail: healthy
+      ? `baseline ${ms}ms (healthy, limit ${BASELINE_HEALTHY_MS}ms)`
+      : `baseline ${ms}ms is over the ${BASELINE_HEALTHY_MS}ms limit`,
+  };
+}
+
+export function capFor(baseline: Baseline): number {
+  return Math.min(PROBE_CEILING_MS, Math.max(PROBE_FLOOR_MS, CAP_PER_BASELINE * baseline.ms));
+}
+
+// "linear" passes. "redos" and "probe-error" fail (exit 1). "cannot-check" is neither: the machine was
+// too slow to tell a slow start from a slow pattern, so the run exits 2.
+export interface DynamicVerdict {
+  kind: "linear" | "redos" | "probe-error" | "cannot-check";
   reason: string;
 }
 
-function dynamicallyLinear(source: string, flags: string): DynamicVerdict {
+// gradePattern probes one pattern. `state.baseline` is the most recent baseline; it is read for the cap
+// and replaced each time a kill makes this function re-measure it.
+export function gradePattern(source: string, flags: string, state: { baseline: Baseline }): DynamicVerdict {
   const fills = candidateFillChars(source).slice(0, 2);
   const terms = ["", FOREIGN_TERMINATOR];
+  const retried: string[] = [];
   for (const fill of fills) {
     for (const term of terms) {
-      const r = runProbe(source, flags, fill, term);
-      if (!r.completed) {
-        const lastStep = r.output.trim().split("\n").pop() ?? "(no output before the probe was killed)";
-        return {
-          safe: false,
-          reason:
-            `probe with fill=${JSON.stringify(fill)} terminator=${JSON.stringify(term)} did not finish within ` +
-            `${PROBE_TIMEOUT_MS}ms (timedOut=${r.timedOut}, signal=${r.signal ?? "none"}); last completed step: ${lastStep}`,
-        };
+      const at = `fill=${JSON.stringify(fill)} terminator=${JSON.stringify(term)}`;
+      const kills: string[] = [];
+      for (let attempt = 0; ; attempt++) {
+        const cap = capFor(state.baseline);
+        const r = runProbe(source, flags, fill, term, cap);
+        if (r.completed) {
+          if (kills.length > 0) retried.push(`probe with ${at} ${kills.join("; ")}, and the retry finished`);
+          break;
+        }
+        const lastStep = r.output.trim().split("\n").pop() || "(no output before the probe stopped)";
+        if (!r.timedOut) {
+          return {
+            kind: "probe-error",
+            reason: `probe with ${at} stopped without finishing and was not killed by the cap (signal=${r.signal ?? "none"}); last completed step: ${lastStep}`,
+          };
+        }
+        state.baseline = measureBaseline();
+        kills.push(`killed at the ${cap}ms cap (last completed step: ${lastStep}), then ${state.baseline.detail}`);
+        if (!state.baseline.healthy) {
+          return { kind: "cannot-check", reason: `probe with ${at}: ${kills.join("; ")}` };
+        }
+        if (attempt >= 1) {
+          return { kind: "redos", reason: `probe with ${at} did not finish on a healthy machine, twice: ${kills.join("; ")}` };
+        }
       }
     }
   }
-  return { safe: true, reason: "every probe finished the full doubling schedule without exceeding the cap" };
+  const after = retried.length > 0 ? `; a load kill was retried: ${retried.join("; ")}` : "";
+  return { kind: "linear", reason: `every probe finished the full doubling schedule within its cap (${state.baseline.detail})${after}` };
 }
 
 // allowlistCitations reads this file's own DYNAMIC_REGEX_ALLOWLIST block and returns every
@@ -505,6 +588,13 @@ async function main(): Promise<void> {
   let staticSafe = 0;
   let dynamicChecked = 0;
   const found: string[] = [];
+  // The run's first baseline. gradePattern replaces it each time a kill makes it re-measure.
+  const state = { baseline: measureBaseline() };
+  console.log(`start-of-run ${state.baseline.detail}; probe cap ${capFor(state.baseline)}ms`);
+  let cannotCheck: string | undefined = state.baseline.healthy
+    ? undefined
+    : `${state.baseline.detail}, before any pattern was probed`;
+  let notProbed = 0;
 
   for (const p of patterns) {
     const cite = p.sites.map((s) => `${s.file}:${s.line}`).join(", ");
@@ -513,10 +603,22 @@ async function main(): Promise<void> {
       ok(`${p.literal}  (bounded, no unbounded repetition; cannot backtrack catastrophically) [${cite}]`, true);
       continue;
     }
+    if (cannotCheck !== undefined) {
+      notProbed++;
+      continue;
+    }
     dynamicChecked++;
-    const verdict = dynamicallyLinear(p.source, p.flags);
-    ok(`${p.literal}  (dynamic: ${verdict.reason}) [${cite}]`, verdict.safe);
-    if (!verdict.safe) found.push(`${p.literal} at ${cite}: ${verdict.reason}`);
+    const verdict = gradePattern(p.source, p.flags, state);
+    if (verdict.kind === "cannot-check") {
+      // Not ok() and not a FAIL line: a kill on a machine too slow to measure is not a verdict either way.
+      cannotCheck = `${p.literal} at ${cite}: ${verdict.reason}`;
+      console.log(`  CANNOT CHECK ${p.literal}  (dynamic: ${verdict.reason}) [${cite}]`);
+      dynamicChecked--;
+      notProbed++;
+      continue;
+    }
+    ok(`${p.literal}  (dynamic: ${verdict.reason}) [${cite}]`, verdict.kind === "linear");
+    if (verdict.kind !== "linear") found.push(`${p.literal} at ${cite}: ${verdict.reason}`);
   }
 
   // Constructor call sites whose pattern (or flags) is not a static string literal: each must
@@ -569,9 +671,26 @@ async function main(): Promise<void> {
     console.log("UNREVIEWED DYNAMIC CONSTRUCTOR PATTERN(S):");
     for (const u of unreviewed) console.log(`  - ${u}`);
   }
-  console.log(failures === 0 ? "\nREGEX SAFETY SWEEP: PASS" : `\n${failures} FAILURE(S)`);
-  verdictReached(failures, checks);
-  if (failures > 0) process.exit(1);
+  if (cannotCheck !== undefined) {
+    console.log(
+      `\nCANNOT CHECK: machine too slow to measure. ${notProbed} pattern(s) with an unbounded repetition ` +
+        `were not graded. Cause: ${cannotCheck}`,
+    );
+  }
+  if (failures > 0 || cannotCheck === undefined) {
+    // A finding made on a healthy machine stands even when a later probe could not be graded.
+    console.log(failures === 0 ? "\nREGEX SAFETY SWEEP: PASS" : `\n${failures} FAILURE(S)`);
+    verdictReached(failures, checks);
+    // exitCode, not process.exit(): a piped stdout drains asynchronously, and process.exit() dropped the
+    // last 64 KiB of this sweep's output (measured: the verdict lines went missing when stdout was a pipe).
+    if (failures > 0) process.exitCode = 1;
+    return;
+  }
+  verdictSkipped(
+    `REFUSED, exit 2: CANNOT CHECK, the machine is too slow to measure, so ${notProbed} pattern(s) were not graded ` +
+      `and a probe kill cannot be told apart from a slow start`,
+  );
+  process.exitCode = 2;
 }
 
-await main();
+if (isEntryPoint(import.meta.url)) await main();

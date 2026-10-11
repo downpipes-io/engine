@@ -22,7 +22,6 @@
 //
 // Run with `node test/validate-framework-posture-claims.ts`.
 //
-//
 
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";

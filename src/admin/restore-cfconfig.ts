@@ -5,7 +5,12 @@ import type { ConfigWriteResult } from "../sources/cf-config-surfaces.ts";
 // stores {_truncated} / {_unavailable} sentinels). This stops a partial snapshot from ever being diffed
 // or written against live config.
 export function decodeConfigSnapshot(bytes: Uint8Array): unknown {
-  const data = JSON.parse(new TextDecoder().decode(bytes)) as unknown;
+  let data: unknown;
+  try {
+    data = JSON.parse(new TextDecoder().decode(bytes));
+  } catch {
+    throw new Error("snapshot incomplete: the snapshot record is not valid JSON");
+  }
   if (data !== null && typeof data === "object" && ("_truncated" in data || "_unavailable" in data)) {
     // A NOT-ATTEMPTED marker is a different fact from a read that was tried and refused, and it has a
     // different remedy (the discovery cache, and usually the discovery token, not a retry), so it gets its

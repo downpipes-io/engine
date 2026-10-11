@@ -16,7 +16,7 @@
 import { SchedulerDO } from "../src/sched/scheduler-do.ts";
 import { handleAdmin } from "../src/admin/router.ts";
 import type { AdminRuntime } from "../src/admin/router-helpers.ts";
-import { oidcTxnSetCookie } from "../src/admin/router-idp-web.ts";
+import { oidcTxnSetCookie, samlTxnSetCookie } from "../src/admin/router-idp-web.ts";
 import { SESSION_COOKIE_NAME } from "../src/admin/session.ts";
 import type { Env } from "../src/env.d.ts";
 import { MockStorage } from "./mock-storage.ts";
@@ -97,9 +97,8 @@ async function main(): Promise<void> {
     ok(`${label}: A still verifies (the revoke was a no-op)`, await verifies(call, a));
   }
 
-  // The OIDC / OAuth2 callback edge must forward the presented session cookie as priorToken
-  // whether or not the IdP sent the RFC 9207 iss parameter. GitHub and most OAuth2 providers never send iss,
-  // and the edge used to forward priorToken only inside the iss branch, so the DO never ended the prior session.
+  // The OIDC / OAuth2 callback edge forwards the presented session cookie as priorToken whether or not the IdP
+  // sent the RFC 9207 iss parameter. GitHub and most OAuth2 providers never send iss.
   console.log("\nthe OIDC / OAuth2 callback edge forwards the presented session with and without iss");
   {
     const forwarded: Record<string, unknown>[] = [];
@@ -126,6 +125,42 @@ async function main(): Promise<void> {
     const withIss = await callback("code=c1&state=s1&iss=https%3A%2F%2Fidp.example", true);
     ok("with iss the presented session is forwarded as priorToken", withIss?.priorToken === "tok-A" && withIss?.iss === "https://idp.example");
     const noCookie = await callback("code=c1&state=s1", false);
+    ok("negative control: a browser with no session cookie forwards no priorToken", noCookie !== undefined && !("priorToken" in noCookie));
+  }
+
+  // The SAML ACS edge forwards the presented session cookie as priorToken whether or not the request carries
+  // CF-Connecting-IP. The source IP is audit context only; the session swap does not depend on it.
+  console.log("\nthe SAML ACS edge forwards the presented session with and without CF-Connecting-IP");
+  {
+    const forwarded: Record<string, unknown>[] = [];
+    const stub = {
+      async fetch(input: string | Request, init?: RequestInit): Promise<Response> {
+        const path = new URL(typeof input === "string" ? input : input.url).pathname;
+        if (path === "/idp/saml/acs" && typeof init?.body === "string") forwarded.push(JSON.parse(init.body) as Record<string, unknown>);
+        return new Response(JSON.stringify({ allowed: true, ok: false, reason: "stub" }), { headers: { "content-type": "application/json" } });
+      },
+    };
+    const env = { CONSOLE_ORIGIN: "https://console.example", SCHEDULER: { idFromName: () => "id", get: () => stub } } as unknown as Env;
+    const runtime: AdminRuntime = { sealNow: () => {}, waitUntil: (p: Promise<unknown>) => void p.catch(() => {}) };
+    const bindCookie = samlTxnSetCookie("bind-1").split(";")[0] ?? "";
+    const acs = async (withSession: boolean, withIp: boolean): Promise<Record<string, unknown> | undefined> => {
+      const n0 = forwarded.length;
+      const headers: Record<string, string> = {
+        cookie: withSession ? `${bindCookie}; ${SESSION_COOKIE_NAME}=tok-A` : bindCookie,
+        "content-type": "application/x-www-form-urlencoded",
+      };
+      if (withIp) headers["CF-Connecting-IP"] = "203.0.113.9";
+      await handleAdmin(new Request("https://engine.example/admin/saml/acs/conn1", { method: "POST", headers, body: "SAMLResponse=UEhOaGJXdz0%3D&RelayState=rs-1" }), env, runtime);
+      return forwarded.length > n0 ? forwarded[forwarded.length - 1] : undefined;
+    };
+    const withIp = await acs(true, true);
+    ok("CONTROL: the ACS POST with CF-Connecting-IP reached the DO", withIp !== undefined);
+    ok("with CF-Connecting-IP the presented session is forwarded as priorToken", withIp?.priorToken === "tok-A" && withIp?.sourceIp === "203.0.113.9");
+    const noIp = await acs(true, false);
+    ok("CONTROL: the ACS POST without CF-Connecting-IP reached the DO", noIp !== undefined);
+    ok("without CF-Connecting-IP the presented session is still forwarded as priorToken", noIp?.priorToken === "tok-A");
+    ok("without CF-Connecting-IP no sourceIp field is forwarded", noIp !== undefined && !("sourceIp" in noIp));
+    const noCookie = await acs(false, true);
     ok("negative control: a browser with no session cookie forwards no priorToken", noCookie !== undefined && !("priorToken" in noCookie));
   }
 

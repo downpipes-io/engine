@@ -12,9 +12,9 @@
 // marker over a bound pair: it seals to break-glass alone, opens no run with the operational private, and
 // reports the stale pair (status, posture, support pack) until the break-glass-only switch deletes it.
 //
-// HOW IT WAS MISSED. validate-keys-install.ts counted the strict install's PUTs over a stub that refused every
-// DELETE and started from an estate with no operational pair, so it could not see what the install left bound.
-// No test sealed a run after a strict re-key.
+// WHY A SEPARATE TEST. validate-keys-install.ts counts the strict install's PUTs over a stub that refuses every
+// DELETE and starts from an estate with no operational pair, so it cannot see what the install leaves bound.
+// This test seals a run after a strict re-key.
 //
 // WHAT THIS DRIVES, all on the real code:
 //   1. installEngineSecrets over a STATEFUL Cloudflare secrets double (PUT binds, DELETE unbinds, a DELETE of an
@@ -465,8 +465,14 @@ async function main(): Promise<void> {
     ok("its remediation names the break-glass-only switch and its route", /break-glass only/.test(held?.remediation ?? "") && /POST \/admin\/keys\/break-glass-only/.test(held?.remediation ?? ""));
     const keys = (await buildKeysHealth(staleEnv)) as { operationalRetired?: { markerSet?: boolean; staleKeyHeld?: boolean } };
     ok("the support pack's keys section flags the stale key", keys.operationalRetired?.markerSet === true && keys.operationalRetired?.staleKeyHeld === true);
+    const opRet = (keys as { operationalRetired?: { state?: string; action?: string } }).operationalRetired;
+    ok("the support pack names the state stale-key-held and the remove action", opRet?.state === "stale-key-held" && /POST \/admin\/keys\/break-glass-only/.test(opRet?.action ?? ""));
 
     const cleanEnv = afterStrict as unknown as Env;
+    const appliedKeys = (await buildKeysHealth(cleanEnv)) as { operationalRetired?: { state?: string; action?: string } };
+    ok("after the strict re-key the support pack state is applied, with no remove action", appliedKeys.operationalRetired?.state === "applied" && appliedKeys.operationalRetired?.action === undefined);
+    const noMarkerKeys = (await buildKeysHealth(twoRecipient as unknown as Env)) as { operationalRetired?: { state?: string } };
+    ok("CONTROL: with no marker the support pack state is not-set", noMarkerKeys.operationalRetired?.state === "not-set");
     ok("after the strict re-key the check passes (the choice is fully applied)", postureFor(cleanEnv).get("operational-retired-key-held")?.status === "pass");
     const cleanKeys = (await buildKeysHealth(cleanEnv)) as { operationalRetired?: { markerSet?: boolean; staleKeyHeld?: boolean } };
     ok("...and the pack reports the marker with no stale key", cleanKeys.operationalRetired?.markerSet === true && cleanKeys.operationalRetired?.staleKeyHeld === false);

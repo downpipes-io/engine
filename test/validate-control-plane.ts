@@ -29,7 +29,10 @@ import {
   serialiseControlPlaneExport,
   signControlPlaneExport,
   verifyControlPlaneSignature,
+  verifyControlPlaneSignatureDetailed,
 } from "../src/admin/control-plane.ts";
+import { type SealedControlPlaneExport, verifySealedControlPlaneSignatureDetailed } from "../src/admin/control-plane-seal.ts";
+import fc from "fast-check";
 import type { DestinationCollection, StoredDestination } from "../src/sched/scheduler-do-base.ts";
 import { verdictReached } from "./lib/verdict-guard.ts";
 
@@ -75,8 +78,33 @@ function checkRecipientPinIsSignedOver(): void {
   ok("the pin carries fingerprints, never key material", !serialised.includes("BEGIN") && serialised.includes("dpr1:"));
 }
 
+// The no-custody walk refuses hostile nesting with an Error of its own, never a stack overflow, for both
+// array and object nesting, and still passes a realistic nesting depth.
+function checkExportNestingBound(): void {
+  const refusal = (v: unknown): string => {
+    try {
+      assertNoPlaintextSecretInExport(v);
+      return "accepted";
+    } catch (e) {
+      return e instanceof RangeError ? "stack overflow" : e instanceof Error && e.message.startsWith("no-custody violation") ? "refused" : "other";
+    }
+  };
+  let arrays: unknown = { token: "" };
+  let objects: unknown = { token: "" };
+  for (let i = 0; i < 10_000; i++) {
+    arrays = [arrays];
+    objects = { inner: objects };
+  }
+  ok("no-custody walk: 10000 levels of array nesting are refused with the no-custody error", refusal(arrays) === "refused");
+  ok("no-custody walk: 10000 levels of object nesting are refused with the no-custody error", refusal(objects) === "refused");
+  let shallow: unknown = { token: "" };
+  for (let i = 0; i < 8; i++) shallow = { inner: [shallow] };
+  ok("no-custody walk: eight levels of nesting are accepted", refusal(shallow) === "accepted");
+}
+
 async function main(): Promise<void> {
   checkRecipientPinIsSignedOver();
+  checkExportNestingBound();
   const { b64: signerB64 } = await makeSigner();
   const signer = await loadSigner(signerB64);
   const verifier = verifierFrom(signer);
@@ -179,6 +207,77 @@ async function main(): Promise<void> {
   const otherVerifier = verifierFrom(await loadSigner(otherB64));
   ok("sign/verify: the WRONG signer fails verification", !(await verifyControlPlaneSignature(exp, sig, otherVerifier)));
   ok("artefact key: timestamped + version-padded under the recovery prefix", controlPlaneArtefactKey(exp.configVersion, exp.exportedAt).startsWith("_RECOVERY/CONTROL-PLANE/"));
+
+  // ---- NON-CANONICAL EXPORTS (S2-16): the verifiers are TOTAL ------------------------------------------
+  // A parsed body or bucket artefact can carry a non-integer number or a lone surrogate. canonicalJSON refuses
+  // both, so such an export was never signed. The verifiers used to let that refusal escape as a throw (an
+  // uncaught 500 on the import routes, a stalled auto-heal with no refusal row); each must answer the
+  // altered-export verdict instead. The block uses only the verifiers' public surface, so on a tree without the
+  // fix it fails by assertion (a "threw" verdict), not by a missing import.
+  // canonicalBytesOrNull is this test's own oracle for "has a canonical form". It shares no code with the fix.
+  const canonicalBytesOrNull = (e: ControlPlaneExport): Uint8Array | null => {
+    try {
+      return serialiseControlPlaneExport(e);
+    } catch {
+      return null;
+    }
+  };
+  const floatExp = { ...exp, configVersion: 1.5 } as ControlPlaneExport;
+  const surrogateExp = { ...exp, exportedAt: "2026-01-01T00:00:00.000Z\ud800" } as ControlPlaneExport;
+  for (const [label, bad] of [["a non-integer number", floatExp], ["a lone surrogate", surrogateExp]] as const) {
+    let verdict = "threw";
+    try {
+      verdict = await verifyControlPlaneSignatureDetailed(bad, sig, verifier);
+    } catch {
+      verdict = "threw";
+    }
+    ok(`non-canonical (${label}): the detailed verifier answers ed25519-mismatch, it does not throw`, verdict === "ed25519-mismatch");
+    let bool: boolean | "threw" = "threw";
+    try {
+      bool = await verifyControlPlaneSignature(bad, sig, verifier);
+    } catch {
+      bool = "threw";
+    }
+    ok(`non-canonical (${label}): the boolean verifier answers false, it does not throw`, bool === false);
+    ok(`non-canonical (${label}): the fixture has no canonical form (the precondition of this check)`, canonicalBytesOrNull(bad) === null);
+  }
+  const sealedBad = { v: 1, exportedAt: exp.exportedAt, configVersion: 2.5, recipients: [], capsule: [{}], body: "x" } as unknown as SealedControlPlaneExport;
+  let sealedVerdict = "threw";
+  try {
+    sealedVerdict = await verifySealedControlPlaneSignatureDetailed(sealedBad, sig, verifier);
+  } catch {
+    sealedVerdict = "threw";
+  }
+  ok("non-canonical sealed artefact: the sealed detailed verifier answers ed25519-mismatch, it does not throw", sealedVerdict === "ed25519-mismatch");
+
+  // A seeded sweep: poison one value anywhere in a genuinely signed export. Neither verifier may throw, and
+  // neither may answer ok for an export whose canonical bytes changed.
+  {
+    const poison = fc.oneof(fc.double({ noInteger: true }), fc.constantFrom<unknown>(Number.NaN, 2 ** 53, "\udc00", "a\ud800b", { y: 0.5 }, [1.25]), fc.jsonValue({ maxDepth: 2 }));
+    const paths = fc.array(fc.constantFrom("configVersion", "exportedAt", "downpipes", "destinations", "roles", "priorAuditHead", "x", "0", "configContentHash"), { minLength: 1, maxLength: 2 });
+    let threw = 0;
+    let wrongOk = 0;
+    const N = 300;
+    for (const [path, value] of fc.sample(fc.tuple(paths, poison), { seed: 0x5eed36, numRuns: N })) {
+      const edited = JSON.parse(JSON.stringify(exp)) as Record<string, unknown>;
+      let cur: Record<string, unknown> = edited;
+      for (const seg of path.slice(0, -1)) {
+        if (cur[seg] === null || typeof cur[seg] !== "object") cur[seg] = {};
+        cur = cur[seg] as Record<string, unknown>;
+      }
+      cur[path[path.length - 1]!] = value;
+      try {
+        const v = await verifyControlPlaneSignatureDetailed(edited as unknown as ControlPlaneExport, sig, verifier);
+        const same = canonicalBytesOrNull(edited as unknown as ControlPlaneExport);
+        const unchanged = same !== null && Buffer.compare(Buffer.from(same), Buffer.from(serialiseControlPlaneExport(exp))) === 0;
+        if (v === "ok" && !unchanged) wrongOk++;
+      } catch {
+        threw++;
+      }
+    }
+    ok(`non-canonical sweep: ${N} poisoned exports, the verifier never throws`, threw === 0);
+    ok(`non-canonical sweep: ${N} poisoned exports, ok only when the canonical bytes are unchanged`, wrongOk === 0);
+  }
 
   // ---- SILENCE-KILLER: the latch blocks the silent re-bootstrap ----------------------------------
   const B = makeScheduler();

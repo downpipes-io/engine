@@ -24,8 +24,12 @@ ok("a dest-remove of a bogus id is auto-queued for a second owner (202)", propos
 const pid = ((await propose.json()) as { id?: string }).id ?? "";
 
 // A DISTINCT owner approves -> executeOwnerActionDO -> removeDest("no-such-destination") throws a plain Error.
+// Aged past the dwell floor first: an unaged approve is refused 429 too-soon before the apply runs, which would
+// satisfy a bare 4xx check without the plain Error ever being thrown.
+ctx.ageOwnerAction(pid);
 const approve = await doFetch("/owner-actions/approve", ownerCaller(OWNER2), { id: pid });
-ok("the plain-Error apply refusal is a clean 4xx, not a 5xx", approve.status >= 400 && approve.status < 500);
+const approveText = await approve.text();
+ok("the plain-Error apply refusal is a clean 400 carrying the apply's own reason (no such destination), not a 5xx and not the dwell floor", approve.status === 400 && /no such destination/.test(approveText));
 ok("the plain Error did NOT escape blockConcurrencyWhile (guardThrows()===0 -> no DO reset, so 4xx not 500)", ctx.sched.guardThrows() === 0);
 
 // The record must be untouched (still pending, single-use preserved): a refused apply writes nothing.

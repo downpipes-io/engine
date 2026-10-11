@@ -19,10 +19,11 @@ import type { Env } from "../env.d.ts";
 import type { Signer } from "../format/writer.ts";
 import { loadSigner, verifierFrom } from "../keys-env.ts";
 import { encodeVerifier } from "../sched/rekey-handover.ts";
-import { type HandoverOutcome, handOverRunlog, type PrecheckRefusal, precheckRunlog } from "../seal/runlog-handover.ts";
+import { type HandoverOutcome, handOverRunlog, type PrecheckAnomaly, type PrecheckRefusal, precheckRunlog } from "../seal/runlog-handover.ts";
 import type { HybridVerifier } from "../crypto/sign.ts";
 import { loadConfigWrapKey } from "./config-secret.ts";
 import { doURL } from "./router-helpers.ts";
+import { reportRunlogAnomaly } from "./integrity-fault-report.ts";
 import { noteSiteFault } from "./site-faults.ts";
 
 // A destination the hand-over covers: its id ("" = the env-backed destination of an estate with no console
@@ -64,12 +65,16 @@ export async function listHandoverTargets(env: Env, scheduler: DurableObjectStub
   return out;
 }
 
-// precheckTargets verifies every target's RUNLOG under the old key and returns each failure.
-export async function precheckTargets(targets: readonly HandoverTarget[], oldVerifier: HybridVerifier): Promise<PrecheckFailure[]> {
+// precheckTargets verifies every target's RUNLOG under the old key and returns each failure. A chain-anomaly
+// refusal's forensic row is pushed to anomalies, when given, for the support pack.
+export async function precheckTargets(targets: readonly HandoverTarget[], oldVerifier: HybridVerifier, anomalies?: PrecheckAnomaly[]): Promise<PrecheckFailure[]> {
   const failed: PrecheckFailure[] = [];
   for (const t of targets) {
     const r = t.dest ? await precheckRunlog(t.dest, oldVerifier) : ({ ok: false, reason: "unreadable" } as const);
-    if (!r.ok) failed.push({ id: t.id, label: t.label, reason: r.reason });
+    if (!r.ok) {
+      failed.push({ id: t.id, label: t.label, reason: r.reason });
+      if ("anomaly" in r && r.anomaly !== undefined) anomalies?.push(r.anomaly);
+    }
   }
   return failed;
 }
@@ -115,7 +120,11 @@ export async function beginRekeyRunlogHandover(env: Env, scheduler: DurableObjec
     return { ok: false, status: 409, message: why, failed: [] };
   }
   const targets = await listHandoverTargets(env, scheduler);
-  const failed = await precheckTargets(targets, oldVerifier);
+  const anomalies: PrecheckAnomaly[] = [];
+  const failed = await precheckTargets(targets, oldVerifier, anomalies);
+  // A chain anomaly is recorded where the seal path records one (integrityFaults, per downpipe), so a pack taken
+  // after this refusal names it. The refusal below does not depend on the post.
+  for (const a of anomalies) await reportRunlogAnomaly(scheduler, a.downpipeId, a.row);
   if (failed.length > 0) {
     await scheduler.fetch(doURL("/rekey-handover/abort"), { method: "POST" });
     const names = failed.map((f) => `${f.label}${f.id && f.id !== f.label ? ` (${f.id})` : ""}: ${f.reason}`).join("; ");

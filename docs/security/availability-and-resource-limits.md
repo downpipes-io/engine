@@ -156,7 +156,7 @@ The R2 destination (`src/dest/r2.ts` `putStream`, lines 132-148; the assertion a
 `size > MAX_STREAM_SEGMENT_BYTES`. The S3-compatible destination asserts the same limit
 (`src/dest/s3.ts` lines 537-543). From engine 0.3.7 the Azure Blob destination asserts it too
 (`src/dest/azure-blob.ts` lines 407-410), before it stages a block. The S3-compatible destination uploads a segment whose sealed size is above 32 MiB, or is not known, as a SigV4
-multipart upload in 32 MiB parts (`src/dest/s3-multipart.ts` lines 15 and 24; see `docs/SCALE-AND-ENTERPRISE.md`).
+multipart upload in 32 MiB parts (`src/dest/s3-multipart.ts` lines 15 and 24).
 The R2 binding path writes each segment in one PUT. `sealRecordToDest` (`src/seal/record.ts`
 lines 88-99) sends a value above the limit to the chained multi-segment path.
 

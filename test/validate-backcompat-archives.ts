@@ -34,7 +34,6 @@
 //
 // Run: node test/validate-backcompat-archives.ts
 //
-//
 
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";

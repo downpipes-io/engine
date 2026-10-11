@@ -411,7 +411,9 @@ function describeTarget(t: AuditTarget): string {
       if (t.op === "handover-refused") return `re-key stopped: RUNLOG did not verify under the current signer${ids}`;
       if (t.op === "held-key-discarded") return "re-key RUNLOG hand-over complete: the held old public key was discarded";
       if (t.op === "relink") return `RUNLOG chain of downpipe ${t.downpipeId ?? "?"} relinked by an Owner (acknowledged ${t.state ?? "?"}${t.indexA !== undefined ? ` at index ${t.indexA}${t.indexB !== undefined ? `/${t.indexB}` : ""}` : ""}, ${t.chainEntries ?? "?"} entries, digest ${t.digest ?? "?"})${ids}`;
+      if (t.op === "relink-refused") return `RUNLOG chain relink of downpipe ${t.downpipeId ?? "?"} refused (${t.reasons?.join(", ") ?? "?"}${t.state ? `; anomaly ${t.state}` : ""})${ids}`;
       if (t.op === "floor-reset") return `RUNLOG floor reset by an Owner from ${t.lastGoodIndex ?? "none"} to ${t.maxIndex ?? 0} (${t.state ?? "?"})${ids}`;
+      if (t.op === "resume") return `RUNLOG .sig restored from the pending signature by an Owner (digest ${t.digest ?? "?"}, max index ${t.maxIndex ?? "?"})${ids}`;
       if (t.op === "resign") return `RUNLOG re-signed by an Owner (${t.state ?? "?"}, digest ${t.digest ?? "?"}, max index ${t.maxIndex ?? "?"}, last good index ${t.lastGoodIndex ?? "none"})${ids}`;
       return `re-key RUNLOG hand-over (${t.resigned ?? 0} re-signed, ${t.pending ?? 0} pending)${ids}`;
     }
@@ -437,7 +439,7 @@ function describeTarget(t: AuditTarget): string {
         const promo = t.fromDefaultId !== t.toDefaultId ? ` (default ${t.fromDefaultId ?? "(none)"} -> ${t.toDefaultId ?? "(none)"})` : "";
         return `destination removed ${t.id ?? "(?)"}${promo}${forced}`;
       }
-      if (t.rejectReason) return `destination set REJECTED (${t.rejectReason})`;
+      if (t.refusal || t.rejectReason) return t.refusal ? `destination ${t.op === "clear" ? "clear" : "save"} REFUSED (${t.refusal}${t.probeClass ? `; probe ${t.probeClass}${t.probeStatus ? ` HTTP ${t.probeStatus}` : ""}` : ""})` : `destination set REJECTED (${t.rejectReason})`;
       if (t.op === "default") return `default destination -> ${t.toDefaultId ?? t.id ?? "(?)"}`;
       if (t.op === "clear") return t.fromDefaultId !== t.toDefaultId ? `destination cleared (default ${t.fromDefaultId ?? "(none)"} -> ${t.toDefaultId ?? "(none)"})` : "destination cleared";
       return t.id ? `destination set ${t.id}` : "destination set";

@@ -9,6 +9,7 @@ import { type AuthMethod, passkeySubject, type Role } from "../admin/identity.ts
 import { CHALLENGE_TTL_MS, INVITE_TTL_MS, type PasskeyAssertionCeremony, type PasskeyChallenge, type PasskeyCred, type PasskeyInvite, randomInviteToken } from "../admin/passkey.ts";
 import { fakeRecoveryRecord, generateRecoveryCodes, isRecoveryRecordShaped, isRecoverySigningKeyUsable, normaliseCode, RECOVERY_SIGNING_KEY_MIN_BYTES, type RecoveryBreakGlassReason, type RecoveryRecord, recoveryKeyProof, remainingCount, verifyCode } from "../admin/recovery.ts";
 import { RECOVERY_CODES_LOW_THRESHOLD } from "../admin/recovery-constants.ts";
+import { ipSourceGroup } from "../admin/sign-in-context.ts";
 import { rosterRefusesEnrolment } from "../admin/signin-factors.ts";
 import { b64urlDecode, b64urlEncode } from "../crypto/bytes.ts";
 import { log } from "../log.ts";
@@ -362,7 +363,7 @@ export function RecoveryMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
       // are loud. A malformed email still consumes a per-IP token (so spraying random emails from one host is
       // still throttled).
       const emailKey = email ? `email:${email}` : "email:_invalid";
-      const ipKey = ip ? `ip:${ip}` : null;
+      const ipKey = ip ? `ip:${ipSourceGroup(ip)}` : null;
       const rateOk = await this.recoveryRateAllow(emailKey, ipKey);
       if (!rateOk) {
         // NO ACTOR ON A THROTTLED ATTEMPT. This attempt is refused before a single byte has been compared
@@ -446,12 +447,12 @@ export function RecoveryMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
       const role = this.effectiveRole(mine, Date.now());
       // Mint a NORMAL session token under the SESSION signing key (the same in-DO key + signSession the passkey
       // login uses, deliberately NOT the recovery key that verified the code above), so a recovered
-      // session is indistinguishable from a passkey session downstream and carries its own TTL. It is a
-      // passkey-class session: method "passkey", subject passkeySubject(email). It carries the email's CURRENT
-      // session epoch, so a recovery sign-in yields a valid (non-revoked) session.
+      // session authorises as a passkey session downstream and carries its own TTL. It is a passkey-class
+      // session (method "passkey", subject passkeySubject(email)) marked recovered, so step-up asks it for a fresh
+      // passkey assertion (stepUpCheck). It carries the email's CURRENT session epoch (a valid, non-revoked session).
       // A recovery sign-in from a browser that already holds a session ends that session first.
       await this.revokePresentedSession(body.priorToken, Date.now());
-      const token = await this.mintSessionRecorded(await this.sessionSigningKey(), { method: "passkey", email, subject: passkeySubject(email), epoch: await this.getSessionEpoch(email) }, Date.now(), { sourceIp: typeof body.ip === "string" ? body.ip : null, userAgent: typeof body.userAgent === "string" ? body.userAgent : null });
+      const token = await this.mintSessionRecorded(await this.sessionSigningKey(), { method: "passkey", email, subject: passkeySubject(email), recovered: true, epoch: await this.getSessionEpoch(email) }, Date.now(), { sourceIp: typeof body.ip === "string" ? body.ip : null, userAgent: typeof body.userAgent === "string" ? body.userAgent : null });
       const remaining = remainingCount(record);
       // AUDIT the successful recovery and signal recovery-code-used so a successful break-glass sign-in is
       // loud (the router fires the alert).

@@ -597,7 +597,7 @@ export async function finaliseRun(deps: SliceDeps, cp: RunCheckpoint, master: Ui
     deps.signer,
     { index: cp.runlogIndex, runId: cp.runId, downpipeId: cp.downpipeId, time: nowIso(), recordCount: cp.counts.records, prevRunId: localPrev, status: "active" },
     lock,
-    { relinkLocalPrev: true },
+    { relinkLocalPrev: true, budget: deps.budget },
   );
   return { rootWritten: true, shards: shards.length };
 }
@@ -640,6 +640,9 @@ export function coarseRunError(m: string): string {
   }
   // The engine REFUSED to modify a RUNLOG it could not verify (pipeline.ts RunlogIntegrityError). No retry
   // clears it, so it must never read as contention: an Owner reviews it on the attended route.
+  // An append refused because its destination already holds the run's index (pipeline.ts reason "index-held").
+  // The run failed once and the next cron pass moves the counter, so this is named apart from an Owner review.
+  if (/^RUNLOG integrity: index \d+ is already held/.test(m)) return "runlog integrity refused: index-held (this destination already holds the run's index; the counter advances on the next pass)";
   if (/^RUNLOG integrity: /.test(m)) return "runlog integrity refused (an Owner must review the destination RUNLOG)";
   if (/RUNLOG write contended|RUNLOG/.test(m)) return "runlog write contended";
   // A finalise that REFUSED to sign a truncated archive (the completeness guard: fewer shards

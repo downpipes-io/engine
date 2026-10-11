@@ -560,7 +560,7 @@ const SURFACE_LABEL: Record<string, string> = {
   "bot-management": "Bot Management",
   "cloud-connector-rules": "Cloud Connector rules",
   "google-tag-gateway": "Google Tag Gateway config",
-  "hyperdrive-configs": "Hyperdrive configs", vectorize: "Vectorize indexes (config)", "r2-bucket-config": "R2 bucket list (names and creation dates, not bucket settings)", "durable-objects-namespaces": "Durable Objects namespaces",
+  "hyperdrive-configs": "Hyperdrive configs", vectorize: "Vectorize indexes (config)", "r2-bucket-config": "R2 bucket settings (CORS, lifecycle, lock, custom domains, public access, Sippy, notifications; captured, not restorable)", "durable-objects-namespaces": "Durable Objects namespaces",
 };
 
 export interface CfConfigSurfaceMeta {

@@ -1,0 +1,14 @@
+{
+  "$schema": "../../node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "testRunner": "command",
+  "commandRunner": { "command": "node test/validate-integrity-faults.ts && node test/validate-availability-evidence.ts && node test/validate-control-plane-seal.ts && node test/validate-support-round4.ts && node test/validate-cap-sibling-honesty.ts && node test/validate-format-root-evidence.ts && node test/validate-cov-admin-router-identity.ts && node test/validate-deadvocab-update-channel.ts && node test/validate-restore.ts && node test/validate-keys-add-operational.ts && node test/validate-keys-config-recovery.ts" },
+  "mutate": ["src/crypto/sign.ts:89-126", "src/crypto/capsule.ts:60-92", "src/crypto/capsule.ts:118-149", "src/crypto/kem.ts:49-74"],
+  "ignorePatterns": [".worktrees", ".stryker-tmp", "coverage", "*.log", "test/mutation-pilot/reports"],
+  "reporters": ["clear-text", "json"],
+  "jsonReporter": { "fileName": "test/mutation-pilot/reports/crypto-wide.json" },
+  "thresholds": { "high": 95, "low": 90, "break": null },
+  "timeoutMS": 90000,
+  "concurrency": 3,
+  "tempDirName": ".stryker-tmp-cwide",
+  "cleanTempDir": true
+}

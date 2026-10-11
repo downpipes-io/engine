@@ -85,8 +85,10 @@ function ioIsQuiet(io: unknown): boolean {
  * @param scheduler - the scheduler DO stub.
  * @param downpipeId - the customer's own downpipe id, for attribution.
  * @param dest - the destination this crawl wrote to, when one was built (absent on a pre-destination fault).
+ * @param destinationId - the id of that destination, when the run resolved one; it names the destination on the
+ *   pack's destFaults entry.
  */
-export async function reportRunFaults(scheduler: DurableObjectStub, downpipeId: string, dest?: Destination): Promise<void> {
+export async function reportRunFaults(scheduler: DurableObjectStub, downpipeId: string, dest?: Destination, destinationId?: string): Promise<void> {
   // The FORMAT + CRYPTO evidence of the same crawl (the verify-at-seal pass, the writer's zero-byte default,
   // a key-provisioning fault, a streaming abort). It drains and posts on the SAME run boundary, and is
   // deliberately its own post: a source fault and an integrity fault are different aggregates with different
@@ -114,7 +116,7 @@ export async function reportRunFaults(scheduler: DurableObjectStub, downpipeId: 
         body: JSON.stringify({
           id: downpipeId,
           ...(sourceEvidence ? { source } : {}),
-          ...(destEvidence ? { dest: { ...(faults !== undefined ? { faults } : {}), ...(io !== undefined ? { io } : {}) } } : {}),
+          ...(destEvidence ? { dest: { ...(faults !== undefined ? { faults } : {}), ...(io !== undefined ? { io } : {}), ...(destinationId !== undefined ? { destinationId } : {}) } } : {}),
         }),
         headers: { "content-type": "application/json" },
       }),

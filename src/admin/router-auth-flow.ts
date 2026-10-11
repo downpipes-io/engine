@@ -153,8 +153,8 @@ export async function handleRegenerate(req: Request, env: Env, runtime?: AdminRu
   }
   // Step-up (ASVS V7.5.1): regenerating recovery codes is a sensitive action, so require a FRESH re-auth proof
   // (or a recent authentication). The bare token is exempt inside requireStepUp and an Access caller is judged
-  // on the assertion's issued-at; a recovery sign-in is itself recent-enough (freshness) so a break-glass
-  // operator is never locked out of this.
+  // on the assertion's issued-at. A recovered session does not pass on recency: it presents a fresh passkey
+  // assertion, and enrolling a replacement passkey (open to it) issues a session that can, so no dead end.
   const stepUp = await requireStepUp(req, scheduler, verdict, runtime);
   if (stepUp) return stepUp;
   // The source IP for the recovery-codes-generated audit event, forwarded in the body (the recovery-recover
@@ -206,7 +206,7 @@ export async function handleRegenerate(req: Request, env: Env, runtime?: AdminRu
 // the confirm to the caller's OWN verified email, so a caller can only promote their own staged set. IT IS
 // NOT A SENSITIVE MUTATION IN THE WAY REGENERATE IS: it does not mint anything and does not decide to
 // invalidate a working set on the operator's say-so alone -- the operator already completed a step-up-gated
-// enrolment ceremony (or the freshness of their recovery sign-in) to reach this point, and confirm only
+// enrolment ceremony (or their recovery sign-in) to reach this point, and confirm only
 // finalises what that ceremony already produced. No additional step-up is required. CSRF: still a MUTATING
 // cookie-borne request, so the same strict-Origin check applies. A confirm for an email with nothing staged
 // (already confirmed, none was ever staged, or a later staged mint superseded it) is a harmless 200
@@ -395,13 +395,13 @@ async function resolveRegisterAuth(
   // is omitted rather than forwarded: an absent address must stay absent, because an engine that genuinely
   // cannot capture one is the fault this evidence is for.
   if (sourceIp !== null && sourceIp.length > 0) authExtras.sourceIp = sourceIp;
-  // Step-up (ASVS V7.5.1): SELF-ADD of a passkey (an AUTHENTICATED cookie session adding a NEW credential)
+  // Step-up: SELF-ADD of a passkey (an AUTHENTICATED cookie session adding a NEW credential)
   // requires a FRESH re-auth, so a stale ambient session cannot enrol an attacker-controlled key (account
   // takeover). Bootstrap (token) and invite (unauthenticated, no cookie session) are NOT gated here, and
   // register/begin adds nothing so it is not gated; a recent login (freshness) satisfies it without a prompt.
-  // The "enrol-passkey" purpose is what lets a FRESH OIDC/SAML session pass here (ASVS V6.8.4): an SSO member
+  // The "enrol-passkey" purpose is what lets a FRESH OIDC/SAML session pass here: an SSO member
   // enrolling their first passkey has no passkey to assert with, and this is the only route that says so. An
-  // Access self-add is gated the same way and judged on the assertion's issued-at (ASVS V7.5.1).
+  // Access self-add is gated the same way and judged on the assertion's issued-at.
   if (sub === "register/finish" && verdict.ok && verdict.method !== "token") {
     const stepUp = await requireStepUp(req, scheduler, verdict, runtime, "enrol-passkey");
     if (stepUp) return { authExtras, stepUp };

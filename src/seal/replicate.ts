@@ -5,7 +5,9 @@
 // objects (run/<runId>/...) are copied, and the run's RUNLOG entry is appended to that destination's
 // OWN RUNLOG with a re-linked, index-ordered per-downpipe chain (relinkLocalPrev), so a destination
 // added mid-life, or back-filled out of global order, keeps a valid, fork-free chain rather than a
-// dangling pointer.
+// dangling pointer. The recovery bundle (_RECOVERY/<version>/..., format/bundle.ts addBundle) is copied
+// alongside, as bytes, from wherever the downpipe's most recent seal actually ran (replicateRecoveryBundle),
+// so a destination that has only ever received copies is still a self-sufficient, verifiable archive.
 //
 // Record bytes live in content-addressed seg/ objects OUTSIDE the
 // run/<runId>/ tree (see format/writer.ts segmentObjectKey), so copying only the run-tree leaves a
@@ -45,6 +47,8 @@ import { loadConfigWrapKey } from "../admin/config-secret.ts";
 import { buildDestination, type DestResolutionRefusal, resolveDestination } from "../dest/factory.ts";
 import type { Destination } from "../dest/types.ts";
 import type { Env } from "../env.d.ts";
+import { constantTimeEqual } from "../crypto/bytes.ts";
+import { BUNDLE_FILE_NAMES, BUNDLE_PREFIX } from "../format/bundle.ts";
 import { unframeSeg } from "../format/container.ts";
 import { attestKeyless, type ObjectStore } from "../format/reader.ts";
 import { parseRunlog, type RunlogEntry, type Signer } from "../format/writer.ts";
@@ -73,13 +77,14 @@ interface ReplPassTally {
   stateWriteFailures: number;
   verifySampleShortfall: number;
   segmentVanishDeferrals: number;
+  bundleCopyFailures: number;
 }
-let passTally: ReplPassTally = { deferredDownpipes: 0, stateWriteFailures: 0, verifySampleShortfall: 0, segmentVanishDeferrals: 0 };
+let passTally: ReplPassTally = { deferredDownpipes: 0, stateWriteFailures: 0, verifySampleShortfall: 0, segmentVanishDeferrals: 0, bundleCopyFailures: 0 };
 
 /** resetReplicationPassTally clears the per-pass counters. Called at the start of every pass; exported so a
  * validator can isolate a case. */
 export function resetReplicationPassTally(): void {
-  passTally = { deferredDownpipes: 0, stateWriteFailures: 0, verifySampleShortfall: 0, segmentVanishDeferrals: 0 };
+  passTally = { deferredDownpipes: 0, stateWriteFailures: 0, verifySampleShortfall: 0, segmentVanishDeferrals: 0, bundleCopyFailures: 0 };
 }
 
 /** replicationPassTally is the read-only peek into the replication pass counters. Counts only.
@@ -191,6 +196,17 @@ export function highestContiguousRun(runs: RunOrigin[], placed: Set<string>): Ru
     held = run;
   }
   return held;
+}
+
+// lastOwnSealIndex returns the highest index among `runs` that this destination itself SEALED directly
+// (run.origin === destinationId), or undefined when it never has. A destination's own bundle (the one its
+// own seal path, format/bundle.ts addBundle, last wrote there) is at least this fresh; it is the rule that
+// keeps a newer bundle from regressing to an older signer.pub after a rotation (see replicateRecoveryBundle).
+// `runs` MUST be sorted ascending by index. Pure; exported for the validator.
+export function lastOwnSealIndex(runs: RunOrigin[], destinationId: string): number | undefined {
+  let last: number | undefined;
+  for (const run of runs) if (run.origin === destinationId) last = run.index;
+  return last;
 }
 
 // replicateBacklog brings EVERY configured destination up to date on EVERY run it is missing, not just
@@ -462,6 +478,19 @@ async function processTarget(ctx: ReplicaContext, targetId: string, quota: numbe
         // unreadable, or the run absent from it) rather than the generic "unreachable", so support is pointed
         // at the right destination.
         strand(run, src.cause, src.originHolds);
+      }
+    }
+    // A destination that holds runs must also hold a recovery bundle that verifies (see
+    // replicateRecoveryBundle for the freshness rule). Fail-open and isolated from the run-copy outcome
+    // above: a bundle-copy fault is counted and logged but never thrown into the catch below, so it can
+    // never fail or undo the run copies this call already made (copiedRuns, placed are untouched by it).
+    if (budget?.shouldYield() !== true) {
+      try {
+        const outcome = await replicateRecoveryBundle(ctx.getDest, targetId, targetDest, runs, budget);
+        if (outcome === "copied") log("info", `replicate ${config.id} -> ${targetId}: recovery bundle copied`);
+      } catch (e) {
+        passTally.bundleCopyFailures++; // site-fault-waiver: src/seal/replicate.ts:processTarget:catch:2 -- counted in bundleCopyFailures, which the pass posts in its replication-pass seal fault, and logged at error
+        log("error", `replicate ${config.id} -> ${targetId}: recovery bundle copy failed (retry next tick): ${e instanceof Error ? e.message : String(e)}`);
       }
     }
     // held = the highest CONTIGUOUS run the destination holds (every run up to it present, no gap
@@ -780,7 +809,13 @@ export async function mirrorRunToReplica(primary: Destination, replica: Destinat
     const r = await primary.get(RUNLOG_KEY);
     return r ? parseRunlog(r.body).some((e) => e.runId === entry.runId) : false;
   };
-  const seg = opts.syncSegments === false ? { copied: 0, complete: true, newly: [] as string[] } : await syncSegmentStore(primary, replica, opts.budget, isRunLive);
+  // REPL_SEGMENT_SYNC_SHARE: the sync gets at most half of what is left of the shared pass window, not all
+  // of it, so a downpipe whose destination is missing the whole seg/ store cannot spend the window the
+  // round-robin needs to reach the downpipes after it (see the constant's comment). shareWindow shares the
+  // real subrequest tally (the platform cap is still honoured) with its own capped wall share; an
+  // incomplete sync still leaves segments already copied in place, so the next call resumes past them.
+  const segBudget = opts.budget?.shareWindow(REPL_SEGMENT_SYNC_SHARE);
+  const seg = opts.syncSegments === false ? { copied: 0, complete: true, newly: [] as string[] } : await syncSegmentStore(primary, replica, segBudget, isRunLive);
   // The data sync did not finish this tick: the bytes are NOT all present, so do NOT copy the run-tree,
   // verify or mark held. The segments already copied stay (the next sync skips them), so the next tick
   // resumes the sync, and only once the store is fully synced are the run-tree and the done-marker written.
@@ -826,8 +861,84 @@ export async function mirrorRunToReplica(primary: Destination, replica: Destinat
   // "lock-free mirror racing the lock-holding seal" the appendRunlog relink note calls out). The lock is
   // best-effort: a held lock falls through to the lock-free CAS, and sustained contention throws
   // RunlogContendedError, which the per-target catch records down and retries next tick (idempotent).
-  await appendRunlog(replica, signer, entry, opts.lock, { relinkLocalPrev: true });
+  await appendRunlog(replica, signer, entry, opts.lock, { relinkLocalPrev: true, ...(opts.budget ? { budget: opts.budget } : {}) });
   return { copied, alreadyDone: false };
+}
+
+// syncRecoveryBundle copies the recovery bundle (_RECOVERY/<version>/..., format/bundle.ts addBundle) from
+// `origin` to `target` AS BYTES. Only the seal path writes the bundle, so a destination that has only ever
+// received replicated runs (never sealed to directly) has none, and the reader's --signer-fingerprint path
+// and `verify --check-bundle` fail there until this runs.
+//
+// NEVER RE-SIGNED. SHA384SUMS.sig is a detached signature over SHA384SUMS, which in turn lists the hash of
+// every other bundle file; re-deriving any of it here would need the signer's private key, which
+// replication does not hold (and must not: it is keyless by design, see the file header), and would in any
+// case produce bytes the recoverer has no way to tell apart from a forged bundle. The only safe move is to
+// copy the origin's own already-signed objects unchanged.
+//
+// EQUALITY is decided by SHA384SUMS bytes alone, not the signature: FORMAT.md, RECOVER.md and signer.pub are
+// deterministic for a given signer, so two addBundle calls over the same signer produce an identical
+// SHA384SUMS, but hybridSign is not required to be deterministic, so SHA384SUMS.sig can differ byte-for-byte
+// between two equally-valid signatures over that same content. Comparing the signature would copy on every
+// tick forever even once the target is current; comparing SHA384SUMS is the cheap, sufficient check (one
+// get on each side) and is exact because addBundle writes SHA384SUMS from exactly those file bytes.
+//
+// Returns "copied" (bundle written or rewritten), "equal" (target already current, nothing written), or
+// "absent" (the origin itself has no bundle; fail-open, nothing to copy from). Caller-threaded budget is
+// checked before each object touched, like the run-tree copy, and an out-of-budget return leaves the
+// target exactly where it was (safe to resume next tick: every write here is idempotent).
+export async function syncRecoveryBundle(origin: Destination, target: Destination, budget?: SliceBudget): Promise<"copied" | "equal" | "absent" | "incomplete"> {
+  if (budget?.shouldYield()) return "incomplete";
+  const originSums = await copyStep(`${BUNDLE_PREFIX}SHA384SUMS`, () => origin.get(`${BUNDLE_PREFIX}SHA384SUMS`));
+  if (!originSums) return "absent"; // the origin has no bundle of its own yet (for example, runs sealed by an engine that wrote no bundle); nothing to copy
+  const targetSums = await target.get(`${BUNDLE_PREFIX}SHA384SUMS`);
+  if (targetSums && constantTimeEqual(targetSums.body, originSums.body)) return "equal";
+  // SHA384SUMS is written LAST: a target left mid-copy by a budget cut (or a transient put failure before
+  // this point) still answers "not equal" next tick and is simply re-copied, never recorded equal while
+  // partial. Every object copied here is byte-identical to the origin's, so re-copying is a harmless no-op
+  // where it already landed.
+  for (const name of BUNDLE_FILE_NAMES) {
+    if (budget?.shouldYield()) return "incomplete";
+    const key = `${BUNDLE_PREFIX}${name}`;
+    const obj = name === "SHA384SUMS" ? originSums : await copyStep(key, () => origin.get(key));
+    if (!obj) continue; // the bundle is written as one set; a missing member here is unexpected, not fatal
+    await copyStep(key, () => target.put(key, obj.body));
+  }
+  return "copied";
+}
+
+// replicateRecoveryBundle is the per-target bundle decision + copy, injectable like mirrorRunToReplica so the
+// validator can drive it with in-memory destinations and no scheduler. `runs` is the SAME ascending-by-index
+// run list processTarget already built for this downpipe; it is also the freshness ledger:
+//   - latestRun is the highest-index run this pass knows about. Its origin is wherever the most recent
+//     seal on this downpipe actually ran addBundle, so that is the freshest bundle this pass can see.
+//   - lastOwnSealIndex(runs, targetId) is the highest index, if any, THIS destination itself sealed
+//     directly. It can never exceed latestRun.index (both are read off the same `runs`); it EQUALS it
+//     exactly when targetId is latestRun's own origin, i.e. this destination's own seal path just wrote
+//     the current bundle there itself. That is the only case skipped: this destination has never been
+//     caught holding a bundle older than one it sealed itself, because replication never touches a target's
+//     bundle except through this function, and every other target either has no own seal (ownIndex
+//     undefined) or an older one (ownIndex < latestRun.index), both below the floor a real signer rotation
+//     could have crossed since. This is the rule that cannot regress signer.pub after a rotation: a
+//     destination is only ever offered a bundle that is at least as new as the newest seal recorded
+//     anywhere on the downpipe, and never overwritten once it holds that exact one.
+//   - otherwise, sync FROM latestRun's origin, never from the per-run `src` processTarget used for the run
+//     copy: that source can be a stale back-fill holder (sourceOf falls back to any destination that holds
+//     the run as active), not necessarily the destination that ran the most recent seal.
+export async function replicateRecoveryBundle(
+  getDest: (id: string | undefined) => Promise<Destination | null>,
+  targetId: string,
+  targetDest: Destination,
+  runs: RunOrigin[],
+  budget?: SliceBudget,
+): Promise<"copied" | "equal" | "absent" | "incomplete" | "own-seal-is-current" | "no-source"> {
+  const latestRun = runs[runs.length - 1];
+  if (latestRun === undefined) return "no-source"; // nothing sealed yet on this downpipe
+  const ownIndex = lastOwnSealIndex(runs, targetId);
+  if (ownIndex !== undefined && ownIndex >= latestRun.index) return "own-seal-is-current";
+  const bundleSrc = await getDest(latestRun.origin);
+  if (!bundleSrc) return "no-source"; // the latest seal's origin is unreachable this tick; retried next tick
+  return syncRecoveryBundle(bundleSrc, targetDest, budget);
 }
 
 // REPL_FAIR_ROTATE moves the downpipe that starts a pass, and the destination a downpipe serves first, on by
@@ -837,6 +948,20 @@ export async function mirrorRunToReplica(primary: Destination, replica: Destinat
 // line of its own.
 const REPL_FAIR_ROTATE = true;
 const REPL_FAIR_QUOTA: number | undefined = 1;
+
+// REPL_SEGMENT_SYNC_SHARE caps one mirrorRunToReplica call's segment-store sync to at most this fraction of
+// the pass window LEFT when it starts. A destination added to an estate with data is missing the whole
+// shared seg/ store, and REPL_FAIR_QUOTA (one run per round) does not bound that: syncSegmentStore keeps
+// copying until the window is gone, so the downpipe ahead of the others in the rotation can still spend the
+// WHOLE shared window on one call, and every other downpipe is deferred until that store is fully copied
+// (measured live: about 13 of 43 segments per tick, 5 downpipes, catch-up near 2 hours over 8 ticks). Giving
+// the sync at most half of what is left, not all of it, keeps the other half for the downpipes after it in
+// the same round, so the rotation reaches them every tick instead of only once the backlog is gone. The
+// alternative (sync only the segments the run being mirrored needs) is unavailable: replication is keyless,
+// so it cannot enumerate one run's segments from the encrypted shards (see syncSegmentStore). The deferred
+// share resumes next tick; segments already copied are skipped (content-addressed, idempotent), so the
+// store still finishes, just without starving the rotation while it does.
+const REPL_SEGMENT_SYNC_SHARE = 0.5;
 
 // rotateForTick rotates a list by the cron tick number, so each member comes first once every N ticks. The
 // tick number comes from the clock: a cron invocation fires on the CRON_CADENCE_MS grid and holds the tick
@@ -970,7 +1095,7 @@ export async function runReplications(env: Env, scheduler: DurableObjectStub, ti
   // One record per pass, and ONLY when the pass had something to say (a clean pass on a healthy fleet posts
   // nothing at all). Counts and a closed outcome; never a destination, a bucket or a message.
   const outcome: ReplicationPassOutcome = exhausted ? "budget-exhausted" : "ok";
-  if (outcome !== "ok" || passTally.deferredDownpipes > 0 || passTally.stateWriteFailures > 0 || passTally.verifySampleShortfall > 0 || passTally.segmentVanishDeferrals > 0) {
+  if (outcome !== "ok" || passTally.deferredDownpipes > 0 || passTally.stateWriteFailures > 0 || passTally.verifySampleShortfall > 0 || passTally.segmentVanishDeferrals > 0 || passTally.bundleCopyFailures > 0) {
     await postSealFault(scheduler, { kind: "replication-pass", at: Date.now(), passOutcome: outcome, ...passTally });
   }
 }

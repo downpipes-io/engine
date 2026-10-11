@@ -43,7 +43,7 @@ function schedulerReturning(body: unknown): DurableObjectStub {
 
 async function projectedRefusedCode(code: string): Promise<unknown> {
   const scheduler = schedulerReturning({ recoveryRequired: true, refused: true, refusedCode: code });
-  const rec = (await fetchRecoveryStatus(scheduler)) as { refusedCode?: unknown };
+  const rec = (await fetchRecoveryStatus(scheduler, {})) as { refusedCode?: unknown };
   return rec.refusedCode;
 }
 

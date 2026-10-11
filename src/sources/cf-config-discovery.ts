@@ -214,7 +214,7 @@ export function resolveCfConfigMode(source: { cfConfigMode?: CfConfigMode; inclu
 // count: a backup that quietly did not capture something. They stay out of
 // `include` (auto mode exists so a run is not one GET per registry surface, and re-reading a surface a
 // probe just found unreadable buys nothing), and are named in `notAttempted` instead, which costs no
-// Cloudflare read and makes both the archive and the run row say what was missed.
+// Cloudflare read and makes both the archive and the run row say what was not captured.
 export function effectiveCfConfigSelector(
   source: { cfConfigMode?: CfConfigMode; include: string[]; exclude: string[] },
   discovery: CfConfigDiscovery | undefined,

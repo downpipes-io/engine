@@ -140,6 +140,7 @@ const INTEGRITY_FETCH_KEY_SET: ReadonlySet<string> = new Set(
 // key fingerprint. Anything else in these fields is dropped, so no message can ride through a "digest" seam.
 const ERR_ID_SHAPE = /^[0-9a-f]{8}$/;
 const HEX12_SHAPE = /^[0-9a-f]{12}$/;
+const ARCHIVE_ID_SHAPE = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/;
 const SHA384_SHAPE = /^[0-9a-f]{96}$/;
 const FORMAT_MAJOR_SHAPE = /^downpipe\/\d{1,3}\.x$/;
 const FINGERPRINT_SHAPE = /^(?:dpr1:)?[0-9a-f]{8,96}$/;
@@ -378,6 +379,7 @@ export async function fetchIntegrityFaults(scheduler: DurableObjectStub): Promis
         ...(a.lineOrdinal !== undefined ? { lineOrdinal: clampInt(a.lineOrdinal, Number.MAX_SAFE_INTEGER) ?? 0 } : {}),
         ...(a.entryCount !== undefined ? { entryCount: clampInt(a.entryCount, Number.MAX_SAFE_INTEGER) ?? 0 } : {}),
         ...(shaped(a.digest, HEX12_SHAPE) !== undefined ? { digest: a.digest } : {}),
+        ...(shaped(a.archiveId, ARCHIVE_ID_SHAPE) !== undefined ? { archiveId: a.archiveId } : {}),
       }];
     });
     // writerRefusals: the writer's three LOUD refusals, distinct from a generic run failure.

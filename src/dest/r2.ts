@@ -2,7 +2,7 @@ import { sealedSegmentLength } from "../crypto/streamseal.ts";
 import type { Meter } from "../meter.ts";
 import { toArrayBuffer } from "./buffer-utils.ts";
 import { DestIo, type DestIoSnapshot } from "./dest-io.ts";
-import { DestFaultLog, type DestFaultSnapshot } from "./fault-log.ts";
+import { classifyDestKey, type DestFaultSnapshot, DestFaultLog, type DestOp, r2BindingCode } from "./fault-log.ts";
 import type { Destination, GetResult, ListPage, PutConditionalResult, WormStatus } from "./types.ts";
 import { MAX_STREAM_SEGMENT_BYTES } from "./types.ts";
 
@@ -34,9 +34,9 @@ export class R2Destination implements Destination {
   // on the RUNLOG is exactly the "two engines are fighting over one log" signal, and is otherwise swallowed
   // by a successful run. Diagnostic only: noting never changes control flow.
   private readonly io = new DestIo();
-  // faults is the bounded closed-vocabulary evidence ring. The native binding never speaks HTTP,
-  // so it records no per-op status faults; what it CAN record is the engine's own guard refusals, which
-  // the run row otherwise coarsens away entirely.
+  // faults is the bounded closed-vocabulary evidence ring. The native binding never speaks HTTP, so a
+  // refused op has no status; it records the op, the closed class and a closed code read from the runtime's
+  // wording (ObjectLocked, NoSuchBucket, AccessDenied or none), plus the engine's own guard refusals.
   private readonly faults = new DestFaultLog();
 
   constructor(bucket: R2Bucket, meter?: Meter) {
@@ -60,7 +60,7 @@ export class R2Destination implements Destination {
     try {
       return await fn();
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
+      const msg = e instanceof Error ? e.message : String(e); this.faults.noteThrown(R2_FAULT_OPS[op] ?? "put", e, r2BindingCode(msg), classifyDestKey(key)); // a refused op leaves a destFaults row: op, closed class, closed code, closed key class (never the key or the message)
       throw new Error(`R2 native binding ${op} ${key} failed (no HTTP status, no S3 code): ${msg}`);
     }
   }
@@ -220,10 +220,9 @@ export class R2Destination implements Destination {
   // bucket's Object-Lock configuration. So this binding path cannot SET store-enforced WORM, and the
   // probe below cannot CONFIRM it.
   //
-  // THE S3 ENDPOINT IS NOT A WAY ROUND IT, AND THIS COMMENT USED TO SAY IT WAS. It read "R2 DOES
-  // support S3 Object-Lock through its S3-compatible API", and four operator-facing surfaces published
-  // "reach the bucket by its S3 endpoint" as the remedy on the strength of it. types.ts said the
-  // opposite 58 lines from its own WORM_UNKNOWN_REASONS list, and types.ts was right.
+  // THE S3 ENDPOINT IS NOT A WAY ROUND IT. R2 does not support S3 Object-Lock through its
+  // S3-compatible API, so reaching the bucket by its S3 endpoint is not a remedy. types.ts states the
+  // same in its WORM_UNKNOWN_REASONS list.
   //
   // Measured against a real R2 bucket over https://<account>.r2.cloudflarestorage.com,
   // signed with this repo's own SigV4 signer (dest/sigv4.ts):
@@ -234,8 +233,8 @@ export class R2Destination implements Destination {
   //                                                  not implemented"
   //
   // R2 does not hide Object-Lock behind the binding; it REFUSES the header on the S3 arm too, by name.
-  // An operator who followed the published remedy got a 501 on every write and an archive holding
-  // nothing, which is worse than the destination they started with. There is no R2 remedy to name.
+  // An operator who tried the S3 endpoint would get a 501 on every write and an archive holding
+  // nothing. There is no R2 remedy to name.
   // R2's own bucket-lock retention feature (wrangler r2 bucket lock / PutBucketLockConfiguration) is a
   // SEPARATE mechanism that neither this policy nor this probe reaches.
   //
@@ -252,3 +251,15 @@ export class R2Destination implements Destination {
     return { enabled: "unknown", unknownReason: "r2-binding-unsupported" };
   }
 }
+
+// R2_FAULT_OPS maps the native driver's op names onto the closed DestOp vocabulary.
+const R2_FAULT_OPS: Record<string, DestOp> = {
+  put: "put",
+  putStream: "put",
+  putConditional: "put-conditional",
+  get: "get",
+  head: "head",
+  delete: "delete",
+  list: "list",
+  listPage: "list",
+};

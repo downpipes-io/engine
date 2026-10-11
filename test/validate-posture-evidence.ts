@@ -56,12 +56,14 @@ import { approvalTimestampUnparseable } from "../src/admin/approvals.ts";
 import { ownerActionTimestampUnparseable } from "../src/admin/owner-action.ts";
 import { expiryRowAnomalies, type ExpiryItem } from "../src/admin/expiry.ts";
 import { customRoleReservedCapabilityDrops, type CustomRole } from "../src/admin/identity-rbac.ts";
-import { checkChannelFreshness, resolveEngineArtefact, sanitiseChannelComponents, type Channel } from "../src/admin/updates.ts";
+import { resolveEngineArtefact, sanitiseChannelComponents, type Channel } from "../src/admin/updates.ts";
+import { checkChannelFreshness } from "../src/admin/update-freshness.ts";
 import { recordChainVerdict, classifyTestFailure, testStatusClass, CHAIN_BREAKS_KEY, TEST_REASON_CLASSES, type LedgerStorage } from "../src/sched/sched-fault-ledger.ts";
 import { fetchSchedDiag } from "../src/admin/support-sections-diag.ts";
 import { fetchAuthSignals } from "../src/admin/support-sections-auth.ts";
 import { fetchAuditStatus } from "../src/admin/support-sections-audit.ts";
 import { fetchConfigIntegrity } from "../src/admin/support-sections-config.ts";
+import { b64urlEncode } from "../src/crypto/bytes.ts";
 import { verdictReached } from "./lib/verdict-guard.ts";
 
 let failures = 0;
@@ -983,10 +985,11 @@ await (async () => {
       const swapped = { ...(v2.snapshot as ConfigSnapshot), downpipes: [] } as ConfigSnapshot;
       await sched.storage.put("confighist:00000000000000000002", { ...v2, snapshot: swapped, contentHash: await configContentHash(swapped) });
     }
-    // THE OWNER BUTTON. The real route, over the real DO: it deletes the passkey session key, which is the key
-    // every config-history digest is HMAC'd with.
-    const term = await sched.stub.fetch(new Request("https://do/passkey/session/terminate-all", { method: "POST", headers: { "content-type": "application/json", [CALLER_HEADER]: encodeCaller({ method: "token", email: null, subject: null, role: "owner", groups: [] }) }, body: "{}" }));
-    if (!term.ok) throw new Error(`terminate-all failed: ${term.status}`);
+    // THE KEY IS LOST. The history signs under its own record (configHistorySigningKey), which the owner's
+    // terminate-all lever no longer touches (validate-config-history-survives-sign-out proves that). What can
+    // still break the keyed verify is that record being lost and regenerated, so the test replaces it with
+    // fresh random bytes, the state a regeneration leaves behind.
+    await sched.storage.put("configHistorySigningKey", { key: b64urlEncode(crypto.getRandomValues(new Uint8Array(32))), createdAt: new Date().toISOString() });
     const health = (await (await sched.stub.fetch(new Request("https://do/config-history-health"))).json()) as Record<string, unknown>;
     const raw = (await sched.storage.get<Record<string, { causeClass?: string; brokenAtSeq?: number; chain?: string }>>(CHAIN_BREAKS_KEY)) ?? {};
     return { health, latched: Object.values(raw).filter((l) => l.chain === "config-history") };
@@ -997,11 +1000,11 @@ await (async () => {
   const causes = (r: { latched: Array<{ causeClass?: string }> }): string[] => r.latched.map((l) => l.causeClass ?? "").sort();
   const verifyOf = (r: { health: Record<string, unknown> }): Record<string, unknown> => (r.health.verify ?? {}) as Record<string, unknown>;
 
-  ok("the owner button really does break the keyed verify on a PRISTINE chain", verifyOf(pristine).intact === false && verifyOf(pristine).signingKeyRotated === true);
+  ok("a lost history signing key really does break the keyed verify on a PRISTINE chain", verifyOf(pristine).intact === false && verifyOf(pristine).signingKeyRotated === true);
   ok("...and the KEY-FREE pass over the whole chain says the chain is clean", verifyOf(pristine).unkeyedIntact === true);
   ok("so the pristine estate latches signing-key-rotated, and ONLY that", JSON.stringify(causes(pristine)) === JSON.stringify(["signing-key-rotated"]));
 
-  ok("the SAME button over a chain whose v2 body was swapped still reports the rotated key", verifyOf(tampered).signingKeyRotated === true);
+  ok("the SAME key loss over a chain whose v2 body was swapped still reports the rotated key", verifyOf(tampered).signingKeyRotated === true);
   ok("...but the KEY-FREE pass CATCHES the tamper the keyed verify never reached", verifyOf(tampered).unkeyedIntact === false && verifyOf(tampered).unkeyedCause === "prev-hash-mismatch" && verifyOf(tampered).unkeyedBrokenAt === 3);
   ok("...and it is LATCHED beside the key fact: two rows, not one", JSON.stringify(causes(tampered)) === JSON.stringify(["prev-hash-mismatch", "signing-key-rotated"]));
   ok("DISCRIMINATION: 'the owner signed everyone out' and 'the owner signed everyone out AND v2 is the attacker's' are now DIFFERENT rows (they were byte-identical)", JSON.stringify(causes(pristine)) !== JSON.stringify(causes(tampered)));

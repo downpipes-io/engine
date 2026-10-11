@@ -63,8 +63,7 @@ account, so test only against your own deployment.
 
 ## Risk-based remediation SLA
 
-These timeframes run from the date a finding is confirmed (that is, triaged and
-reproduced, not merely reported).
+These timeframes run from the date we become aware of the finding.
 
 | Severity  | Definition (examples)                                         | Target remediation  |
 |-----------|---------------------------------------------------------------|---------------------|
@@ -86,11 +85,19 @@ down-scoped accordingly).
 
 ## Supported versions and branches
 
-| Branch / tag | Status           | Notes                                    |
+The full policy is in [docs/SUPPORTED-VERSIONS.md](docs/SUPPORTED-VERSIONS.md). Fixes ship only in the
+next release; the vendor does not backport them.
+
+| Release | Status | Notes |
 |-------------|------------------|------------------------------------------|
 | `main`      | Supported        | All security fixes land here first       |
-| Tagged releases | Supported for 90 days after tag | Fixes backported on request for Critical/High |
-| Older releases | Not supported  | Upgrade to the latest tag                |
+| Latest release | Supported | It has no successor, so it has no end-of-support date |
+| An earlier release | Supported until 90 days after its successor ships | Upgrade to the latest release |
+| A release past that date | End of life | No fixes of any kind |
+
+The signed update channel carries the release dates. The engine reports `supportedUntil` and
+`supportStatus` for the running version, and the console shows a notice from 30 days before
+`supportedUntil`, and after it.
 
 Deployments are manual (`npm run deploy`). There is no automatic rollout; operators
 are responsible for pulling and deploying fixes within the SLA window above. Use
@@ -246,7 +253,7 @@ authentication bypass. This is their status in the code:
 - **G2 (low), fixed: SAML assertion id replay.** The ACS refuses an assertion id it has
   seen before `notOnOrAfter`
   (`src/sched/scheduler-do-idp-saml.ts:224-227`), and the alarm sweep prunes the expired
-  ids (`src/sched/scheduler-do-scheduling.ts:774-775`).
+  ids (`src/sched/scheduler-do-scheduling.ts:775-776`).
 - **G3 (informational), open.** Session mint applies no length bound of its own
   (`signSession`, `src/admin/session.ts:245`). The assessment asks for no fix: the inputs
   are server-derived, and the read path bounds every field (`SESSION_EMAIL_MAX`,
@@ -259,9 +266,9 @@ These are the controls the assessment covers:
   a recycled email cannot inherit a departed member's role.
 - A per-email session epoch backs the self terminate-others and admin terminate-user
   routes and a passkey-credential revoke route (`src/admin/router-account-session.ts:94`,
-  `179`, `221`; `bumpSessionEpoch`, `src/sched/scheduler-do-session.ts:396`). Owner
+  `179`, `221`; `bumpSessionEpoch`, `src/sched/scheduler-do-session.ts:397`). Owner
   terminate-all rotates the session signing key instead (`src/admin/router-account-session.ts:282`,
-  `terminateAllSessions`, `src/sched/scheduler-do-session.ts:265`). They cover V7.4.3.
+  `terminateAllSessions`, `src/sched/scheduler-do-session.ts:266`). They cover V7.4.3.
   For V7.5.2: an OIDC, OAuth2 or SAML caller lists and ends only the sessions of its own
   signed-in subject. A passkey, recovery-code or Access caller lists and ends every session
   recorded under its email, including a native session of another subject that asserts the same
@@ -284,8 +291,8 @@ The assessment also covers these controls:
   (`downpipe/internal/source/s3.go:154-156`, `164`, `168`).
 - Per-caller fixed-window rate limiting (120 requests per 60 s) runs before the handler on
   every mutating admin route behind the authorisation gate (`rateLimited`,
-  `src/admin/router-core.ts:303`), keyed on the verified caller's stable subject rather than
-  source IP (`rateLimitKey`, `src/admin/router-core.ts:218-220`). `test/validate-ratelimit.ts`
+  `src/admin/router-core.ts:349`), keyed on the verified caller's stable subject rather than
+  source IP (`rateLimitKey`, `src/admin/router-core.ts:264-266`). `test/validate-ratelimit.ts`
   drives the 429 and reads every mutating case in the `src/admin/router*.ts` spokes for the
   call. Two POST routes do not take this check: `/admin/session/bootstrap` accepts only
   the bare `ADMIN_TOKEN`, which has its own throttle (below), and `/admin/policy/require-access`
@@ -294,13 +301,13 @@ The assessment also covers these controls:
 - Credential-guessing throttles: the unauthenticated sign-in ceremonies under
   `/admin/auth/*`, `/admin/oidc/*`, `/admin/saml/*` and `/scim/v2` admit at most 30 requests
   per 60 seconds per source address and deny the request on any limiter fault
-  (`authRateLimited`, `src/admin/router-core.ts:629`); a recovery-code sign-in admits at
+  (`authRateLimited`, `src/admin/router-core.ts:675`); a recovery-code sign-in admits at
   most 5 attempts per 60 seconds per email and, separately, per source address, denying on
   either bucket or a limiter fault (`recoveryRateAllow`,
-  `src/sched/scheduler-do-recovery.ts:516`); and the bare `ADMIN_TOKEN` bearer compare is
+  `src/sched/scheduler-do-recovery.ts:517`); and the bare `ADMIN_TOKEN` bearer compare is
   preceded by its own cap of 10 requests per 60 seconds per source address, checked before
   the constant-time compare and denying on any limiter fault (`src/admin/auth.ts:340`,
-  `adminTokenRateLimitedViaDO`, `src/admin/router-session.ts:337`).
+  `adminTokenRateLimitedViaDO`, `src/admin/router-session.ts:338`).
 
 If you believe you have found an exploitable path that builds on any control above,
 please report it privately rather than assuming it is already known.

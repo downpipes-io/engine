@@ -4,6 +4,7 @@
 // gatherers; each keeps its own redaction contract (see the per-function comments). The
 // control-plane recovery latch and export-lag gatherers live in support-sections-recovery.ts.
 
+import { isRegionHint } from "../dest/fault-log.ts";
 import { D1_ERROR_CLASSES, METADATA_SHED_FIELDS } from "../dest/restore-fault.ts";
 import { CF_WRITE_SKIP_CLASSES } from "../sources/cf-config-fault.ts";
 import { RESTORE_REJECT_REASON_SET } from "./approvals.ts";
@@ -15,6 +16,9 @@ import { EXPORT_ATTEMPT_OUTCOMES, EXPORT_CHANNELS, EXPORT_FORMATS } from "./diag
 import { MEDIA_FAULT_CLASSES } from "./media-restore.ts";
 import { RESTORE_FAILURE_CLASSES } from "./restore-types.ts";
 import { doURL } from "../do-url.ts";
+import { RUNLOG_ANOMALY_KINDS } from "../format/integrity-fault-ledger.ts";
+import { PRECHECK_REFUSALS, RELINK_REFUSALS } from "../seal/runlog-handover.ts";
+import { DEST_PROBE_FAIL_CLASS_SET, DEST_REFUSAL_PROVIDER_SET, DEST_SAVE_REFUSAL_SET } from "./dest-save-refusal.ts";
 import { clampInt, clampTs, gateClosed, grantExpiryState } from "./support-shared.ts";
 
 // The restore-receipt vocabularies, taken from the module that CLASSIFIES at the fault site so the
@@ -79,6 +83,11 @@ const CONFIG_EVENT_ALLOWLIST = new Set([
   // whether an attributable identity or the shared break-glass token. The free-text justification and the
   // acceptedBy address are dropped at their own chokepoints and never reach the excerpt.
   "posture-override-set",
+  // The RUNLOG integrity actions an Owner takes or is refused: a re-key's hand-over (and a re-key stopped because
+  // a destination RUNLOG did not verify or its chain is anomalous), an attended relink (done or refused), and an
+  // attended resume that published an absent RUNLOG.sig again.
+  // Projected by runlogFields to closed enums and counts only.
+  "runlog-handover", "runlog-relinked", "runlog-resumed",
 ]);
 // Bound to the canonical RESTORE_FAILURE_CLASSES tuple rather than hand-listed, for the reason the auto-heal
 // refusal codes are: a hand-listed copy is exactly how a class the fault site happily tags gets silently
@@ -149,7 +158,16 @@ type AuditExcerptEvent = {
     toDefaultId?: string;
     force?: boolean;
     uncoveredOriginRunCount?: number;
+    pinnedDownpipeCount?: unknown;
+    pinnedDownpipeIds?: unknown;
+    atRiskRunCount?: unknown;
     rejectReason?: string;
+    // dest-change refusal fields (a REFUSED save or clear; projected by destChangeFields).
+    refusal?: unknown;
+    provider?: unknown;
+    probeClass?: unknown;
+    probeStatus?: unknown;
+    regionHint?: unknown;
     // config-change field (configchange audit target; the closed-enum changeKind projected by configChangeFields).
     changeKind?: string;
     // The key-ceremony failure fields (the key-ceremony audit target; projected by keyCeremonyFields):
@@ -349,7 +367,7 @@ function restoreApplyFields(e: AuditExcerptEvent): Record<string, unknown> {
   // metadataFieldsDropped: the record RESTORED and a piece of its metadata did not. A KV key whose
   // stored expiration was unusable restores with NO TTL -- it will never expire, which is a compliance and a
   // cost fault that no error anywhere reported. Counts per closed field name; the unusable value never rides
-  // (it was rejected precisely for being unusable, and carrying it would be the leak).
+  // (it is unusable by definition, and carrying it would be the leak).
   const shed: Record<string, number> = {};
   const md = t.metadataFieldsDropped;
   if (typeof md === "object" && md !== null) {
@@ -409,6 +427,29 @@ function secretAbsentFields(e: AuditExcerptEvent): Record<string, unknown> {
   return typeof f === "string" && TRACKED_PRESENCE_FIELD_SET.has(f) ? { secretAbsent: f } : {};
 }
 
+// runlogFields projects a RUNLOG integrity row (runlog-handover, runlog-relinked, runlog-resumed): which step (runlogOp), the
+// anomaly kind an Owner acknowledged or was refused over, the closed refusal classes, and the hand-over counts.
+// Closed enums and clamped counts only. Never the digest, the downpipe id, the destination ids or an index.
+const RUNLOG_OP_SET: ReadonlySet<string> = new Set(["handover-refused", "handover", "held-key-discarded", "relink", "relink-refused", "resume"]);
+const RUNLOG_ANOMALY_KIND_SET: ReadonlySet<string> = new Set(RUNLOG_ANOMALY_KINDS);
+const RUNLOG_REFUSAL_SET: ReadonlySet<string> = new Set([...PRECHECK_REFUSALS, ...RELINK_REFUSALS]);
+const RUNLOG_REASONS_MAX = 8;
+function runlogFields(e: AuditExcerptEvent): Record<string, unknown> {
+  if (e.action !== "runlog-handover" && e.action !== "runlog-relinked" && e.action !== "runlog-resumed") return {};
+  const t = e.target as { op?: unknown; state?: unknown; reasons?: unknown; resigned?: unknown; pending?: unknown } | undefined;
+  if (t === undefined) return {};
+  const out: Record<string, unknown> = {};
+  if (typeof t.op === "string" && RUNLOG_OP_SET.has(t.op)) out.runlogOp = t.op;
+  if (typeof t.state === "string" && RUNLOG_ANOMALY_KIND_SET.has(t.state)) out.anomalyKind = t.state;
+  const reasons = (Array.isArray(t.reasons) ? t.reasons : []).filter((r): r is string => typeof r === "string" && RUNLOG_REFUSAL_SET.has(r)).slice(0, RUNLOG_REASONS_MAX);
+  if (reasons.length > 0) out.reasons = reasons;
+  const resigned = clampInt(t.resigned, 1_000_000);
+  if (resigned !== undefined) out.resigned = resigned;
+  const pending = clampInt(t.pending, 1_000_000);
+  if (pending !== undefined) out.pending = pending;
+  return out;
+}
+
 // customRoleFields projects the DELETION CONSEQUENCE: how many member + group grants still named the
 // custom role when it was deleted, i.e. how many people the tidy-up floors to viewer at their next request.
 // The deletion FACT already rode (custom-role-change is allowlisted above); the consequence rode nowhere, so
@@ -443,6 +484,24 @@ function destChangeFields(e: AuditExcerptEvent): Record<string, unknown> {
   if (typeof t.force === "boolean") out.force = t.force;
   if (typeof t.uncoveredOriginRunCount === "number" && Number.isFinite(t.uncoveredOriginRunCount)) out.uncoveredOriginRunCount = Math.max(0, Math.min(1_000_000, Math.floor(t.uncoveredOriginRunCount)));
   if (typeof t.rejectReason === "string" && DEST_REJECT_REASONS.has(t.rejectReason)) out.rejectReason = t.rejectReason;
+  // A REFUSED save or clear (dest-save-refusal.ts): the closed refusal class, the provider the endpoint names, and,
+  // when the live write probe failed, the probe's closed failure class and its HTTP status. Each is forwarded only
+  // when a member of its closed set (or a status number in range), so the row can carry no endpoint, bucket,
+  // credential or sentence. The time is the row's own `at`.
+  if (typeof t.refusal === "string" && DEST_SAVE_REFUSAL_SET.has(t.refusal)) out.refusal = t.refusal;
+  if (out.refusal !== undefined && typeof t.provider === "string" && DEST_REFUSAL_PROVIDER_SET.has(t.provider)) out.provider = t.provider;
+  if (out.refusal !== undefined && typeof t.probeClass === "string" && DEST_PROBE_FAIL_CLASS_SET.has(t.probeClass)) out.probeClass = t.probeClass;
+  if (out.refusal !== undefined && typeof t.probeStatus === "number" && Number.isInteger(t.probeStatus) && t.probeStatus >= 100 && t.probeStatus <= 599) out.probeStatus = t.probeStatus;
+  // What blocked a REFUSED clear or remove (sched/dest-remove-refusal-audit.ts): how many downpipes name the
+  // destination, their ids (the ids runs[] already carries, never the names), and how many runs would lose their
+  // only proven copy. Counts are clamped; the ids are plain slugs, capped at 10.
+  if (out.refusal !== undefined && typeof t.pinnedDownpipeCount === "number" && Number.isFinite(t.pinnedDownpipeCount)) out.pinnedDownpipeCount = Math.max(0, Math.min(1_000_000, Math.floor(t.pinnedDownpipeCount)));
+  if (out.refusal !== undefined && Array.isArray(t.pinnedDownpipeIds)) {
+    const dpIds = t.pinnedDownpipeIds.filter((x): x is string => typeof x === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(x)).slice(0, 10);
+    if (dpIds.length > 0) out.pinnedDownpipeIds = dpIds;
+  }
+  if (out.refusal !== undefined && typeof t.atRiskRunCount === "number" && Number.isFinite(t.atRiskRunCount)) out.atRiskRunCount = Math.max(0, Math.min(1_000_000, Math.floor(t.atRiskRunCount)));
+  if (out.probeClass === "redirect" && isRegionHint(t.regionHint)) out.regionHint = t.regionHint;
   // affectedDownpipeNames: WHICH downpipes lost their only proven copy on a FORCED removal.
   // uncoveredOriginRunCount is the magnitude and answers "how bad"; this answers "who", which is the question
   // an incident timeline actually has. The names are the customer's OWN downpipe labels (the redaction class
@@ -622,6 +681,7 @@ export async function fetchConfigEvents(scheduler: DurableObjectStub): Promise<{
       ...keyCeremonyFields(e), // the ceremony step + cause it died at, and Cloudflare's own verdict
       ...secretAbsentFields(e), // WHICH key presence flipped true -> false, and (from the row's `at`) WHEN
       ...customRoleFields(e), // how many grants a custom-role DELETION floors to the viewer floor
+      ...runlogFields(e), // the RUNLOG integrity step, anomaly kind and refusal classes (closed enums, counts)
     }));
     return { events, fetched: true };
   }

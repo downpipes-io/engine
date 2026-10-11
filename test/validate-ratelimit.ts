@@ -37,6 +37,11 @@
 //    imports and drives (120/30/5/10), and does not claim a per-IP limiter is avoided; a drift in either
 //    direction reds PART H below rather than waiting for a reader to notice the prose disagrees with the
 //    code (ASVS V6.3.1: the controls must be implemented according to the security documentation).
+//  - the three per-IP limiters (authRateLimited, adminTokenRateLimitedViaDO and the recovery-code IP
+//    bucket) key an IPv6 client by its /64 and an IPv4 client by its full address (PART J). One host
+//    commonly holds a whole /64, so a per-address key let one attacker rotate through 2^64 buckets. Other
+//    spellings of one address (case, compressed or full form, brackets, a zone id, an IPv4-mapped
+//    ::ffff:a.b.c.d) share its bucket, so a rewrite does not escape the group.
 //
 // The mutating burst is driven over the ADMIN_TOKEN break-glass path so the proof needs no forged
 // JWT and no role wiring: that caller resolves to Owner (passing every role gate) and shares the
@@ -56,6 +61,7 @@ import type { Env } from "../src/env.d.ts";
 // common harness (findings engine-test-012-05/06): one in-memory DO double, extended here only by the
 // failRateCheck option the harness factory already accepts.
 import { makeScheduler } from "./validate-rbac-harness.ts";
+import { recoveryFoldSource } from "../src/sched/audit-fold.ts";
 import { verdictReached } from "./lib/verdict-guard.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -607,6 +613,91 @@ async function main(): Promise<void> {
       'doc-parity: section 17 no longer claims a per-IP limiter is avoided ("explicitly avoided" is absent)',
       !section17.includes("explicitly avoided"),
     );
+  }
+
+  // ============================================================================================
+  // PART J: an IPv6 client is ONE client per /64 (ASVS V6.3.1, V2.4.1). One host commonly holds a whole
+  // /64 (2^64 addresses), so a limiter keyed on the raw address does not bind it: each new address is a
+  // fresh bucket. Every per-IP limiter must group IPv6 by /64, keep IPv4 per full address, and read other
+  // spellings of one address as that address.
+  // ============================================================================================
+  {
+    const v6 = (prefix: string, i: number): string => `${prefix}:${(i + 1).toString(16)}:0:0:${(i * 7 + 3).toString(16)}`;
+
+    // ---- PROOF J1: 100 sign-in attempts from 100 addresses in one /64 are limited as one client ----
+    {
+      const sched = makeScheduler();
+      let admitted = 0;
+      let refused = 0;
+      for (let i = 0; i < 100; i++) {
+        const r = await authRateLimited(sched.stub, authReq(v6("2001:db8:aa:1", i)));
+        if (r === null) admitted++;
+        else if (r.status === 429) refused++;
+      }
+      ok(`J1: 100 addresses in one /64 share one bucket: ${admitted} admitted (want ${AUTH_RATE_LIMIT_MAX_PER_WINDOW}), ${refused} refused with 429 (want ${100 - AUTH_RATE_LIMIT_MAX_PER_WINDOW})`, admitted === AUTH_RATE_LIMIT_MAX_PER_WINDOW && refused === 100 - AUTH_RATE_LIMIT_MAX_PER_WINDOW);
+      // ---- PROOF J2: two different /64s are limited separately ----
+      const other = await authRateLimited(sched.stub, authReq("2001:db8:aa:2::1"));
+      ok("J2: an address in a DIFFERENT /64 has its own fresh bucket (admitted)", other === null);
+    }
+
+    // ---- PROOF J3: IPv4 is unchanged, one bucket per full address ----
+    {
+      const sched = makeScheduler();
+      for (let i = 0; i < AUTH_RATE_LIMIT_MAX_PER_WINDOW; i++) await authRateLimited(sched.stub, authReq("198.51.100.40"));
+      const over = await authRateLimited(sched.stub, authReq("198.51.100.40"));
+      ok("J3: an IPv4 address is still refused past its own cap", over !== null && over.status === 429);
+      ok("J3: the next IPv4 address in the same /24 has its own fresh bucket (admitted)", (await authRateLimited(sched.stub, authReq("198.51.100.41"))) === null);
+    }
+
+    // ---- PROOF J4: other spellings of one address do not escape its group ----
+    {
+      const sched = makeScheduler();
+      const spellings = ["2001:db8:bb:1::5", "2001:DB8:BB:1::5", "2001:0db8:00bb:0001:0000:0000:0000:0005", "[2001:db8:bb:1::5]", "2001:db8:bb:1::5%eth0", "2001:db8:bb:1:0:0:0.0.0.5"];
+      for (let i = 0; i < AUTH_RATE_LIMIT_MAX_PER_WINDOW; i++) await authRateLimited(sched.stub, authReq(spellings[i % spellings.length]!));
+      const refusedAll = [];
+      for (const sp of spellings) {
+        const r = await authRateLimited(sched.stub, authReq(sp));
+        refusedAll.push(r !== null && r.status === 429);
+      }
+      ok(`J4: past the cap, every spelling of the address is refused (${refusedAll.filter(Boolean).length}/${spellings.length})`, refusedAll.every(Boolean));
+
+      const mapped = makeScheduler();
+      const forms = ["203.0.113.77", "::ffff:203.0.113.77", "::FFFF:CB00:714D", "0:0:0:0:0:ffff:203.0.113.77"];
+      for (let i = 0; i < AUTH_RATE_LIMIT_MAX_PER_WINDOW; i++) await authRateLimited(mapped.stub, authReq(forms[i % forms.length]!));
+      const mappedRefused = [];
+      for (const f of forms) {
+        const r = await authRateLimited(mapped.stub, authReq(f));
+        mappedRefused.push(r !== null && r.status === 429);
+      }
+      ok(`J4: an IPv4-mapped address shares the bucket of the IPv4 address it carries (${mappedRefused.filter(Boolean).length}/${forms.length} refused)`, mappedRefused.every(Boolean));
+      ok("J4: the audit fold groups the same way (an IPv4-mapped address folds as its IPv4 address)", recoveryFoldSource("::ffff:203.0.113.77") === "203.0.113.77" && recoveryFoldSource("2001:DB8:BB:1::5%eth0") === "2001:db8:bb:1::/64");
+    }
+
+    // ---- PROOF J5: the bare-token throttle groups IPv6 by /64 too ----
+    {
+      const sched = makeScheduler();
+      let blocked = 0;
+      for (let i = 0; i <= ADMIN_TOKEN_RATE_LIMIT_MAX_PER_WINDOW; i++) {
+        if (await adminTokenRateLimitedViaDO(sched.stub, adminTokenReq(v6("2001:db8:cc:1", i)))) blocked++;
+      }
+      ok(`J5: adminTokenRateLimitedViaDO blocks the address past the cap in one /64 (${blocked} blocked, want 1)`, blocked === 1);
+      ok("J5: an address in a different /64 is admitted", (await adminTokenRateLimitedViaDO(sched.stub, adminTokenReq("2001:db8:cc:2::1"))) === false);
+    }
+
+    // ---- PROOF J6: the recovery-code IP bucket groups IPv6 by /64 too ----
+    // Each attempt names a different email, so the per-email bucket never trips; only the IP bucket can.
+    {
+      const sched = makeScheduler();
+      for (let i = 0; i <= RECOVERY_RATE_MAX_PER_IP; i++) {
+        await sched.stub.fetch("https://scheduler.internal/recovery/recover", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ email: `j6-${i}@acme.example`, code: "00000-00000-00000-00000-00000-00000", ip: v6("2001:db8:dd:1", i) }),
+        });
+      }
+      const agg = (await (await sched.stub.fetch("https://scheduler.internal/auth-signals")).json()) as Record<string, { count: number }>;
+      ok(`J6: the recovery IP bucket refused the attempt past the cap in one /64 (recovery-ratelimited count ${agg["recovery-ratelimited"]?.count ?? 0}, want 1)`, (agg["recovery-ratelimited"]?.count ?? 0) === 1);
+    }
   }
 
   console.log(failures === 0 ? "\nPER-CALLER + PER-IP RATE-LIMIT VECTORS PASS" : `\n${failures} FAILURE(S)`);

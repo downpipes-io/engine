@@ -31,7 +31,7 @@ import { consumeLicenceTokenReadFault } from "./test-faults.ts";
 // DERIVE from this one array, so a future tier added here updates both automatically -- there is no
 // second list to remember to keep in step. community is the fail-open default (never minted; a
 // customer with no token, or an unverifiable one, simply IS community). business-1/-3/-10/-25 are the
-// estate-banded self-serve tiers (see docs/CONTROL-PLANE.md); the band and any per-tier service grant ride
+// estate-banded self-serve tiers; the band and any per-tier service grant ride
 // as feature strings (estates:<n>, procurement-pack, plus the per-tier service strings), never as a
 // schema field of LicenceClaims below. msp is per-client-estate (metadata rides the same way,
 // open-set feature strings). enterprise keeps its own 7 features. There is no legacy tier compatibility:

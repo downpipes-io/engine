@@ -1,7 +1,7 @@
 # SHA-384 pins for the vendored copies of the downpipe reference spec package, read by
-# test/validate-format-constants.ts. Vendored from downpipe origin/main at 5ebaff53e459d336513d0fbf41fe883cb7a0db43
+# test/validate-format-constants.ts. Vendored from downpipe origin/main at b831af86c8f61102c86e143db2425885f3e447c2
 # (internal/spec/*.go, byte for byte). To re-vendor: copy the three files, recompute the digests, and
 # record the new commit here. Lines that are not '<sha384>  <name>' are ignored by the reader.
-8641a53959cfab999c8ee59f9fcda799be64c73b7d2edcb5d9987c7d944d378fce01f4ab2f61d957fadc46c2893f084c  spec.go
+ca77d362ce183228ec418fd698ce9692dbd1d071a027e3acf1533fd6113aab18fdf96803a670c15b55755de8dee6d67d  spec.go
 bea04094d92b45a8216283fce99e1cab883ef588324c0d6aac91e689ad117f83535bb2c0cb362c70608e1908dc0ddef3  sourcetype.go
 58e2b495271635f4290e4947fe670b804a5682a2ec1662cdf9eccc8a0846fc9f4fd9776f4cd30908b92d80a062dbf55f  container.go

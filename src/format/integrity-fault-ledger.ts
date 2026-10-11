@@ -403,6 +403,8 @@ export const RUNLOG_ANOMALY_KINDS = [
   "runlog-absent", // the RUNLOG or its signature could not be read at all: DELETING the document is the quietest attack on the chain, so its absence is itself the row
   "run-missing", // the RUNLOG verified and parsed, but the run being checked is not in it: its entry was removed
   "root-disagreement", // the RUNLOG's entry for the run does not bind to the signed root (the index pair rides when the disagreement is on the index)
+  "counter-advanced-after-recovery", // an append met an index its archive already held, so the run counter moved past the highest index in every archive (indexA from, indexB to, archiveId the archive that held it)
+  "sig-restored", // the RUNLOG.sig was absent and the engine published its pending signature over the same bytes: integrity holds, and this row is the trace
 ] as const;
 /**
  * RunlogAnomalyKind is the union over RUNLOG_ANOMALY_KINDS: the kind field of a RunlogAnomaly row. The chain
@@ -424,7 +426,10 @@ export interface RunlogAnomaly {
   readonly lineOrdinal?: number;
   readonly entryCount?: number;
   readonly digest?: string; // 12 lower-case hex over the RUNLOG bytes, computed at the call site
+  readonly archiveId?: string; // the customer's own destination id, shape-gated (RUNLOG_ARCHIVE_ID_RE)
 }
+/** The shape an archive id must have to ride on an anomaly row: a destination id, never a URL or a bucket name with a path. */
+export const RUNLOG_ARCHIVE_ID_RE = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/;
 /**
  * The ceiling on the runlogAnomalies ring, half the others because an anomaly is a property of the DOCUMENT
  * rather than of a record: one RUNLOG yields a handful of rows at most, and each row's entryCount already
@@ -682,19 +687,40 @@ export function noteStreamFault(f: StreamFault): void {
 export function noteRunlogAnomaly(a: RunlogAnomaly): void {
   try {
     if (ledger.runlogAnomalies.length >= RUNLOG_ANOMALIES_CAP) return;
-    if (!RUNLOG_ANOMALY_KIND_SET.has(a.kind)) return; // out of vocabulary: DROP rather than widen it
-    const digest = typeof a.digest === "string" && DIGEST_RE.test(a.digest) ? a.digest : undefined;
-    ledger.runlogAnomalies.push({
-      kind: a.kind,
-      ...(clampInt(a.indexA) !== undefined ? { indexA: clampInt(a.indexA)! } : {}),
-      ...(clampInt(a.indexB) !== undefined ? { indexB: clampInt(a.indexB)! } : {}),
-      ...(clampInt(a.lineOrdinal) !== undefined ? { lineOrdinal: clampInt(a.lineOrdinal)! } : {}),
-      ...(clampInt(a.entryCount) !== undefined ? { entryCount: clampInt(a.entryCount)! } : {}),
-      ...(digest !== undefined ? { digest } : {}),
-    });
+    const row = gateRunlogAnomaly(a);
+    if (row !== null) ledger.runlogAnomalies.push(row);
   } catch {
     /* best-effort */
   }
+}
+
+// gateRunlogAnomaly is the note-side gate both noteRunlogAnomaly and runlogAnomalySnapshot use: an out-of-vocabulary
+// kind is dropped (null), every int is clamped, and the digest is shape-gated.
+function gateRunlogAnomaly(a: RunlogAnomaly): RunlogAnomaly | null {
+  if (!RUNLOG_ANOMALY_KIND_SET.has(a.kind)) return null; // out of vocabulary: DROP rather than widen it
+  const digest = typeof a.digest === "string" && DIGEST_RE.test(a.digest) ? a.digest : undefined;
+  return {
+    kind: a.kind,
+    ...(clampInt(a.indexA) !== undefined ? { indexA: clampInt(a.indexA)! } : {}),
+    ...(clampInt(a.indexB) !== undefined ? { indexB: clampInt(a.indexB)! } : {}),
+    ...(clampInt(a.lineOrdinal) !== undefined ? { lineOrdinal: clampInt(a.lineOrdinal)! } : {}),
+    ...(clampInt(a.entryCount) !== undefined ? { entryCount: clampInt(a.entryCount)! } : {}),
+    ...(digest !== undefined ? { digest } : {}),
+    ...(typeof a.archiveId === "string" && RUNLOG_ARCHIVE_ID_RE.test(a.archiveId) ? { archiveId: a.archiveId } : {}),
+  };
+}
+
+/**
+ * runlogAnomalySnapshot builds a snapshot that carries ONE RUNLOG anomaly row and nothing else, for a path that is
+ * not a crawl, verify or restore (the re-key pre-check). It never touches the isolate-local ledger, so it cannot
+ * drain or clear a concurrent run's evidence. The row passes the same gate as noteRunlogAnomaly.
+ *
+ * @param a - the anomaly row.
+ * @returns the snapshot, or null for an out-of-vocabulary kind.
+ */
+export function runlogAnomalySnapshot(a: RunlogAnomaly): IntegrityFaultSnapshot | null {
+  const row = gateRunlogAnomaly(a);
+  return row === null ? null : { ...emptyLedger(), runlogAnomalies: [row] };
 }
 
 /**
@@ -744,6 +770,26 @@ function clampInt(n: unknown): number | undefined {
 /** resetIntegrityFaultLedger clears the accumulator. Called before a crawl / restore by the run path. */
 export function resetIntegrityFaultLedger(): void {
   ledger = emptyLedger();
+}
+
+/**
+ * markIntegrityFaultLedger returns a copy of the accumulator as it stands, for rollbackIntegrityFaultLedger.
+ *
+ * @returns the mark: an independent copy, unaffected by later notes.
+ */
+export function markIntegrityFaultLedger(): IntegrityFaultSnapshot {
+  return structuredClone(ledger);
+}
+
+/**
+ * rollbackIntegrityFaultLedger sets the accumulator back to a mark. A caller that retries a read it expects to
+ * meet a write in progress uses it to drop the faults of an attempt that a later attempt supersedes. The faults
+ * recorded before the mark stay.
+ *
+ * @param mark - a value markIntegrityFaultLedger returned.
+ */
+export function rollbackIntegrityFaultLedger(mark: IntegrityFaultSnapshot): void {
+  ledger = structuredClone(mark);
 }
 
 /** drainIntegrityFaultLedger returns the snapshot and clears the accumulator in one step. */

@@ -126,7 +126,7 @@ async function planeOne(): Promise<void> {
   }
 
   // The router-side rateLimited wrapper builds the honest 429 over the cap: a whole-second Retry-After >= 1 and
-  // the { error: "rate limited" } body (router-core.ts:212). Driven directly against a real DO.
+  // the { error: "rate limited" } body (router-core.ts:257). Driven directly against a real DO.
   console.log("cell (a): the rateLimited wrapper returns an honest 429 over the per-caller cap");
   {
     const sched = makeScheduler();

@@ -3,7 +3,7 @@
 //
 // WHY. The question this pass settles is whether an UNAUTHORISED restore APPLY (confirm:true by a role
 // lacking restore.apply) records the denied-apply audit row the engine's own comment promises at
-// router-restore.ts:249. That is not answerable by reading the source (two readings already disagreed
+// router-restore.ts:251. That is not answerable by reading the source (two readings already disagreed
 // with an observed absence on a live estate), and the live estate is held by another pass's drive. This
 // entry gives a DRIVEN answer against the same code, with no shared estate touched.
 //

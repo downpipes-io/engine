@@ -19,8 +19,7 @@
 //     second world proves the refusal, that nothing moved, and that the two plural steps the refusal names
 //     move the backups to the new bucket.
 //
-// HOW IT WAS MISSED. Every resolver test seeded the "deploy" row. None cleared the default while a downpipe
-// named it.
+// COVERAGE. Resolver tests seed the "deploy" row. This drive clears the default while a downpipe names it.
 //
 // WHAT THIS DRIVES. A real SchedulerDO over MockStorage and its own routes, the real seal dispatch
 // (cron/seal-dispatch.ts runDownpipe, buffered), one real cron invocation (cron/drive.ts drive: replication and

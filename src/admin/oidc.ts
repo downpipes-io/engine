@@ -254,7 +254,7 @@ export interface TokenResponse {
 // exchangeCode performs the server-side authorization-code -> token exchange (RFC 6749 + PKCE). It sends the
 // code, the one redirect_uri, the client_id and the code_verifier, with client authentication per the
 // connection's clientAuth: client_secret_post (secret in the body), client_secret_basic (HTTP Basic), or
-// pkce_public (no secret, PKCE only). private_key_jwt is a fast-follow (it needs the engine-held key). The
+// pkce_public (no secret, PKCE only). private_key_jwt is not supported (it needs an engine-held key). The
 // clientSecret VALUE is passed in by the caller (the DO resolves it from secretRef just-in-time); it never
 // lives in this module. Returns the id_token (+ optional access_token) or a reason.
 export async function exchangeCode(
@@ -277,7 +277,7 @@ export async function exchangeCode(
     if (params.clientSecret === undefined) return { ok: false, reason: "client_secret_basic requires a resolved client secret" };
     headers.authorization = `Basic ${basicCredentials(conn.clientId, params.clientSecret)}`;
   } else if (conn.clientAuth === "private_key_jwt") {
-    return { ok: false, reason: "private_key_jwt client authentication is not yet implemented in this build" };
+    return { ok: false, reason: "private_key_jwt client authentication is not supported" };
   }
   // pkce_public: no client authentication beyond the PKCE verifier.
   let resp: GuardedResponse;

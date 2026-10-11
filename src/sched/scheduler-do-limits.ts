@@ -113,7 +113,7 @@ export interface DestinationConfig {
   // probeWormCapability), so the console needs this to tell a lock with a rule from a lock that retains
   // nothing when no worm policy is set. Absent means not read: a record stored before 0.3.7, or a bucket whose
   // lock does not read enforced.
-  defaultRetention?: boolean;
+  defaultRetention?: boolean; lockMode?: "GOVERNANCE" | "COMPLIANCE" | "none"; lockRetentionDays?: number; // the default rule's mode and period (lock-facts.ts), stored only beside objectLock "enforced"; "none" has no period; verifiedAt is when they were learnt
   // pricing is the OPTIONAL per-destination unit pricing for the cost estimate (never used by the
   // runtime, never a secret). Absent means the console falls back to a provider preset.
   pricing?: DestinationPricing;
@@ -196,7 +196,7 @@ export interface DestStatusView {
   objectLock?: "enforced" | "not-enforced" | "unknown";
   // defaultRetention passes StoredDestination.defaultRetention through (see DestinationConfig). The console
   // keys its immutability cell and its off-account note on it when no worm policy is set.
-  defaultRetention?: boolean;
+  defaultRetention?: boolean; lockMode?: "GOVERNANCE" | "COMPLIANCE" | "none"; lockRetentionDays?: number; // pass StoredDestination's default-rule facts through
   // authMode + assumeRoleArn are the redaction-safe authentication view: "keys" (a stored long-lived key)
   // or "sts" (AssumeRole temporary credentials), with the role ARN (NOT secret) when STS. The externalId
   // and the principal secret are NEVER surfaced. honest: STS still stores a long-lived principal key, so

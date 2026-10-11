@@ -24,7 +24,7 @@ function ok(label: string, cond: boolean): void {
   if (!cond) failures++;
 }
 
-const NOT_WIRED = /requires an in-tenant export shim .*not yet wired/;
+const NOT_WIRED = /durable_object source is not supported: it needs an in-tenant export shim/;
 const SELECTOR: Selector = { include: [], exclude: [] };
 
 async function testCrawlThrows(): Promise<void> {

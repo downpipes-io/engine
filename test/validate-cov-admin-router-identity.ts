@@ -1154,6 +1154,30 @@ async function main(): Promise<void> {
       const keys = [rows1, rows2, rows3, rows4].map((r) => Object.keys(r).join(","));
       ok("DISCRIMINATION: the four states produce FOUR DIFFERENT ROWS (they used to produce ONE)", new Set(keys).size === 4);
       ok("...and NOT ONE of the three key/signature-file faults is filed as tamper", [rows1, rows3, rows4].every((r) => r["estate-import|signature"] === undefined));
+
+      // STATE 5 (S2-16): THE EXPORT HAS NO CANONICAL FORM. A non-integer number or a lone surrogate parses
+      // from JSON but cannot be canonicalised, so it can never be what the signer signed. The verifier used to
+      // THROW on it (an uncaught 500 with no refusal row); it must refuse it as the altered export it is.
+      // The cases are the S2-16 fuzz inputs: a top-level and a NESTED non-integer, an integer above 2^53-1, and
+      // a lone surrogate.
+      const noncanonical: Array<[string, unknown]> = [
+        ["a non-integer number", { ...exp, configVersion: 1.5 }],
+        ["a nested non-integer number", { ...exp, x: { y: [0.5] } }],
+        ["a 2^60 integer", { ...exp, x: 2 ** 60 }],
+        ["a lone surrogate", { ...exp, x: "\ud800" }],
+      ];
+      for (const [i, [label, body]] of noncanonical.entries()) {
+        const t5 = await target(`kit-noncanon-${i}@cov.example`);
+        let status = 0;
+        try {
+          status = (await call(t5.env, "POST", "/admin/control-plane/import", { jwt: t5.jwt, body: { export: body, signature: sig, signerPublic } })).status;
+        } catch {
+          status = -1;
+        }
+        const rows5 = await refusalRows(t5.stack);
+        ok(`STATE 5 (an export with ${label}): refused 400, not thrown (got ${status})`, status === 400);
+        ok(`STATE 5 (an export with ${label}): recorded as \`signature\`, the altered-export verdict`, rows5["estate-import|signature"] === 1);
+      }
     }
 
     // =====================================================================================
@@ -1275,7 +1299,7 @@ async function main(): Promise<void> {
     // =====================================================================================
     {
       const packRow = async (stack: Stack): Promise<Record<string, unknown> | undefined> => {
-        const rec = await fetchRecoveryStatus(stack.stub);
+        const rec = await fetchRecoveryStatus(stack.stub, {});
         return rec.lastImport as Record<string, unknown> | undefined;
       };
       // STATE A: a GENUINE cross-account import. Both sides NAME an account and the accounts differ.

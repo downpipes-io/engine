@@ -323,7 +323,8 @@ async function main(): Promise<void> {
       const refusal = await caught(() => e.dobj.removeDest(A, false, OWNER));
       sentences.orphanWait = refusal?.message ?? "";
       ok("the orphan refusal names the wait, and that the count falls", refusal !== null && /Replication copies them to another destination of their downpipes at each 15-minute tick, oldest first within each downpipe\. This count falls as replication copies runs\. It can stay the same for several ticks while replication copies shared data, and the wait can take hours\./.test(refusal.message));
-      ok("it states the case where the count does not fall", refusal !== null && /If replication cannot copy a run \(for example, no destination holds it\), its downpipe's newer runs stay in this count until that run leaves the downpipe's newest 50 runs\./.test(refusal.message));
+      ok("it states the case where the count does not fall", refusal !== null && /If replication cannot copy a run \(for example, no destination holds it\), that run stays in this count until it leaves the downpipe's newest 50 runs\./.test(refusal.message) && !/newer runs stay/.test(refusal.message));
+      ok("the whole orphan refusal fits the 600-character console toast", refusal !== null && refusal.message.length <= 600);
       ok("it classifies as orphan-guard", classifyDestProbeRefusal(refusal) === "orphan-guard");
     }
 
@@ -375,6 +376,32 @@ async function main(): Promise<void> {
       await e.storage.put(`hist:${D1}`, h1.slice(1));
       await tick(e);
       ok("when run 1 leaves the run history, one tick moves d1's runs 3 and 5 into the window and the count stays 0", (await heldOnlyOnA()) === 0 && (await repl(e, D1))[B]?.holdsFrom === 3 && (await repl(e, D1))[B]?.holdsIndex === 5 && (await repl(e, D1))[B]?.holdsAbove === undefined);
+    }
+
+    // A stranded run that A's history still names. As the 4c control, but run 1 stays recorded as sealed on A
+    // while A's RUNLOG no longer lists it, so no destination holds it. B copies d1's runs 3 and 5 and records
+    // them in holdsAbove. They leave the count. Run 1 stays, and the refusal says that run stays.
+    console.log("-- 4c stranded. a stranded run stays in the count and the newer runs held above it leave --");
+    {
+      const e = await makeEstate(wire, [B, "dest-c"]);
+      const bucketA = e.wire.bucket(BUCKET[A]!);
+      const kept = parseRunlog(bucketA.get("_RECOVERY/RUNLOG")!.bytes).filter((x) => x.index !== 1);
+      bucketA.delete("_RECOVERY/RUNLOG");
+      bucketA.delete("_RECOVERY/RUNLOG.sig");
+      const a = new S3Destination(ENDPOINT, BUCKET[A]!, "auto", "AKIDEXAMPLE", "not-a-real-secret", { addressing: "path" });
+      for (const x of kept) await appendRunlog(a, e.signer, x, undefined, { relinkLocalPrev: true });
+      const msgOf = async (): Promise<string> => (await caught(() => e.dobj.removeDest(A, false, OWNER)))?.message ?? "";
+      const countOf = async (): Promise<number> => {
+        const m = await msgOf();
+        return Number(/it holds (\d+) backed-up run/.exec(m)?.[1] ?? /proven copy of (\d+) backed-up run/.exec(m)?.[1] ?? "0");
+      };
+      for (let t = 1; t <= TICKS_BOUND + 1; t++) await tick(e);
+      const b1 = (await repl(e, D1))[B];
+      ok(`B records d1's runs 3 and 5 above its window (holdsAbove ${JSON.stringify(b1?.holdsAbove)})`, JSON.stringify(b1?.holdsAbove) === "[3,5]");
+      ok("the count is 1: only the stranded run 1 stays, and runs 3 and 5 left", (await countOf()) === 1);
+      const m = await msgOf();
+      ok("the orphan refusal names the stranded run, not its downpipe's newer runs", /^destination is the only proven copy of 1 backed-up run\(s\) \(src-d1\)\./.test(m) && /that run stays in this count until it leaves the downpipe's newest 50 runs\./.test(m) && !/newer runs stay/.test(m));
+      ok("the refusal fits the 600-character console toast", m.length <= 600);
     }
 
     // Three destinations: A, the origin of every run, is replaced by C after B holds the runs. A is removed, so

@@ -141,7 +141,7 @@ export function capStream(max: number, recordId: string): TransformStream<Uint8A
 /**
  * parseShard decodes a DECRYPTED shard manifest: newline-delimited JSON whose first line is the
  * preamble and whose remaining lines are one record each, with empty lines dropped. The canonical-numeric
- * gate runs on the preamble's recordCountInShard and on every record's plaintextSize BEFORE that line is
+ * gate runs on the preamble's recordCountInShard and on every record's count fields BEFORE that line is
  * parsed, and the preamble's declared count must equal the number of record lines, so a shard that was
  * re-signed with a padded count or a truncated tail is refused here.
  *
@@ -152,19 +152,18 @@ export function capStream(max: number, recordId: string): TransformStream<Uint8A
 export function parseShard(plain: Uint8Array): { preamble: ShardPreamble; recs: ShardRecord[] } {
   const lines = new TextDecoder().decode(plain).split("\n").filter((l) => l.length > 0);
   if (lines.length === 0) throw new Error("shard manifest is empty");
-  // Canonical-numeric gate (SPEC 11.3) on the signed shard count/size fields, mirroring
-  // the Go reference shard reader (shard.go), which calls validateCounts on the preamble's
-  // recordCountInShard and on each record's plaintextSize. Without it a re-signed shard
-  // carrying a non-canonical or out-of-range count is accepted here while Go rejects it
-  // (exit 6).
+  // Canonical-numeric gate (SPEC 11.3) on the signed shard count/size fields, mirroring the Go reference
+  // shard reader (shard.go recordCountPaths): the preamble's recordCountInShard, and on each record its
+  // plaintextSize, each segment's packed offset and length, and each chunkRange bound. Without it a re-signed
+  // shard carrying a non-canonical or out-of-range count is accepted here while Go rejects it (exit 6).
   validateCanonicalCounts(lines[0]!, "recordCountInShard");
-  const preamble = JSON.parse(lines[0]!) as ShardPreamble;
-  if (preamble.kind !== "preamble") throw new Error("first shard line is not a preamble");
+  const preamble = JSON.parse(lines[0]!) as ShardPreamble | null;
+  if (typeof preamble !== "object" || preamble === null || preamble.kind !== "preamble") throw new Error("first shard line is not a preamble");
   const recs: ShardRecord[] = [];
   for (const line of lines.slice(1)) {
-    validateCanonicalCounts(line, "plaintextSize");
-    const r = JSON.parse(line) as ShardRecord;
-    if (r.kind !== "record") throw new Error("shard line is not a record");
+    validateCanonicalCounts(line, "plaintextSize", "segments[].packed.offset", "segments[].packed.length", "segments[].chunkRange[]");
+    const r = JSON.parse(line) as ShardRecord | null;
+    if (typeof r !== "object" || r === null || r.kind !== "record") throw new Error("shard line is not a record");
     recs.push(r);
   }
   if (preamble.recordCountInShard !== recs.length) throw new Error("shard record count mismatch");

@@ -37,7 +37,7 @@
 // reach the chain at the next fold write, router audit write or alarm.
 
 import type { AuditDraft } from "../admin/audit.ts";
-import { expandIpv6 } from "../admin/sign-in-context.ts";
+import { ipSourceGroup } from "../admin/sign-in-context.ts";
 
 // The window, the same one minute as AUTHN_FAILURE_AUDIT_WINDOW_MS and RATE_LIMIT_WINDOW_MS.
 export const AUDIT_FOLD_WINDOW_MS = 60_000;
@@ -418,11 +418,8 @@ export async function flushAuditFolds(state: DurableObjectState, append: (d: Aud
   for (const { fold, writes } of due) for (const w of writes) await append(fold.finish(w));
 }
 
-// recoveryFoldSource names the source a recovery attempt is folded under: an IPv6 address by its /64, since one
-// host commonly holds a whole /64, and any other value as it is. The row still records the attempt's own IP.
+// recoveryFoldSource names the source a recovery attempt is folded under: ipSourceGroup's group, so an IPv6
+// address by its /64, since one host commonly holds a whole /64. The row still records the attempt's own IP.
 export function recoveryFoldSource(ip: string | null): string {
-  if (ip === null) return "none";
-  if (!ip.includes(":")) return ip;
-  const hextets = expandIpv6(ip);
-  return hextets === null ? ip : `${hextets.slice(0, 4).join(":")}::/64`;
+  return ip === null ? "none" : ipSourceGroup(ip);
 }

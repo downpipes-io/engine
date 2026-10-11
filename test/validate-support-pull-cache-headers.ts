@@ -69,16 +69,16 @@ async function main(): Promise<void> {
     ok("/support/audit-feed 401 carries pragma:no-cache", resp.headers.get("pragma") === "no-cache");
   }
 
-  // (c) negative control: "/" and the 404 fallback are UNTOUCHED -- no cache-control/pragma leaks onto
-  // the genuinely-unauthenticated branches, proving the fix is scoped to the two /support/* routes.
+  // (c) negative control: "/" and the 404 fallback carry the response floor's cache-control:no-store and no
+  // pragma, so the /support-only pragma does not leak onto the genuinely-unauthenticated branches.
   {
     const root = await worker.fetch(new Request("https://engine.example/"), env, ctx);
-    ok("GET / has no cache-control header (base security unchanged)", root.headers.get("cache-control") === null);
+    ok("GET / carries the response floor cache-control:no-store", root.headers.get("cache-control") === "no-store");
     ok("GET / has no pragma header (base security unchanged)", root.headers.get("pragma") === null);
 
     const notFound = await worker.fetch(new Request("https://engine.example/nope-404"), env, ctx);
     ok("GET /nope-404 is a 404", notFound.status === 404);
-    ok("GET /nope-404 has no cache-control header (base security unchanged)", notFound.headers.get("cache-control") === null);
+    ok("GET /nope-404 carries the response floor cache-control:no-store", notFound.headers.get("cache-control") === "no-store");
     ok("GET /nope-404 has no pragma header (base security unchanged)", notFound.headers.get("pragma") === null);
   }
 

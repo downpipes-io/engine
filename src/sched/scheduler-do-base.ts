@@ -1938,7 +1938,7 @@ export interface SchedulerDOSurface {
   rearmAlarm(): Promise<void>;
   nextWithJitter(cadenceSeconds: number, schedule?: DownpipeSchedule): { next: number; cronResolve: CronResolve | null; blackoutResolve: BlackoutResolve | null };
   sessionSigningKey(): Promise<Uint8Array>;
-  recoverySigningKey(): Promise<Uint8Array>;
+  recoverySigningKey(): Promise<Uint8Array>; configHistorySigningKey(): Promise<Uint8Array>;
   blockConcurrencyWhile<T>(fn: () => Promise<T>): Promise<T>;
   terminateAllSessions(caller: {
     method: AuthMethod;

@@ -15,7 +15,7 @@ const AUTO_HEAL_REFUSAL_CODE_SET: ReadonlySet<string> = new Set(AUTO_HEAL_REFUSA
 const AUTO_HEAL_SUB_CAUSE_SET: ReadonlySet<string> = new Set(AUTO_HEAL_SUB_CAUSES);
 
 import type { CpExportFailClass } from "../cron/cron-fault-ledger.ts";
-import { parseRunlogSeedResult, readRunlogSeedRecord, recordRunlogSeed, RUNLOG_SEED_HOLD_REASONS } from "./runlog-seed.ts";
+import { advanceRunlogCounter, parseRunlogSeedResult, readRunlogIndexHeld, readRunlogSeedRecord, recordRunlogSeed, RUNLOG_SEED_HOLD_REASONS } from "./runlog-seed.ts";
 import type { SchedulerDOCtor } from "./scheduler-do-base.ts";
 
 export function RoutingControlPlaneMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
@@ -130,6 +130,8 @@ export function RoutingControlPlaneMixin<TBase extends SchedulerDOCtor>(Base: TB
             refusedScan: rec?.refused?.scan ?? null,
             amnesiaProbe,
             runlogSeed,
+            // A refused index waiting for the cron pass to move the counter (sched/runlog-seed.ts); null when none.
+            runlogIndexHeld: await readRunlogIndexHeld(this.state.storage),
             deploy,
             exportHealth,
             lastImport,
@@ -270,6 +272,13 @@ export function RoutingControlPlaneMixin<TBase extends SchedulerDOCtor>(Base: TB
           if (result === null) return this.jsonStatus({ ok: false, reason: "a valid runlog seed outcome is required" }, 400);
           await recordRunlogSeed(this.state.storage, result);
           return this.json({ ok: true });
+        }
+        // The cron pass read every archive's RUNLOG and posts the highest index it found. The counter moves past it
+        // and the pending report clears; the reply names where it moved from and to so the pass can record the row.
+        case "POST /control-plane/runlog-advance": {
+          const body = (await req.json()) as { to?: unknown };
+          const moved = await advanceRunlogCounter(this.state.storage, typeof body.to === "number" ? body.to : 0);
+          return this.json({ ok: true, moved });
         }
         // The break-glass-gated reconcile: the router has verified the break-glass token + the export
         // signature BEFORE forwarding here; the DO re-asserts the caller is the bare-token break-glass

@@ -211,7 +211,7 @@ export async function buildAuthData(
   new DataView(sc.buffer).setUint32(0, opts.signCount, false);
   // includeAttestedData controls whether the attested-credential-data bytes are appended; it defaults to
   // the AT flag. A test sets the AT flag WITHOUT appending real data (or appends data on an assertion) to
-  // drive the "AT set on an assertion is rejected" control: here we set the AT flag but append a minimal
+  // drive the "AT set on an assertion is rejected" control: this helper sets the AT flag and appends a minimal
   // attested-credential-data block so the structure parses far enough for the AT check to fire.
   const appendAttested = opts.includeAttestedData ?? opts.attested;
   if (!appendAttested) return cat(rpIdHash, new Uint8Array([flags]), sc);

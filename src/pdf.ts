@@ -17,7 +17,7 @@ import type { Report } from "./admin/reports.ts";
 //
 // DETERMINISM: given the same Report the bytes are identical (no Date.now, no random ids; the only time
 // shown is the report's own generatedAt). The xref offsets are computed from the actual byte lengths and
-// the object plan is renumbered as the object count grows, so the document is structurally valid.
+// the object plan is numbered from the object count, so the document is structurally valid.
 //
 // REDACTION: the PDF renders ONLY the report's own already-redaction-safe fields (the same data the JSON
 // carries). It never reads env, keys or secrets; the Report is the sole input and it carries none.
@@ -178,11 +178,11 @@ export function renderReportPDF(report: Report): Uint8Array {
   // Wrap each page's painted content in a single BT/ET text object plus the page-level graphics. Graphics
   // (rg/RG/re/m/l/S) live OUTSIDE the text object; text runs (Tf/Tm/Tj) live INSIDE it. We separate them:
   // each paint fragment interleaves graphics and text ops, so we wrap the whole fragment with a leading
-  // graphics-safe state and embed text runs in their own BT/ET. To keep it simple and valid, we emit a
+  // graphics-safe state and embed text runs in their own BT/ET. To keep it simple and valid, the code emits a
   // single content stream per page where graphics ops and a BT...ET block coexist: PDF allows path/fill
   // ops between text objects, and text-positioning/show ops only inside BT/ET. Our textRun() emits Tf/Tm/Tj
-  // which MUST be inside BT/ET, while fillRect/hRule emit path ops which must be OUTSIDE. So we split each
-  // fragment into its graphics lines and its text lines and reassemble: graphics first, then one BT/ET with
+  // which MUST be inside BT/ET, while fillRect/hRule emit path ops which must be OUTSIDE. So each
+  // fragment is split into its graphics lines and its text lines and reassembled: graphics first, then one BT/ET with
   // all the text runs. The helpers tag text lines by containing " Tj" / "Tf"; we route by that.
   const pageStreams: string[] = [];
   // Cover (page 1).
@@ -198,7 +198,7 @@ export function renderReportPDF(report: Report): Uint8Array {
 }
 
 // buildPdfObjects builds the indirect-object table (1-based, with no holes) from the rendered page
-// streams, and returns the highest object number used. The numbering plan (renumbered for the two fonts):
+// streams, and returns the highest object number used. The numbering plan:
 //   1: Catalog
 //   2: Pages (parent)
 //   3: Font  /F1 Helvetica

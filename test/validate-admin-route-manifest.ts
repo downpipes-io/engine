@@ -314,7 +314,7 @@ const CATALOGUE_PRE_SWITCH: ReadonlyArray<{ key: string; why: string }> = [
 ];
 
 // The two numbers router.ts's catalogue header states about itself. They are asserted, not decorative: the
-// header used to say "roughly a third", which is the one form of the claim that can never be checked.
+// header states exact counts, because a vague form such as "roughly a third" can never be checked.
 const HEADER_CATALOGUED = 57;
 const HEADER_DISPATCHED = 179;
 

@@ -10,6 +10,7 @@
 // cycles).
 
 import { CALLER_HEADER, decodeCaller } from "../admin/identity.ts";
+import { appendDestRefusalAudit, type DestRefusalAuditBody } from "./dest-refusal-audit.ts";
 import { censusConfigSecrets, type SwapRequest, swapConfigSecret } from "./config-secret-sweep.ts";
 import {
   DEMO_FRESH_FIRST_RUN_KEY,
@@ -393,6 +394,10 @@ export function RoutingConfigMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
     // tries the next link. The arms are verbatim from the original single switch.
     async routeDestConfig(req: Request, url: URL): Promise<Response | null> {
       switch (`${req.method} ${url.pathname}`) {
+      // The router's record of a REFUSED destination save or clear: the scheduler re-validates the closed detail and
+      // caps the rows (dest-refusal-gate.ts), then writes the failed dest-config-set / -cleared audit row.
+      case "POST /diag/dest-refusal-audit":
+        return this.json(await appendDestRefusalAudit(this.state.storage, (d) => this.appendAudit(d), (await req.json()) as DestRefusalAuditBody, Date.now()));
       case "GET /dest-config": {
         // INTERNAL-ONLY full record (including the secret access key): reached exclusively by the
         // router's own scheduler.fetch when building the effective destination. Never an admin route.

@@ -62,6 +62,7 @@ import {
   type CheckAuto,
   type CheckDraft,
 } from "./posture-checks.ts";
+import { buildConsoleOnWorkersDev } from "./posture-checks-console.ts";
 // PostureInput is used locally by computePosture; it is defined in posture-types.ts (and re-exported
 // below so importers keep importing it from "./posture.ts").
 import type { PostureInput, PostureOverrideInput, PostureOverrideKind } from "./posture-types.ts";
@@ -301,6 +302,10 @@ export const CHECK_SEVERITY: Record<string, PostureSeverity> = {
   // key the engine verifies updates with. Not applicable when no pin is declared. See the builder in
   // posture-checks.ts.
   "release-signer-pin": "medium",
+  // console-on-workers-dev (low, ISO 27001 A.8.20 / A.8.24): a console on a workers.dev hostname is a supported
+  // way to start, so moving it to a custom domain is recommended hardening and not a vulnerability. Omitted
+  // when CONSOLE_ORIGIN is unset, unparseable or not https. See the builder in posture-checks-console.ts.
+  "console-on-workers-dev": "low",
 };
 
 // isKnownCheckId reports whether a string is a real posture check id (only a real check may be
@@ -415,6 +420,7 @@ export function computePosture(input: PostureInput, now: number): PostureReport 
   push(buildUpdateApplyProvenance(input));
   push(buildUpdateVersionDrift(input));
   push(buildReleaseSignerPin(input));
+  push(buildConsoleOnWorkersDev(input));
 
   // Sort: most severe first, then needs-attention before graded/passing within a severity (a CISO scans
   // the worst open findings first), then by id for a stable order. SEVERITY_WEIGHT gives the rank; a

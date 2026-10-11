@@ -5,7 +5,8 @@
 
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { mldsaKeygen } from "../src/crypto/pq.ts";
-import { verifyChannel, checkUpdates, normaliseRiskClass, compareSemver, isEngineCompatible, checkChannelFreshness, loadVerifiedChannel } from "../src/admin/updates.ts";
+import { verifyChannel, checkUpdates, normaliseRiskClass, compareSemver, isEngineCompatible, loadVerifiedChannel } from "../src/admin/updates.ts";
+import { checkChannelFreshness } from "../src/admin/update-freshness.ts";
 import { ENGINE_VERSION } from "../src/format/version.ts";
 import { hybridSign } from "../src/crypto/sign.ts";
 import { concat, utf8, b64urlEncode } from "../src/crypto/bytes.ts";

@@ -71,9 +71,10 @@ export function healthyInput(): PostureInput {
   return {
     status: { destConfigured: true, breakGlassConfigured: true, operationalConfigured: { public: true, private: false }, tokenFallbackDisabled: true, adminTokenPresent: false, bootstrapConsumed: true, breakGlassTokenRetired: false, recoveryBreakGlassReady: true },
     downpipes: [
-      // destinationCount 2 => the downpipe fans out (redundant-copies passes). A healthy posture is
-      // genuinely 3-2-1, so media-diversity is attested below.
-      { id: "dp1", name: "Primary", destinationCount: 2, restoreTestCadenceSeconds: 604800, lastRestoreTestAt: NOW - 2 * DAY, lastRestoreTestOk: true, lastRunId: "run-dp1" },
+      // destinationCount 2 and provenCopies 2 => the downpipe fans out AND both destinations are proven
+      // to hold its latest run (redundant-copies passes). A healthy posture is genuinely 3-2-1, so
+      // media-diversity is attested below.
+      { id: "dp1", name: "Primary", destinationCount: 2, provenCopies: 2, restoreTestCadenceSeconds: 604800, lastRestoreTestAt: NOW - 2 * DAY, lastRestoreTestOk: true, lastRunId: "run-dp1" },
     ],
     expiry: [{ label: "S3 key", state: "ok" }],
     notifyFailureRuleSet: true,

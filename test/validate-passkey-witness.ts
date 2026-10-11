@@ -80,9 +80,19 @@ export async function run(): Promise<void> {
     await registerFinish(env, email, await buildAttestation(auth, challengeFor(begin)), bootstrapOpts());
     const credKey = `passkeyCred:${b64urlEncode(auth.credentialId)}`;
 
+    // Positive control: the same authenticator, an untampered assertion at the same counter, is accepted, so the
+    // refusal below can only come from the tamper. The accepted login stamps lastAssertedAt, so the stamp is
+    // cleared again before the tampered attempt to leave the assertion about "stamps nothing" meaningful.
+    const cbegin = await loginBegin(env, email);
+    const control = await loginFinish(env, challengeIdFor(cbegin), await signAssertion(auth, challengeFor(cbegin), { signCount: 1 }));
+    ok("witness: control - the same authenticator's untampered assertion is accepted", control.json.ok === true);
+    const stamped = await storage.get<StoredCred & Record<string, unknown>>(credKey);
+    const { lastAssertedAt: _a, lastAssertedVia: _v, ...unstamped } = stamped!;
+    await storage.put(credKey, { ...unstamped, signCount: 0 });
+
     const lbegin = await loginBegin(env, email);
     const bad = await loginFinish(env, challengeIdFor(lbegin), await signAssertion(auth, challengeFor(lbegin), { signCount: 3, tamper: true }));
-    ok("witness: a TAMPERED assertion is refused", bad.json.ok !== true);
+    ok("witness: a TAMPERED assertion is refused by the signature check (reason signature)", bad.json.ok === false && bad.json.reason === "signature");
     const afterBad = await storage.get<StoredCred>(credKey);
     ok("witness: a refused assertion stamps NOTHING", afterBad?.lastAssertedAt === undefined);
     ok("witness: a refused assertion does not move the counter either", afterBad?.signCount === 0);
@@ -256,9 +266,9 @@ export async function run(): Promise<void> {
   }
 
   // 4b. THE FALSE EMPTY, AND THE THREE STATES THAT MUST NOT COLLAPSE INTO TWO. Section 4 gives an operator a
-  // read that CAN see the residue; this is the read that used to say there was none. The per-email route
-  // resolved its target as `?email=` else the CALLER's own email, and answered a null target with an empty
-  // list, so a caller with no email of its own got `200 {"credentials":[]}` on every account. That is
+  // read that CAN see the residue; this is the read that must not say there is none. The per-email route
+  // resolves its target as `?email=` else the CALLER's own email, and must not answer a null target with an
+  // empty list, because a caller with no email of its own would get `200 {"credentials":[]}` on every account. That is
   // byte-identical to a clean account, and a bearer token is exactly that caller (whoami answers email:null
   // for one), so an ADMIN_TOKEN sweep read every estate as clean, including estates holding dozens.
   //

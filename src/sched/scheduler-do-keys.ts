@@ -188,26 +188,28 @@ export interface StatusBaselineState {
 // stored value, which is how session termination works WITHOUT a session store: bump the epoch and
 // every token minted before the bump fails its next request (V7.4.3 / V7.4.5 / V7.5.2).
 export const SESSION_EPOCH_PREFIX = "sessionEpoch:";
-// OIDC_GROUPS_PREFIX keys the per-subject GROUP snapshot written at sign-in and re-read on every request, so a
+// OIDC_GROUPS_PREFIX keys the per-subject GROUP record written at sign-in and re-read on every request, so a
 // group change takes effect without waiting out the 12h cookie and the cookie itself never carries groups.
+// The value is { email, groups, updatedAt } (src/sched/oidc-groups-record.ts). Readers also accept a bare
+// string[], the shape with no address and no time.
 //
-// IT HAS ONE WRITER AND NO DELETER, recorded here because this declaration is where the next reader looks.
-// The writer is the native-IdP session mint; the readers are the live request path and spendTimeGroupsFor,
+// The writer is the native-IdP session mint. The readers are the live request path and spendTimeGroupsFor,
 // which quotes it with NO SESSION IN HAND when a stored governance record re-resolves its principal and is
-// then the SOLE source of a group-conferred person's spend-time authority. So those groups are their last
-// login's until they log in again. Every candidate deleter needs a decision, so none is built:
-//   OFFBOARD CANNOT NAME THE KEY, a hard limit rather than a preference. The row is a bare string[] with no
-//     email and no time, and the only email-bearing subject-keyed record here is role:sub:<subject>, which a
-//     group-conferred person does not have. Closing it needs a NEW durable email-to-subject record written at
-//     sign-in: a custody question, plus a rule for subject change.
-//   A STALENESS SWEEP cannot be written before a schema change (no timestamp), needs a retention number, and
-//     its effect is the silent mid-session demotion already counted as group-snapshot-missing.
-//   DELETING ON CONNECTION DISABLE would make disable-then-re-enable irreversible for group-conferred members,
-//     contradicting the suspend-rather-than-void property the replay liveness axis keeps on purpose.
-// The one variant needing no decision buys nothing: on connection DELETE the subject encodes the connId so a
-// prefix scan could enumerate, but both readers already fail closed there, so it would remove rows that
-// confer nothing. Hygiene, not revocation. What DOES revoke today: delete the group->role mapping
-// (estate-wide), reject the stored record, or disable the connection (per person).
+// then the SOLE source of a group-conferred person's spend-time authority. Those groups come from the person's most
+// recent sign-in.
+//
+// Three paths delete it:
+//   OFFBOARD BY ADDRESS lists this prefix and deletes every record whose stored address matches, so a
+//     group-only person, who has no role row, is reached without an address-to-subject index. Role delete and
+//     SCIM DELETE both take this path. A bound member's record under an earlier subject goes with it.
+//   AGE-OUT: the scheduler alarm deletes a record not refreshed for 90 days (OIDC_GROUPS_RETENTION_MS). A bare
+//     string[] record has no address and no time. The next authenticated request of its person upgrades it in
+//     place with the address in their session. The first alarm stamps one that is still bare with
+//     { groups, migratedAt }, which keeps the groups readable, and deletes it once it is still in that shape 14
+//     days after migratedAt (OIDC_GROUPS_MIGRATION_GRACE_MS). A person who is active never reaches that.
+//   ROLE DELETE for a bound member also deletes the record keyed by the subject the role row names.
+// Disabling or deleting a connection deletes nothing here: both readers already fail closed there, and
+// deleting on disable would make re-enabling irreversible for group-conferred members.
 export const OIDC_GROUPS_PREFIX = "oidcgroups:";
 // IDP_EPOCH_PREFIX / SESSION_EPOCH_SUB_PREFIX key the two revocation axes the v3 session adds on top of the
 // per-email epoch. Both store a "not-before" INSTANT (epoch ms): a session whose signed iat predates the
@@ -229,3 +231,10 @@ export const PASSKEY_SIG_MAX = 1024;
 export const PASSKEY_CRED_ID_MAX = 1023;
 export const REG_PATHS = ["bootstrap", "invite", "self-add"] as const;
 export const STEPUP_TOKEN_PREFIX = "stepupToken:";
+// SIGNIN_CONTEXT_PREFIX keys the per-operator sign-in network baseline: signinctx:<stable subject>. Role delete removes it.
+export const SIGNIN_CONTEXT_PREFIX = "signinctx:";
+// CONFIG_HISTORY_SIGNING_KEY_KEY holds the HMAC-SHA-256 key the config history digests are signed and verified
+// under. It is separate from the session key because terminate-all deletes the session key, and a history
+// signed under it would then fail its digest check at its first version. The record is materialised lazily and
+// adopts the current session key bytes verbatim, so every digest already stored keeps verifying.
+export const CONFIG_HISTORY_SIGNING_KEY_KEY = "configHistorySigningKey";

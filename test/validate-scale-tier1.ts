@@ -28,7 +28,6 @@
 //
 // Run: node test/validate-scale-tier1.ts
 //
-//
 
 import { createHash } from "node:crypto";
 import { rmSync } from "node:fs";

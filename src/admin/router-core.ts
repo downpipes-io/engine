@@ -19,6 +19,7 @@ import {
 import { callerHeaders } from "./router-audit.ts";
 import { type AdminRuntime, doURL, recordAuthSignalEdge } from "./router-helpers.ts";
 import { readSessionCookie, STEPUP_FRESH_MS } from "./session.ts";
+import { ipSourceGroup } from "./sign-in-context.ts";
 import type { RiskClass } from "./updates.ts";
 
 
@@ -78,6 +79,51 @@ export async function parseJsonBody<T>(req: Request): Promise<{ ok: true; body: 
   } catch {
     return { ok: false };
   }
+}
+
+// The body helpers below are the ONE place an admin route turns a request body into an object.
+//
+// readObjectBody parses the body and answers a 400 Response when it is not a JSON object. JSON null, a number, a
+// string and an array all parse, and every route that then reads a field off the result throws on null and quietly
+// reads nothing off the rest; a 500 for the first and a silent empty request for the others are the same defect.
+// `malformedAsEmpty` keeps a route that treats unparseable text as an empty object doing so (its own field checks
+// then answer); a parseable value that is not an object is a 400 either way. A caller tests the result with
+// `instanceof Response`. A route reads the body only AFTER its capability gate, and a refused caller's body is
+// read with peekObjectBody, for the fields the denied audit row names.
+const NOT_AN_OBJECT = "request body must be a JSON object";
+
+export function notAnObjectResponse(): Response {
+  return jsonError(NOT_AN_OBJECT, 400);
+}
+
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+export async function readObjectBody<T extends object>(req: Request, opts: { malformedAsEmpty?: boolean } = {}): Promise<T | Response> {
+  const parsed = await parseJsonBody<unknown>(req);
+  if (!parsed.ok) return opts.malformedAsEmpty === true ? ({} as T) : notAnObjectResponse();
+  return isPlainObject(parsed.body) ? (parsed.body as T) : notAnObjectResponse();
+}
+
+// peekObjectBody reads a body for the fields a DENIED audit row names. It never throws and never refuses: a body
+// that is unreadable or not an object is an empty object, so the refused caller still gets their 403 and their
+// denied row, with the fields they did not supply left blank.
+export async function peekObjectBody<T extends object>(req: Request): Promise<Partial<T>> {
+  const parsed = await parseJsonBody<unknown>(req);
+  return parsed.ok && isPlainObject(parsed.body) ? (parsed.body as Partial<T>) : {};
+}
+
+// refuseBadBody is for the routes that must read the body BEFORE they can choose a gate (the request-shape
+// checks run ahead of the role gate on purpose). When that body is not an object, the caller's own capability
+// still decides first: a caller without it gets the 403 and the denied row, one with it gets the 400.
+export async function refuseBadBody(caller: Caller, required: Capability, bad: Response, onDenied?: () => Promise<unknown>): Promise<Response> {
+  const denied = gate(caller, required);
+  if (denied) {
+    if (onDenied) await onDenied();
+    return denied;
+  }
+  return bad;
 }
 
 
@@ -628,17 +674,17 @@ const AUTH_RATE_LIMIT_FALLBACK_RETRY_AFTER_S = 60;
 
 export async function authRateLimited(scheduler: DurableObjectStub, req: Request, runtime?: KeepAlive): Promise<Response | null> {
   const ip = req.headers.get("CF-Connecting-IP");
-  // No source IP: ADMIT. On the custom-domain-only deployment the Cloudflare edge ALWAYS injects
-  // CF-Connecting-IP (overwriting any client-supplied value), and the engine rejects workers.dev, so a real
-  // edge request can never lack it - its absence means a non-edge/local context (a validator), not an
-  // attacker who stripped it. Failing closed here would buy ZERO production security (the case cannot occur
-  // at the edge) while bucketing every header-less local caller into one shared "ip:" key. The deliberate,
-  // edge-guaranteed accept is documented in docs/security/identity-sessions-and-files.md.
+  // No source IP: ADMIT, with no throttle bucket. Cloudflare's edge sets CF-Connecting-IP on the requests it
+  // proxies to the engine and overwrites any client-supplied value. The engine does not look at the inbound
+  // host, so that holds for a custom domain and a workers.dev hostname alike; a request without the header
+  // did not come through the edge (a local caller such as a validator) and is not an attacker who stripped
+  // it. Failing closed would add no protection at the edge while bucketing every header-less local caller
+  // into one shared "ip:" key. The accept decision is in docs/security/identity-sessions-and-files.md.
   if (ip === null || ip.length === 0) return null;
   try {
     const resp = await scheduler.fetch(doURL("/rate-check"), {
       method: "POST",
-      body: JSON.stringify({ key: `ip:${ip}`, max: AUTH_RATE_LIMIT_MAX_PER_WINDOW }),
+      body: JSON.stringify({ key: `ip:${ipSourceGroup(ip)}`, max: AUTH_RATE_LIMIT_MAX_PER_WINDOW }),
       headers: { "content-type": "application/json" },
     });
     const verdict = (await resp.json()) as { allowed?: boolean; retryAfterMs?: number };
@@ -810,8 +856,8 @@ export function resolveRollbackTarget(rec: { pending: null | { fromVersion?: str
   if (rec.pending && typeof rec.pending.fromVersion === "string" && rec.pending.fromVersion !== "") return rec.pending.fromVersion;
   const last = rec.last;
   if (!last) return "";
-  // applied: roll back to the prior known-good. rolled-back: fromVersion is the version we reverted TO (the
-  // current known-good); we are already on it, so a redundant rollback no-ops against it (never the BAD
+  // applied: roll back to the prior known-good. rolled-back: fromVersion is the version the engine reverted TO (the
+  // current known-good); the engine is already on it, so a redundant rollback no-ops against it (never the BAD
   // version, which is recorded in toVersion). Both use fromVersion.
   //
   // The three HONEST outcomes carry the SAME fromVersion convention (the known-good), and each is a

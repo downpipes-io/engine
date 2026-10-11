@@ -489,7 +489,7 @@ async function main(): Promise<void> {
     // carries all three Azure credential kinds in the secretAccessKey field, so they are sealed by this one
     // call under this one domain. The count assertion above would not tell you that; a new secret kind that
     // skipped the wrap entirely would leave the count unchanged and the credential in plaintext.
-    "admin/router-destinations.ts:227": "default", // the destination secretAccessKey, CONFIG_SECRET_AAD
+    "admin/router-destinations.ts:238": "default", // the destination secretAccessKey, CONFIG_SECRET_AAD
     "admin/router-discovery.ts:407": "DISCOVERY_SECRET_AAD",
     // The IdP client secret's write ingress. It is the last console-set credential class that would
     // otherwise land in Durable Object storage as a bare string; it is sealed here, in the Worker, because

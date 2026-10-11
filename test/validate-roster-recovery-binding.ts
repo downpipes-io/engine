@@ -26,9 +26,11 @@
 
 import { handleAdmin } from "../src/admin/router.ts";
 import { STEPUP_SUBS } from "../src/admin/router-core.ts";
+import { passkeySubject } from "../src/admin/identity.ts";
 import { SESSION_COOKIE_NAME } from "../src/admin/session.ts";
 import { classifyRosterMembership, rosterRefusesEnrolment } from "../src/admin/signin-factors.ts";
 import { PASSKEY_CRED_PREFIX, PASSKEY_INVITE_PREFIX } from "../src/sched/scheduler-do-base.ts";
+import { STEPUP_TOKEN_PREFIX } from "../src/sched/scheduler-do-keys.ts";
 import type { Env } from "../src/env.d.ts";
 import { verdictReached } from "./lib/verdict-guard.ts";
 import { buildContext } from "./validate-owner-action-dualcontrol-harness.ts";
@@ -368,10 +370,10 @@ async function main(): Promise<void> {
     // by the deliberate design this work is built on, never expire, and it reads no roster at all.
     //
     // Its gate is authenticated + carries a verified email + CSRF + step-up, and every one of those is
-    // satisfied by the very session the spent code just minted: it is method "passkey" with the
-    // consumed email's subject, so it is indistinguishable from an authenticator's session at exactly
-    // the point that matters, and handleRegenerate's own comment records that a recovery sign-in is
-    // recent enough to clear the step-up. So the removed person spends one code, is refused a passkey
+    // satisfied by the very session the spent code just minted except step-up, which that session now
+    // meets only with a fresh passkey assertion. The helper below grants the step-up (a one-shot token
+    // for the session's subject, as a fresh assertion would mint) so these cases keep testing the roster
+    // gate itself. So the removed person spends one code, is refused a passkey
     // by the section B gate, and on the very next request banks a fresh set of the same one-time
     // secret. That is the sentence the section B fix uses for what it closes, reached by a shorter
     // route, and the residue it leaves is worse: an unbounded supply with no expiry.
@@ -385,11 +387,14 @@ async function main(): Promise<void> {
       const LEAVER2 = "leaver2-rbr@acme.example";
       // Regenerate exactly as the console does: the production router route, carrying the session
       // cookie the spent code minted, with a same-origin Origin so the CSRF check passes.
-      const regenerate = async (cookie: string | null): Promise<{ status: number; codes: string[] | undefined }> => {
+      let stepUpSeq = 0;
+      const regenerate = async (cookie: string | null, email: string): Promise<{ status: number; codes: string[] | undefined }> => {
+        const stepUpToken = `rbr-stepup-${++stepUpSeq}`;
+        await store.put(`${STEPUP_TOKEN_PREFIX}${passkeySubject(email)}:${stepUpToken}`, { expiresAt: Date.now() + 60_000 });
         const r = await handleAdmin(
           new Request("https://engine.example/admin/auth/recovery-codes/regenerate", {
             method: "POST",
-            headers: { "content-type": "application/json", origin: ORIGIN, ...(cookie !== null ? { cookie: `${SESSION_COOKIE_NAME}=${cookie}` } : {}) },
+            headers: { "content-type": "application/json", origin: ORIGIN, "x-downpipes-stepup": stepUpToken, ...(cookie !== null ? { cookie: `${SESSION_COOKIE_NAME}=${cookie}` } : {}) },
             body: JSON.stringify({}),
           }),
           authEnv(),
@@ -408,7 +413,7 @@ async function main(): Promise<void> {
       ok("J3: the removed person's code signs them in, as section B requires (no lockout invented)", spent.status === 200 && typeof leaverCookie === "string");
       const beforeRemaining = await remainingFor(LEAVER2);
 
-      const regen = await regenerate(leaverCookie);
+      const regen = await regenerate(leaverCookie, LEAVER2);
       ok("J4: THE CLAIM UNDER TEST: an OFF-ROSTER session cannot mint a fresh set of never-expiring codes", regen.status === 403);
       ok("J4: THE ASSERTION THAT MATTERS: no plaintext set was returned to them", regen.codes === undefined);
       // The write assertion, because a status-only proof passes a build that refuses and mints anyway.
@@ -420,7 +425,7 @@ async function main(): Promise<void> {
       // broke. STAYER spent one code in section B and is still on the roster.
       const stayerCodes = await mintCodes(STAYER);
       const stayerSpent = await spendCode(STAYER, stayerCodes[0] ?? "");
-      const stayerRegen = await regenerate(cookieOf(stayerSpent));
+      const stayerRegen = await regenerate(cookieOf(stayerSpent), STAYER);
       ok("J5: NO LOCKOUT: a member the roster still carries regenerates their own set (200)", stayerRegen.status === 200);
       ok("J5: and they really got a fresh plaintext set back", Array.isArray(stayerRegen.codes) && (stayerRegen.codes?.length ?? 0) > 0);
 

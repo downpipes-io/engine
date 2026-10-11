@@ -213,8 +213,8 @@ export function planAttach(existing: LiveBinding[], additions: AttachSource[]): 
 //     it is not in beforeExisting and is not one of our additions; it is now ABSENT or, if
 //     it survived, it is an after-read binding the change did not intend); and
 //   - our own write being clobbered by a concurrent writer whose PATCH won the race (our
-//     addition is absent, already caught below; a binding we removed reappears, also caught;
-//     or an after-read binding we never sent appears, caught by the unexpected-binding guard).
+//     addition is absent, already caught below; a binding the change removed reappears, also caught;
+//     or an after-read binding the change never sent appears, caught by the unexpected-binding guard).
 // The detection is exact: the after-read must contain ONLY bindings the change accounted
 // for, every named before-binding that was not an intended removal, plus every intended
 // addition. Any other NAMED binding in the after-read is a writer we did not coordinate

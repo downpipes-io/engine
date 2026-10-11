@@ -62,7 +62,7 @@ async function main(): Promise<void> {
   ok("resolvePostureAckStatement refuses a stale version", resolvePostureAckStatement("operational", "key-posture-ack/v0") === null);
 
   // The statements RESTATE the specific residual inline (the liability-evidence requirement). Assert the
-  // load-bearing phrases and the factual correction (Worker secret, not "Secrets Store").
+  // load-bearing phrases and that the key is a Worker secret, not "Secrets Store".
   const op = POSTURE_ACK_STATEMENTS.operational.text;
   ok("operational statement names the in-account decryption-capable key", op.includes("in my own Cloudflare account") && op.includes("decrypt my stored archives"));
   ok("operational statement names the compromise + malicious-update residual", op.includes("Cloudflare account is compromised") && op.includes("malicious platform update"));

@@ -1,6 +1,5 @@
-// Proves ASVS V13.3.4 for the engine: the seven secrets docs/security/cryptography-and-keys.md commits to
-// a rotation cadence are CONFIGURED to expire and rotate, not merely documented as a schedule (that is
-// V13.1.4, already met by the table itself).
+// Proves that the seven secrets docs/security/cryptography-and-keys.md commits to
+// a rotation cadence are CONFIGURED to expire and rotate, not merely documented as a schedule.
 //
 // Coverage:
 //  - doc-pin: the cadence table in secret-rotation.ts agrees with the live markdown table, and a hand-

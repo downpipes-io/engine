@@ -83,6 +83,48 @@ export function expandIpv6(ip: string): string[] | null {
   return out;
 }
 
+// ipSourceGroup names the client that a per-source control keys on: an IPv4 address as itself, and an IPv6
+// address by its /64, because one host commonly holds a whole /64. The per-IP sign-in limiters and the
+// recovery audit fold (sched/audit-fold.ts) all key on it. It normalises the input first, so one address
+// cannot leave its group by a different spelling: upper case, leading zeros, a compressed or full form,
+// brackets, a zone id ("%eth0"), or a dotted IPv4 tail. An IPv4-mapped address (::ffff:a.b.c.d) groups as the
+// IPv4 address it carries. A value that does not parse is returned trimmed and lowercased.
+export function ipSourceGroup(ip: string): string {
+  let t = ip.trim().toLowerCase();
+  if (t.startsWith("[") && t.endsWith("]")) t = t.slice(1, -1);
+  if (!t.includes(":")) {
+    const v4 = ipv4Octets(t);
+    return v4 === null ? t : v4.join(".");
+  }
+  const zone = t.indexOf("%");
+  if (zone >= 0) t = t.slice(0, zone);
+  // A dotted IPv4 tail becomes the two hextets it stands for, so expandIpv6 can read the address.
+  const lastColon = t.lastIndexOf(":");
+  const tail = t.slice(lastColon + 1);
+  if (tail.includes(".")) {
+    const v4 = ipv4Octets(tail);
+    if (v4 === null) return t;
+    const [a = 0, b = 0, c = 0, d = 0] = v4;
+    t = `${t.slice(0, lastColon + 1)}${((a << 8) | b).toString(16)}:${((c << 8) | d).toString(16)}`;
+  }
+  const h = expandIpv6(t);
+  if (h === null) return t;
+  if (h.slice(0, 5).every((x) => x === "0") && h[5] === "ffff") {
+    const hi = parseInt(h[6] ?? "0", 16);
+    const lo = parseInt(h[7] ?? "0", 16);
+    return `${hi >> 8}.${hi & 255}.${lo >> 8}.${lo & 255}`;
+  }
+  return `${h.slice(0, 4).join(":")}::/64`;
+}
+
+// ipv4Octets reads a dotted-quad IPv4 address into its four octets, or null when it is not one.
+function ipv4Octets(s: string): number[] | null {
+  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(s);
+  if (m === null) return null;
+  const octets = [m[1], m[2], m[3], m[4]].map((o) => Number(o));
+  return octets.every((n) => Number.isInteger(n) && n >= 0 && n <= 255) ? octets : null;
+}
+
 // evaluateSignInContext is the PURE decision behind the notification. Given the current per-operator seen-set,
 // the coarse prefix of THIS sign-in, and now, it (1) prunes entries older than the TTL, (2) decides whether the
 // prefix is materially NEW, (3) records/refreshes the prefix, and (4) caps the set to the CAP most-recent

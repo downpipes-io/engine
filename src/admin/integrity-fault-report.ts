@@ -22,7 +22,7 @@
 //     shape-gated hex digest, and applyIntegrityFaults (admin/diag-records.ts) re-gates every field DO-side, so
 //     this module adds no trust of its own.
 
-import { drainIntegrityFaultLedger, isEmptyIntegritySnapshot, resetIntegrityFaultLedger } from "../format/integrity-fault-ledger.ts";
+import { drainIntegrityFaultLedger, isEmptyIntegritySnapshot, type RunlogAnomaly, resetIntegrityFaultLedger, runlogAnomalySnapshot } from "../format/integrity-fault-ledger.ts";
 import { recordDiagWrite } from "./diag-writer.ts";
 import { doURL } from "../do-url.ts";
 
@@ -58,5 +58,33 @@ export async function reportIntegrityFaults(scheduler: DurableObjectStub, downpi
     );
   } catch {
     // Best-effort by construction: a fault WHILE reporting a fault must never mask the run's own outcome.
+  }
+}
+
+/**
+ * reportRunlogAnomaly posts ONE RUNLOG anomaly row for a downpipe from a path that is not a crawl, verify or
+ * restore: the cron pass that moves the run counter past the indices the destinations hold, and the re-key
+ * pre-check, which refuses a RUNLOG whose chain is anomalous. The row lands in the same per-downpipe
+ * integrityFaults record the seal path writes, so a pack taken after the move or a refused re-key names it. It
+ * does not use the isolate-local ledger (see runlogAnomalySnapshot). Best-effort; never throws.
+ *
+ * @param scheduler - the scheduler DO stub.
+ * @param downpipeId - the downpipe the anomaly belongs to.
+ * @param a - the anomaly row: closed kind, indices, counts and the 12-hex RUNLOG digest only.
+ */
+export async function reportRunlogAnomaly(scheduler: DurableObjectStub, downpipeId: string, a: RunlogAnomaly): Promise<void> {
+  try {
+    if (typeof downpipeId !== "string" || downpipeId === "") return;
+    const snapshot = runlogAnomalySnapshot(a);
+    if (snapshot === null) return;
+    await recordDiagWrite(scheduler, "integrity-faults", () =>
+      scheduler.fetch(doURL("/diag/integrity-faults"), {
+        method: "POST",
+        body: JSON.stringify({ id: downpipeId, snapshot }),
+        headers: { "content-type": "application/json" },
+      }),
+    );
+  } catch {
+    // site-fault-waiver: src/admin/integrity-fault-report.ts:reportRunlogAnomaly:catch:1 -- recordDiagWrite already counts a dropped post in droppedWrites; this catch only stops a fault while reporting from changing the re-key's refusal
   }
 }

@@ -109,7 +109,7 @@ export const HEALTHY_VARIANT_SCENARIOS: Scenario[] = [
     expectAbsentSignals: ["plan-ceiling-exceeded", "backup-overdue", "posture-failed", "bindings-probe-failed", "deploy-identity-changed", "recovery-required", "dest-auth-failed"],
     mutate: (w) => {
       const now = Date.now();
-      // Deployed this morning; nothing attached yet. The DO answers honestly-empty everywhere.
+      // Freshly deployed; nothing attached yet. The DO answers honestly-empty everywhere.
       w.routes["/downpipes"] = [];
       w.routes["/history"] = { byDownpipe: {} };
       w.routes["/replication"] = { byDownpipe: {} };

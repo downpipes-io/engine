@@ -22,18 +22,14 @@
 //            non-empty target at the header, before a single CREATE/INSERT, so a column-added/dropped/
 //            retyped target can never be half-written. Refuted (fail-closed proven at the divergence case).
 //   IDEM-03  KV TTL -> REPRODUCED, as an ABSOLUTE epoch second, passed through unclamped whenever the live
-//            binding will still take it. A stale backup whose TTL has LAPSED is the case this check used to
-//            record as "refuted-with-observation": the past expiration went to the binding, KV rejected it
-//            (its >=60s-in-future rule), and the record failed loudly, on the stated ground that "the
-//            operator recovers it offline / re-issues the TTL". THAT GROUND DOES NOT HOLD. There is no
-//            in-product path back for the customer: they never run a terminal, and the offline reader writes
-//            a recovered value to a file rather than putting a KV key back. The failure was also loud in the
-//            wrong direction, since its reason was the generic destination-access one and the dry run had
-//            already counted the record as a planned write. So the behaviour CHANGED: the key now restores
-//            with its value and metadata and WITHOUT the lapsed expiration, the drop is counted on the
-//            receipt (kv-expiration-lapsed) and warned about in the dry run before the operator confirms.
-//            The assertions below are inverted to match, and the boundary is still pinned in both
-//            directions: a still-valid future TTL must reach the binding untouched.
+//            binding will still take it. A stale backup whose TTL has LAPSED is the other case. Passing the past expiration
+//            to the binding would make KV reject it (its >=60s-in-future rule) and fail the record, and there
+//            is no in-product path back for the customer: they never run a terminal, and the offline reader
+//            writes a recovered value to a file rather than putting a KV key back. So the key restores with
+//            its value and metadata and WITHOUT the lapsed expiration. The drop is counted on the receipt
+//            (kv-expiration-lapsed) and warned about in the dry run before the operator confirms. The
+//            boundary is pinned in both directions: a still-valid future TTL must reach the binding
+//            untouched.
 //   IDEM-04  R2 metadata -> content-type + EVERY modelled httpMetadata field + customMetadata are
 //            reproduced. FINDING: the source object's STORAGE CLASS is SILENTLY DROPPED -- describeObject
 //            never reads R2Object.storageClass, RestoreDescriptor / R2Descriptor carry no slot for it, and

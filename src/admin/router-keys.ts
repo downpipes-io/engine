@@ -25,7 +25,7 @@ import {
   postureAckStatementHash,
   resolvePostureAckStatement,
 } from "./posture-ack-statements.ts";
-import { callerHeaders, gate, isAuditFolded, jsonError, jsonResponse, rateLimited, recordAudit, recordAuditCheckedAfterSelfDeploy } from "./router-core.ts";
+import { callerHeaders, gate, isAuditFolded, jsonError, jsonResponse, peekObjectBody, rateLimited, readObjectBody, recordAudit, recordAuditCheckedAfterSelfDeploy } from "./router-core.ts";
 import { doURL, type RouterCtx } from "./router-helpers.ts";
 import { type DiscoveryConfigView, resolveEngineAccountId } from "./router-sources.ts";
 import { noteSiteFault } from "./site-faults.ts";
@@ -411,12 +411,11 @@ export async function handleKeys(ctx: RouterCtx): Promise<Response | null> {
     // sets nothing and makes zero API calls. Secrets set this way are available WITHOUT a redeploy; the
     // console polls GET /admin/status until they read present.
     case "POST /keys/install": {
-      // Read the body BEFORE the gate so a REFUSED attempt records what was tried (the same discipline as
-      // the IdP connection-add), but NEVER record the token or any private value (only that an install
-      // was attempted; the closed key-ceremony target carries who + when, no value). A malformed body
-      // degrades to {} so the gate still applies (a non-owner is still refused; an owner falls through to
-      // installEngineSecrets, which 400s on the missing keys) rather than throwing past the gate.
-      const body = (await req.json().catch(() => ({}))) as KeyInstallBody & { confirmRekey?: unknown };
+      // The gate runs before any body field is read, and a REFUSED attempt is recorded, but NEVER with the
+      // token or any private value (only that an install was attempted; the closed key-ceremony target
+      // carries who + when, no value). A body that is not parseable degrades to {} (an owner falls through to
+      // installEngineSecrets, which 400s on the missing keys); a body that parses to something other than an
+      // object is a 400.
       const denied = gate(caller, "keys.ceremony");
       if (denied) {
         // Record the refused install (a caller without keys.ceremony attempting to write the engine's
@@ -424,6 +423,8 @@ export async function handleKeys(ctx: RouterCtx): Promise<Response | null> {
         await auditChecked(scheduler, caller, sourceIp, "keys-installed", "denied", { kind: "key-ceremony" });
         return denied;
       }
+      const body = await readObjectBody<KeyInstallBody & { confirmRekey?: unknown }>(req, { malformedAsEmpty: true });
+      if (body instanceof Response) return body;
       const limited = await rateLimited(scheduler, caller);
       if (limited) return limited;
       // ALREADY-PROVISIONED GUARD (custody-critical): a signer already present means this install would
@@ -486,12 +487,13 @@ export async function handleKeys(ctx: RouterCtx): Promise<Response | null> {
     // rate-limited, name-only audit; the new break-glass private never leaves the browser, so no private
     // value and no token ever reaches the engine beyond the single PUT body Cloudflare requires.
     case "POST /keys/rotate": {
-      const body = (await req.json().catch(() => ({}))) as { token?: unknown; breakGlassPublic?: unknown };
       const denied = gate(caller, "keys.ceremony");
       if (denied) {
         await auditChecked(scheduler, caller, sourceIp, "break-glass-rotated", "denied", { kind: "key-ceremony" });
         return denied;
       }
+      const body = await readObjectBody<{ token?: unknown; breakGlassPublic?: unknown }>(req, { malformedAsEmpty: true });
+      if (body instanceof Response) return body;
       const limited = await rateLimited(scheduler, caller);
       if (limited) return limited;
       const cfgResp = await scheduler.fetch(doURL("/sources/discovery-config"), { method: "GET" });
@@ -541,12 +543,13 @@ export async function handleKeys(ctx: RouterCtx): Promise<Response | null> {
     // rate-limited, name-only audit; the operational private is validated with the engine's own loader
     // before any network call and is never logged or returned.
     case "POST /keys/add-operational": {
-      const body = (await req.json().catch(() => ({}))) as { token?: unknown; operationalPublic?: unknown; operationalPrivate?: unknown };
       const denied = gate(caller, "keys.ceremony");
       if (denied) {
         await auditChecked(scheduler, caller, sourceIp, "operational-added", "denied", { kind: "key-ceremony" });
         return denied;
       }
+      const body = await readObjectBody<{ token?: unknown; operationalPublic?: unknown; operationalPrivate?: unknown }>(req, { malformedAsEmpty: true });
+      if (body instanceof Response) return body;
       const limited = await rateLimited(scheduler, caller);
       if (limited) return limited;
       // REFUSE, not silently rotate: an operational key already present means this is not a break-glass-
@@ -615,12 +618,13 @@ export async function handleKeys(ctx: RouterCtx): Promise<Response | null> {
     // public derived from it, and the answer says configRecipient "repaired". A lone public is refused with the
     // recovery step. No bound half is ever overwritten.
     case "POST /keys/add-config-recovery": {
-      const body = (await req.json().catch(() => ({}))) as { token?: unknown; configRecipientPublic?: unknown; configRecipientPrivate?: unknown; configWrapKey?: unknown };
       const denied = gate(caller, "keys.ceremony");
       if (denied) {
         await auditChecked(scheduler, caller, sourceIp, "config-recovery-added", "denied", { kind: "key-ceremony" });
         return denied;
       }
+      const body = await readObjectBody<{ token?: unknown; configRecipientPublic?: unknown; configRecipientPrivate?: unknown; configWrapKey?: unknown }>(req, { malformedAsEmpty: true });
+      if (body instanceof Response) return body;
       const limited = await rateLimited(scheduler, caller);
       if (limited) return limited;
       const wantsRecipient = bodyString(body.configRecipientPublic).trim() !== "" || bodyString(body.configRecipientPrivate).trim() !== "";
@@ -692,12 +696,13 @@ export async function handleKeys(ctx: RouterCtx): Promise<Response | null> {
     // OPERATIONAL_RETIRED marker, and runs sealed after that call carry the new operational recipient.
     // Owner-gated, rate-limited; a name-only audit row is the durable evidence of the change.
     case "POST /keys/break-glass-only": {
-      const body = (await req.json().catch(() => ({}))) as { token?: unknown; confirmDiscardStranded?: unknown };
       const denied = gate(caller, "keys.ceremony");
       if (denied) {
         await auditChecked(scheduler, caller, sourceIp, "operational-removed", "denied", { kind: "key-ceremony" });
         return denied;
       }
+      const body = await readObjectBody<{ token?: unknown; confirmDiscardStranded?: unknown }>(req, { malformedAsEmpty: true });
+      if (body instanceof Response) return body;
       const limited = await rateLimited(scheduler, caller);
       if (limited) return limited;
       // DISCARD-GUARD (custody-critical): removing the operational key strands any archive wrapped to
@@ -796,28 +801,25 @@ export async function handleKeys(ctx: RouterCtx): Promise<Response | null> {
     // operator must still be able to operate); its adversary is a disputing customer, not a malicious
     // engine (a malicious engine owns its own DO state and could forge any record).
     case "POST /keys/posture-acknowledgement": {
-      const body = (await req.json().catch(() => ({}))) as {
-        posture?: unknown;
-        statementVersion?: unknown;
-        acknowledgedText?: unknown;
-        channel?: unknown;
-      };
       const denied = gate(caller, "keys.ceremony");
       if (denied) {
+        const peek = await peekObjectBody<{ posture?: unknown; statementVersion?: unknown; channel?: unknown }>(req);
         // Record the refused acknowledgement attempt with the posture it was for (or a placeholder hash),
         // so even a denied attempt is attributable. The statement hash is not recomputed on a denial (no
         // canonical lookup for a possibly-bad posture); a fixed marker keeps the closed target well-formed.
-        const posture: PostureChoice = body.posture === "break-glass-only" ? "break-glass-only" : "operational";
+        const posture: PostureChoice = peek.posture === "break-glass-only" ? "break-glass-only" : "operational";
         await auditChecked(scheduler, caller, sourceIp, "posture-acknowledged", "denied", {
           kind: "posture-ack",
           posture,
-          statementVersion: typeof body.statementVersion === "string" ? body.statementVersion.slice(0, 64) : "unknown",
+          statementVersion: typeof peek.statementVersion === "string" ? peek.statementVersion.slice(0, 64) : "unknown",
           statementSha384: "sha384:denied",
-          channel: body.channel === "keys-rekey" ? "keys-rekey" : "onboarding",
+          channel: peek.channel === "keys-rekey" ? "keys-rekey" : "onboarding",
           principalType: postureAckPrincipalType(caller),
         });
         return denied;
       }
+      const body = await readObjectBody<{ posture?: unknown; statementVersion?: unknown; acknowledgedText?: unknown; channel?: unknown }>(req, { malformedAsEmpty: true });
+      if (body instanceof Response) return body;
       const limited = await rateLimited(scheduler, caller);
       if (limited) return limited;
       const posture = body.posture;

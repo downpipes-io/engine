@@ -3,8 +3,10 @@
 //
 // The engine refuses to modify a RUNLOG it cannot verify under its own key, because re-signing an unverified
 // RUNLOG is how a change made in the bucket would be laundered. Legitimate states also leave a RUNLOG that does
-// not verify: a deleted or expired .sig, a crash that also lost the pending signature, a re-key over a signer
-// that would not load, or a late old-version seal after a re-key hand-over. An Owner decides those here:
+// not verify: a deleted or expired .sig whose pending signature is also gone, a crash that also lost the
+// pending signature, a re-key over a signer that would not load, or a late old-version seal after a re-key
+// hand-over. A .sig deleted while the pending signature still verifies the bytes is published again from it by
+// the next write, and the support pack records a sig-restored anomaly row. An Owner decides the others here:
 //
 //   GET  /runlog/signature?destinationId=<id>  what does not verify: the object, the key it was checked under,
 //        the digest of the stored bytes, the highest index in them, and the last good index (the destination's
@@ -14,7 +16,9 @@
 //        old public key and the bytes verify under it, this finishes that hand-over instead. It refuses a
 //        RUNLOG that does not parse, has a chain anomaly or sits below the last good index: a signature cannot
 //        repair those, and the engine would still refuse the RUNLOG. Each re-sign writes a runlog-resigned
-//        audit row and raises the runlog-resigned alert (warning) to every channel.
+//        audit row and raises the runlog-resigned alert (warning) to every channel. When the pending signature
+//        already verifies the bytes, it publishes that signature instead and signs nothing; an absent .sig
+//        restored that way writes a runlog-resumed audit row (no alert: the engine signed those bytes itself).
 //   GET  /runlog/floor?destinationId=<id>  the destination's anti-rollback floor against the RUNLOG it holds now:
 //        the floor, the bucket the destination points at, the highest index of its RUNLOG, and why the writers
 //        refuse it (absent-above-floor or below-floor). keys.ceremony (Owner).
@@ -40,7 +44,7 @@ import { signerFingerprint } from "../format/writer-root.ts";
 import { loadSigner, verifierFrom } from "../keys-env.ts";
 import { log } from "../log.ts";
 import { decodeVerifier } from "../sched/rekey-handover.ts";
-import { diagnoseChain, type RunlogSignatureDiagnosis, diagnoseRunlogSignature, handOverRunlog, relinkRunlogAttended, resignRunlogAttended } from "../seal/runlog-handover.ts";
+import { diagnoseChain, type RelinkRefusal, type RunlogSignatureDiagnosis, diagnoseRunlogSignature, handOverRunlog, relinkRunlogAttended, resignRunlogAttended } from "../seal/runlog-handover.ts";
 import { resolveRunlogSignature } from "../seal/pipeline.ts";
 import { loadConfigWrapKey } from "./config-secret.ts";
 import { fetchRunlogFloor } from "./restore-open.ts";
@@ -137,14 +141,34 @@ function floorRefusal(d: RunlogSignatureDiagnosis, floor: number | undefined): "
 }
 
 // relinkRefusal says why an attended relink cannot help this chain, or null when it can.
-function relinkRefusal(d: Awaited<ReturnType<typeof diagnoseChain>>, floor: number | undefined): string | null {
-  if (!d.present) return "there is no RUNLOG at this destination";
-  if (!d.verifies) return "the RUNLOG does not verify under the current signer; a relink never re-signs bytes that do not verify (see GET /admin/runlog/signature)";
-  if (d.maxIndex === undefined) return "the RUNLOG does not parse";
-  if (floor !== undefined && d.maxIndex < floor) return `the RUNLOG's highest index (${d.maxIndex}) is below the last good index (${floor}) (see GET /admin/runlog/floor)`;
-  if (!d.anomaly) return "this downpipe's chain has no anomaly";
-  if (!d.relinkClears) return `a relink does not clear this anomaly (${d.anomaly.kind}): two entries hold one index, and relinking does not change an index. Attach this downpipe to a fresh destination to keep backing up`;
+// relinkRefusalClass names, as a closed class, why a relink of this chain is refused, or null when it may go ahead.
+function relinkRefusalClass(d: Awaited<ReturnType<typeof diagnoseChain>>, floor: number | undefined): RelinkRefusal | null {
+  if (!d.present) return "absent";
+  if (!d.verifies) return "not-verified";
+  if (d.maxIndex === undefined) return "unparsable";
+  if (floor !== undefined && d.maxIndex < floor) return "below-floor";
+  if (!d.anomaly) return "no-anomaly";
+  if (!d.relinkClears) return "not-cleared";
   return null;
+}
+
+function relinkRefusal(d: Awaited<ReturnType<typeof diagnoseChain>>, floor: number | undefined): string | null {
+  switch (relinkRefusalClass(d, floor)) {
+    case "absent":
+      return "there is no RUNLOG at this destination";
+    case "not-verified":
+      return "the RUNLOG does not verify under the current signer; a relink never re-signs bytes that do not verify (see GET /admin/runlog/signature)";
+    case "unparsable":
+      return "the RUNLOG does not parse";
+    case "below-floor":
+      return `the RUNLOG's highest index (${d.maxIndex}) is below the last good index (${floor}) (see GET /admin/runlog/floor)`;
+    case "no-anomaly":
+      return "this downpipe's chain has no anomaly";
+    case "not-cleared":
+      return `a relink does not clear this anomaly (${d.anomaly?.kind}): two entries hold one index, and relinking does not change an index. Attach this downpipe to a fresh destination to keep backing up`;
+    default:
+      return null;
+  }
 }
 
 async function floorView(ctx: Context, destinationId: string): Promise<Record<string, unknown>> {
@@ -198,6 +222,8 @@ export async function handleRunlog(ctx: RouterCtx): Promise<Response | null> {
       if (d.state === "pending-verifies") {
         // The engine's own interrupted write: resume it from the pending signature. No Owner decision is needed.
         await resolveRunlogSignature(c.dest, (await c.dest.get("_RECOVERY/RUNLOG"))?.body ?? new Uint8Array(), c.current);
+        // An absent .sig published again is the one resume an Owner's attended call caused, so it is audited.
+        if (!d.sigPresent) await recordAudit(scheduler, caller, sourceIp, "runlog-resumed", "success", { kind: "runlog-signature", op: "resume", destinationIds: [id], digest: digest.slice(0, 24), ...(d.maxIndex !== undefined ? { maxIndex: d.maxIndex } : {}) });
         return jsonResponse({ ok: true, outcome: "resumed", destinationId: id });
       }
       const refusal = refusalOf(d, c.floor);
@@ -284,17 +310,22 @@ export async function handleRunlog(ctx: RouterCtx): Promise<Response | null> {
       const c = await openContext(ctx, id);
       if (c instanceof Response) return c;
       const d = await diagnoseChain(c.dest, c.current, downpipeId);
-      if (d.digest !== digest || d.anomaly?.kind !== body.anomalyKind) return jsonError("the RUNLOG or its chain changed since it was shown; read it again before deciding", 409);
-      const refusal = relinkRefusal(d, c.floor);
-      if (refusal !== null) return jsonError(`not relinked: ${refusal}`, 409);
+      // A refused relink is audited with its closed class, so the audit and the support pack show it.
+      const refuse = async (cls: RelinkRefusal, message: string): Promise<Response> => {
+        await recordAudit(scheduler, caller, sourceIp, "runlog-relinked", "failed", { kind: "runlog-signature", op: "relink-refused", destinationIds: [id], downpipeId, reasons: [cls], ...(d.anomaly ? { state: d.anomaly.kind } : {}), ...(d.chainEntries !== undefined ? { chainEntries: d.chainEntries } : {}) });
+        return jsonError(message, 409);
+      };
+      if (d.digest !== digest || d.anomaly?.kind !== body.anomalyKind) return refuse("changed-since-read", "the RUNLOG or its chain changed since it was shown; read it again before deciding");
+      const refusalClass = relinkRefusalClass(d, c.floor);
+      if (refusalClass !== null) return refuse(refusalClass, `not relinked: ${relinkRefusal(d, c.floor)}`);
       const signer = await loadSigner(env.SIGNER_PRIVATE ?? "");
-      let outcome: string;
+      let outcome: Awaited<ReturnType<typeof relinkRunlogAttended>>;
       try {
         outcome = await relinkRunlogAttended(c.dest, signer, downpipeId, digest);
       } finally {
         signer.mldsaSecret.fill(0);
       }
-      if (outcome !== "relinked") return jsonError(`not relinked: ${outcome}`, 409);
+      if (outcome !== "relinked") return refuse(outcome, `not relinked: ${outcome}`);
       const a = d.anomaly!;
       await recordAudit(scheduler, caller, sourceIp, "runlog-relinked", "success", { kind: "runlog-signature", op: "relink", destinationIds: [id], downpipeId, state: a.kind, ...(a.indexA !== undefined ? { indexA: a.indexA } : {}), ...(a.indexB !== undefined ? { indexB: a.indexB } : {}), ...(d.chainEntries !== undefined ? { chainEntries: d.chainEntries } : {}), digest: digest.slice(0, 24) });
       const who = caller.email ? ` by ${caller.email}` : "";

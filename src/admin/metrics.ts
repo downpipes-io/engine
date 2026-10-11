@@ -338,7 +338,7 @@ async function recordScrape(scheduler: DurableObjectStub, outcome: MetricsScrape
 export async function handleMetricsRoute(req: Request, scheduler: DurableObjectStub): Promise<Response> {
   if (req.method !== "GET") return new Response("not found", { status: 404 });
   const auth = await checkMetricsBearer(req, scheduler);
-  logSurfaceAuth("metrics", auth); // V16.3.1: every scrape's authentication, pass or refuse, as a per-attempt line
+  logSurfaceAuth("metrics", auth); // every scrape's authentication, pass or refuse, as a per-attempt line
   if (auth !== "ok") {
     // The refusal is UNCHANGED: a bare 401 with no detail. Only the closed reason is recorded.
     //

@@ -27,10 +27,10 @@ export function StepUpMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
     // ===================== STEP-UP RE-AUTH (ASVS V7.5.1 / V7.5.3) ==========================================
     // A sensitive action (recovery-code regen, self-add passkey, keys.ceremony, posture.riskaccept,
     // restore-approve) requires a FRESH re-authentication so a STALE ambient session cannot perform it. The
-    // proof is EITHER (a) a recently-authenticated PASSKEY session - iat within STEPUP_FRESH_MS, which covers a
-    // just-logged-in passkey session AND a recovery-code sign-in (the break-glass alternate factor) - OR (b) a
-    // single-use, challenge-bound, UV-required passkey assertion that mints a one-shot step-up token. An OIDC
-    // or SAML session is treated as single-factor and needs (b); see stepUpCheck (ASVS V6.8.4).
+    // proof is EITHER (a) a recently-authenticated PASSKEY session - iat within STEPUP_FRESH_MS, a just-logged-in
+    // passkey session - OR (b) a single-use, challenge-bound, UV-required passkey assertion that mints a one-shot
+    // step-up token. An OIDC or SAML session, and a session a recovery code minted, are treated as single-factor
+    // and need (b); see stepUpCheck (ASVS V6.8.4).
     // The router's requireStepUp orchestrates the check; the bare-token + Access methods are exempt (there).
 
 
@@ -191,14 +191,14 @@ export function StepUpMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
 
     // stepUpCheck (router-internal): is a step-up satisfied for the cookie session presenting `token`? The DO
     // holds the signing key, so it re-verifies the session to read iat, method and subject. Satisfied when
-    // (a) the session is a PASSKEY session authenticated within STEPUP_FRESH_MS (a UV WebAuthn login, or the
-    // recovery-code sign-in, which mints method "passkey"), OR (b) a valid single-use step-up token bound to
-    // that subject is presented (and CONSUMED here). An OIDC or SAML session never satisfies on recency alone
-    // (ASVS V6.8.4): the engine cannot verify what factor the IdP used, and the session iat is the engine's
+    // (a) the session is a PASSKEY session authenticated within STEPUP_FRESH_MS (a UV WebAuthn login; a session a
+    // recovery code minted is method "passkey" but marked recovered and never counts), OR (b) a valid single-use
+    // step-up token bound to that subject is presented (and CONSUMED here). An OIDC or SAML session never
+    // counts as fresh on recency alone (ASVS V6.8.4): the engine cannot verify what factor the IdP used, the iat is the engine's
     // own callback instant, not the IdP's auth_time, so a silently reused IdP SSO session would otherwise
     // read as a fresh strong factor. Such a session is treated as single-factor, the minimum strength, and
-    // must present a passkey assertion. The ONE exception is purpose "enrol-passkey": an SSO member with no
-    // passkey yet has nothing to assert with, so a fresh IdP sign-in is accepted to enrol the first one.
+    // must present a passkey assertion, as must a recovered session. Purpose "enrol-passkey" is an exception: an SSO
+    // member or recovered operator with no passkey yet has nothing to assert with, so a fresh sign-in may enrol one.
     // Fail-closed otherwise.
     async stepUpCheck(body: { token?: unknown; stepUpToken?: unknown; purpose?: unknown }): Promise<{ satisfied: boolean }> {
       if (typeof body.token !== "string" || body.token.length === 0) return { satisfied: false };
@@ -218,7 +218,7 @@ export function StepUpMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
       // nothing to assert with yet), and ending the member's OWN sessions (V7.5.2 asks for "at least one
       // factor" again, and a sign-in at the identity provider within STEPUP_FRESH_MS is that factor; the
       // action reaches no session but the caller's own).
-      if (now - res.iat < STEPUP_FRESH_MS && (res.method === "passkey" || body.purpose === "enrol-passkey" || body.purpose === "end-own-session")) return { satisfied: true };
+      if (now - res.iat < STEPUP_FRESH_MS && ((res.method === "passkey" && !res.recovered) || body.purpose === "enrol-passkey" || body.purpose === "end-own-session")) return { satisfied: true };
       if (typeof body.stepUpToken === "string" && body.stepUpToken.length > 0 && body.stepUpToken.length <= 64) {
         const tkKey = `${STEPUP_TOKEN_PREFIX}${res.subject}:${body.stepUpToken}`;
         const rec = await this.state.storage.get<{ expiresAt: number }>(tkKey);

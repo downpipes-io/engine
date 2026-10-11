@@ -97,12 +97,11 @@ async function httpContract(): Promise<void> {
 // Part 4: a non-https DEST_ENDPOINT is rejected at construction, before any signing or fetch
 // (V12.3.1). https is accepted; everything else throws, the http loopback hosts included.
 //
-// THE LOOPBACK ASSERTIONS FLIPPED. This block used to assert that http://localhost:9000 and
-// http://127.0.0.1:9000 CONSTRUCT, which was true of every caller including dest/factory.ts: a DEST_ENDPOINT
-// of http://localhost:9000 built a live archive destination in a deployed worker and signed the SigV4
-// credential onto cleartext. The allowance is now a test seam (requireHttpsEndpoint's allowInternalEndpoint),
-// so the default answer is a refusal and the seam is asserted separately, right below, so this is a
-// discrimination rather than a blanket "http always throws".
+// THE LOOPBACK HOSTS ARE REFUSED BY DEFAULT. http://localhost:9000 and http://127.0.0.1:9000 do not construct,
+// for every caller including dest/factory.ts: a DEST_ENDPOINT of http://localhost:9000 must not build a live
+// archive destination in a deployed worker and sign the SigV4 credential onto cleartext. The allowance is a
+// test seam (requireHttpsEndpoint's allowInternalEndpoint), so the default answer is a refusal and the seam is
+// asserted separately, right below, so this is a discrimination rather than a blanket "http always throws".
 function httpsEnforcement(): void {
   console.log("https endpoint enforcement (V12.3.1):");
   const make = (endpoint: string) => () => new S3Destination(endpoint, BUCKET, CREDS.region, CREDS.accessKeyID, CREDS.secretKey, { now: FIXED_NOW });

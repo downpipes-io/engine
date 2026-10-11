@@ -220,7 +220,7 @@ export function normaliseWormMode(raw: string | undefined): WormMode | null {
  * envelope (admin/config-secret.ts), the control-plane export's wrapped-or-reestablish projection, the
  * approval-summary redaction and the plaintext-at-rest census all keep working with no second code path
  * and no second thing to remember. The alternative, a third credential field with its own envelope, would
- * have had to be taught to every one of those surfaces, and a surface that was missed is a credential
+ * must be taught to every one of those surfaces, and a surface that does not learn it is a credential
  * that leaks or a credential that is silently dropped on import.
  *
  * The presence of this object is also the DISCRIMINATOR: an Azure destination that carries it

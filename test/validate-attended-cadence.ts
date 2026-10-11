@@ -16,7 +16,6 @@
 //
 // Run with `node test/validate-attended-cadence.ts`.
 //
-//
 
 import { dueFor, evaluateAttendedCadence } from "../src/admin/attended-cadence.ts";
 import { ATTENDED_CADENCE_CHECK_ID, buildAttendedCadence } from "../src/admin/posture-checks.ts";

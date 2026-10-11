@@ -33,7 +33,6 @@
 //
 // Run with `node test/validate-data-classification-doc.ts [--require]`.
 //
-//
 
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";

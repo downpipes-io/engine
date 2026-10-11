@@ -5,11 +5,36 @@
 import type { Env } from "../env.d.ts";
 import { log } from "../log.ts";
 import { bumpAdminCounter, bumpAdminCounters } from "./diag-counters.ts";
-import type { AdminCounterName } from "./diag-records.ts";
+import { type AdminCounterName, channelFaultStep, type UpdateCauseClass } from "./diag-records.ts";
 import { type UpdateGuardClass, updateRefusalCounter } from "./posture-counters.ts";
 import { jsonError, recordAudit } from "./router-core.ts";
 import { doURL } from "../do-url.ts";
-import { checkChannelFreshness, type FreshnessState, type RecommendedArtefact } from "./updates.ts";
+import { recordUpdateFault } from "./diag-admin.ts";
+import { checkChannelFreshness, type FreshnessState } from "./update-freshness.ts";
+import type { RecommendedArtefact, UpdateStatus } from "./updates.ts";
+
+// recordChannelFault writes the update-fault ring's CHANNEL row for an on-demand consult (GET /admin/updates)
+// that could not verify, the same {component: channel, step, cause, httpStatus} row the apply path writes, so
+// a pack taken after "I pressed Check for updates and it failed" names the failure. Nothing is written for an
+// engine that never intended updates, nor for a consult that verified. A console that polls this route would
+// otherwise flood the 32-row ring and push out the apply-time rows, so a row identical to the newest one is
+// not written again. Best-effort: a ring read or write fault never changes the route's answer.
+export async function recordChannelFault(scheduler: DurableObjectStub, status: UpdateStatus): Promise<void> {
+  if (status.verified === true || status.channelIntended !== true || status.channelFault === undefined) return;
+  const cause: UpdateCauseClass = status.channelFault === "fetch-failed" ? "other" : status.channelFault;
+  const step = channelFaultStep(cause);
+  const httpStatus = status.channelFault === "fetch-failed" && status.fetchStatus !== undefined && status.fetchStatus > 0 ? status.fetchStatus : undefined;
+  try {
+    const r = await scheduler.fetch(doURL("/update-faults"), { method: "GET" });
+    const j = (await r.json()) as { faults?: Array<Record<string, unknown>> };
+    const last = Array.isArray(j.faults) ? j.faults[j.faults.length - 1] : undefined;
+    if (last !== undefined && last.component === "channel" && last.step === step && last.cause === cause && last.httpStatus === httpStatus) return;
+  } catch {
+    // site-fault-waiver: src/admin/router-updates-shared.ts:recordChannelFault:catch:1 -- an unreadable ring only means no de-duplication, and the fault row is written on the next line either way
+    /* an unreadable ring only means no de-duplication */
+  }
+  await recordUpdateFault(scheduler, { component: "channel", step, cause, ...(httpStatus !== undefined ? { httpStatus } : {}) });
+}
 
 // updateChannelMaxAgeMs reads the OPT-IN R9 channel max-age (UPDATE_CHANNEL_MAX_AGE_DAYS) and returns it in
 // milliseconds, or undefined when unset / non-positive / unparseable (the default: max-age enforcement OFF).

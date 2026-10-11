@@ -648,9 +648,9 @@ async function proofReceiptSignature(receipt: RestoreReceipt, signerB64: string)
   const vw = await verifyRestoreReceiptSignature(receipt, wrongVerifier);
   ok("a wrong verifier does NOT verify the signature (but the hash still matches)", vw.signatureOk === false && vw.hashOk === true);
 
-  // recordsSkipped: the count the apply deliberately did not write. The receipt used to state only what
-  // LANDED, so a reader auditing a recovery saw "restored 98, allVerified true" and could not tell that
-  // records from the archive were still absent from the account.
+  // recordsSkipped: the count the apply deliberately did not write. The receipt states what
+  // was skipped as well as what LANDED, so a reader auditing a recovery can tell that records from the
+  // archive are still absent from the account.
   //
   // The backward-compatibility property is the load-bearing one, because this receipt is ANCHORED into
   // the tamper-evident audit chain by its digest. A receipt that skipped nothing must produce the SAME

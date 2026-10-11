@@ -22,7 +22,7 @@ import type { CrawlEvent, Meter, ResumableSource, Selector, SourceRecord } from 
 // The single message every entry point throws. Naming the missing piece (the in-tenant export shim)
 // keeps the failure self-explanatory and makes a silent empty backup impossible.
 const NOT_WIRED =
-  "durable_object source requires an in-tenant export shim (see design doc); not yet wired";
+  "the durable_object source is not supported: it needs an in-tenant export shim, which this engine does not include";
 
 export class DurableObjectSource implements ResumableSource {
   readonly sourceType = "durable_object" as const;

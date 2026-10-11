@@ -387,7 +387,9 @@ if (which === "C") {
   out(`  C after the sweep: rows ${all.length}, attempts ${sum} (failed from the source ${fromIp("failed")}, denied ${fromIp("denied")})`);
   ok("C: the folded rows' attempts sum to the 9 attempts made", sum === 9);
   ok("C: and the source's own rows hold its 5 failed and 3 throttled attempts", fromIp("failed") === 5 && fromIp("denied") === 3);
-  // One IPv6 /64 is one source: 40 addresses in it, one attempt each, in a quiet window, write one row.
+  // One IPv6 /64 is one source: 40 addresses in it, one attempt each, in a quiet window, write one row per
+  // outcome. The recovery IP bucket also keys the /64, so after RECOVERY_RATE_MAX_PER_IP failed attempts the
+  // rest are throttled: one failed row and one denied row, both from that /64.
   skewMs += 3 * RATE_LIMIT_WINDOW_MS;
   const h6 = w.rows().at(-1)!.seq;
   for (let n = 0; n < 40; n++) {
@@ -396,7 +398,13 @@ if (which === "C") {
   }
   const v6 = w.rows().filter((e) => e.seq > h6);
   out(`  C one /64, 40 addresses: rows ${JSON.stringify(v6.map((e) => [e.outcome, e.sourceIp, recoveryAttempts(e)]))}`);
-  ok("C: 40 addresses in one IPv6 /64 write one row, from an address in that /64", v6.length === 1 && (v6[0]!.sourceIp ?? "").startsWith("2001:db8:7:8:"));
+  ok(
+    "C: 40 addresses in one IPv6 /64 write one failed row and one denied row (the IP bucket throttles the /64), each from an address in that /64",
+    v6.length === 2 &&
+      v6.filter((e) => e.outcome === "failed").length === 1 &&
+      v6.filter((e) => e.outcome === "denied").length === 1 &&
+      v6.every((e) => (e.sourceIp ?? "").startsWith("2001:db8:7:8:")),
+  );
   skewMs = 0;
   globalThis.fetch = w.realFetch;
 }

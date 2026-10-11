@@ -68,20 +68,21 @@ ok("requireNonce:false rejected", validateIdpConnection({ ...baseOidc, requireNo
 }
 // 12. confidential without a secretRef
 ok("confidential client without secretRef rejected", validateIdpConnection({ ...baseOidc, secretRef: undefined }, NONE).ok === false);
-// 13. secrets-store is not yet wired: rejected at CONFIG TIME so a connection can never be saved in a state
-// that only fails at first login (engine-src-008-04). The OLD code accepted secrets-store-with-a-ref here.
+// 13. The secrets-store secret mode is not supported: it is rejected at CONFIG TIME, so a connection can never
+// be saved in a state that only fails at first login, even with a ref.
 {
   const r = validateIdpConnection({ ...baseOidc, secretRef: { mode: "secrets-store", ref: "ENTRA_CLIENT_SECRET" } }, NONE);
-  ok("secrets-store rejected at config validation (not yet supported)", r.ok === false);
+  ok("secrets-store rejected at config validation", r.ok === false);
   ok("secrets-store rejection names the supported mode", r.ok === false && r.reason.includes("secrets-store") && r.reason.includes("do-plaintext"));
+  ok("secrets-store rejection states the current behaviour, not a future one", r.ok === false && !/\bnot yet\b/i.test(r.reason));
 }
 ok("secrets-store without a ref rejected too", validateIdpConnection({ ...baseOidc, secretRef: { mode: "secrets-store" } }, NONE).ok === false);
-// 14. private_key_jwt client authentication is not yet wired: rejected at CONFIG TIME (engine-src-009-01).
-// The OLD code accepted private_key_jwt-with-a-key-ref here.
+// 14. private_key_jwt client authentication is not supported: it is rejected at CONFIG TIME, even with a key ref.
 {
   const r = validateIdpConnection({ ...baseOidc, clientAuth: "private_key_jwt", secretRef: { mode: "private-key-jwt", ref: "entra-key-1" } }, NONE);
-  ok("private_key_jwt rejected at config validation (not yet supported)", r.ok === false);
+  ok("private_key_jwt rejected at config validation", r.ok === false);
   ok("private_key_jwt rejection names the supported alternatives", r.ok === false && r.reason.includes("private_key_jwt"));
+  ok("private_key_jwt rejection states the current behaviour, not a future one", r.ok === false && !/\bnot yet\b/i.test(r.reason));
 }
 ok("private_key_jwt without a ref rejected too", validateIdpConnection({ ...baseOidc, clientAuth: "private_key_jwt", secretRef: { mode: "private-key-jwt" } }, NONE).ok === false);
 // 15. unsafe jwksUri endpoint

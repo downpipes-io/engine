@@ -103,6 +103,7 @@ async function main(): Promise<void> {
     const published = JSON.parse(
       execFileSync(process.execPath, [
         TOOL,
+        "--first-release",
         "--key", seed,
         "--version", FLOOR,
         "--bundle", join(fixture, "engine.mjs"),

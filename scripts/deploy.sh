@@ -86,18 +86,13 @@ if [ "$ENABLE_OPERATIONAL" = "1" ] && [ "$BREAK_GLASS_ONLY" = "1" ]; then
 fi
 
 # ============================================================================================
-# BLOCKING PREFLIGHT. THIS SCRIPT USED TO GRADE NOTHING AT ALL.
+# BLOCKING PREFLIGHT. THE DEPLOY GRADES THE TREE BEFORE IT SHIPS.
 # ============================================================================================
 #
-# WHAT IT COST, MEASURED RATHER THAN ARGUED. Until today this script stamped the artefact,
-# reconciled the bindings and called `npx wrangler deploy`, and never once invoked typecheck,
-# validate or lint. The console's scripts/deploy.sh has run all three under `set -e` for as long
-# as it has existed. The consequence was found: test/validate-cron-fault-evidence.ts
-# landed with four failing assertions and HAD NEVER ONCE BEEN GREEN. It sat inside
-# validate:chain, red on every commit for a month, with validate-support-posture-gaps-r7.ts red
-# beside it. No engine deploy could have noticed, because no engine deploy graded anything. That is
-# not a story about two validators. A deploy that grades nothing cannot tell a repo that works from
-# a repo that has been broken since July, and it ships either one with the same confidence.
+# WHY IT GRADES. The preflight runs typecheck, validate and lint under `set -e` before the script
+# stamps the artefact, reconciles the bindings or calls `npx wrangler deploy`. A deploy that grades
+# nothing cannot tell a repo that works from a repo that is broken, and it ships either one with the
+# same confidence.
 #
 # WHY IT IS HERE, ABOVE THE RECONCILE AND THE BUILD, AND NOT LOWER DOWN. The two steps below this
 # both MUTATE the tree: scripts/sync-bindings.mjs writes wrangler.deploy.toml, and
@@ -266,10 +261,9 @@ DEPLOYED_ARTEFACT_SHA384="$(node scripts/build-deploy-bundle.mjs --config wrangl
 # environment, and /deploy/'s own "hand the repetitive part to your AI assistant" section puts the customer
 # in exactly that environment with a copy-paste prompt.
 #
-# TWO REPAIRS WERE POSSIBLE AND THIS IS THE ONE THAT WAS TAKEN. The other is to stop the prompt appearing:
-# wrangler skips it when ci-info reports CI, so `CI=1 npx wrangler deploy` is one word. It was rejected.
-# It suppresses THIS prompt in THIS version and nothing else, while the class the trial actually named is
-# wider: any non-zero from wrangler after a landed upload (a new prompt, a transient API error, a closed
+# THIS SCRIPT SURVIVES THE EXIT RATHER THAN SUPPRESSING THE PROMPT. Setting `CI=1` makes wrangler skip
+# the prompt (it checks ci-info), but that suppresses THIS prompt in THIS version and nothing else, while the
+# class of failure is wider: any non-zero from wrangler after a landed upload (a new prompt, a transient API error, a closed
 # TTY) leaves the same deployed-but-keyless engine. It also tells wrangler an untruth about the environment,
 # which suppresses prompts a real operator may want to see, and a human in a real terminal answers this one
 # with a single keypress and needs no flag at all. Surviving the exit covers the whole class; suppressing
@@ -312,7 +306,7 @@ set -e
 # worker that was last changed outside this checkout: most often "You are about to upload a Worker that
 # was last updated via the script API", which every console source attach, key install or update apply
 # produces, and also when the dashboard configuration or a remote secret differs. Answered no, wrangler
-# uploads nothing and exits 0, and this script used to report a deploy that never happened and go on to
+# uploads nothing and exits 0, and this script must not report a deploy that never happened and go on to
 # key generation. So the deployed version is compared in both directions: the deploy landed when it
 # moved, whatever the exit code said, and did not land when it stayed put, whatever the exit code said.
 VERSION_AFTER="$(deployed_version)"

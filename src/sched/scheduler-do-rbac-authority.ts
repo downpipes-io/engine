@@ -11,6 +11,7 @@
 
 import { type AuthMethod, type Capability, type CustomRole, ROLE_CAPABILITIES, type Role, type RoleEntry, type RoleSource, roleSubjectKey } from "../admin/identity.ts";
 import { getIdpConnectionRaw } from "../admin/oidc-store.ts";
+import { groupsOf } from "./oidc-groups-record.ts";
 import { AuthError, type GroupRoleEntry, type MutationCaller, OIDC_GROUPS_PREFIX, type SchedulerDOCtor } from "./scheduler-do-base.ts";
 import { mappingForConnection, nowMillisISO } from "./scheduler-helpers.ts";
 
@@ -199,8 +200,8 @@ export function RbacAuthorityMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
     // hand-edited record) yields no groups, which is the fail-closed direction.
     async spendTimeGroupsFor(subject: string, recordedGroups: readonly string[] | undefined): Promise<string[]> {
       if (subject.startsWith("oidc:") || subject.startsWith("saml:")) {
-        const snapshot = await this.state.storage.get<string[]>(`${OIDC_GROUPS_PREFIX}${subject}`);
-        return this.boundGroupList(Array.isArray(snapshot) ? snapshot : []);
+        const snapshot = groupsOf(await this.state.storage.get<unknown>(`${OIDC_GROUPS_PREFIX}${subject}`));
+        return this.boundGroupList(snapshot ?? []);
       }
       return this.boundGroupList(Array.isArray(recordedGroups) ? [...recordedGroups] : []);
     }

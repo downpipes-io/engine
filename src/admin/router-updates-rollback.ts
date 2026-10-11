@@ -114,8 +114,8 @@ export async function handleStandaloneRollback(a: RollbackRouteArgs): Promise<Re
     // re-application of the bad build). The rule:
     //   - a verification in flight (pending)  -> pending.fromVersion (the version it promoted away from)
     //   - last outcome "applied"              -> last.fromVersion   (the prior known-good)
-    //   - last outcome "rolled-back"          -> last.fromVersion   (the version we reverted TO; we are
-    //                                            ALREADY on it, so a redundant 2nd rollback is a no-op,
+    //   - last outcome "rolled-back"          -> last.fromVersion   (the version reverted TO; it is
+    //                                            ALREADY live, so a redundant 2nd rollback is a no-op,
     //                                            both rollback writers record the reverted-to version in
     //                                            fromVersion, the same field the console shows)
     //   - last outcome "superseded"/"expired"/other -> NO target (the pending was cleared WITHOUT a
@@ -166,9 +166,9 @@ export async function handleStandaloneRollback(a: RollbackRouteArgs): Promise<Re
     const r = await runStandaloneRollback(driver, hgate, { toVersion: target });
     // Record the outcome on the lifecycle (the console reads it) + audit (ids + outcome, never the token).
     // CONVENTION (shared with the settle auto-rollback record so the resolver above + the console display
-    // are consistent): on a rolled-back outcome, fromVersion = the version we reverted TO (the known-good,
+    // are consistent): on a rolled-back outcome, fromVersion = the version reverted TO (the known-good,
     // now live, what the console shows and what a redundant next rollback no-ops against), toVersion = the
-    // bad version we left. We must NOT record the abandoned bad version (r.fromVersion) in fromVersion: a
+    // bad version that was left. Do NOT record the abandoned bad version (r.fromVersion) in fromVersion: a
     // later rollback would then resolve it as the target and deploy FORWARD onto the bad build.
     if (r.outcome === "reverted" || r.outcome === "reverted-unverified") {
       // The rollback above just redeployed the known-good version, the same self-redeploy

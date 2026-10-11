@@ -164,7 +164,7 @@ console.log("OAuth2 (GitHub-class) adapter\n");
 {
   const { fetch, reqs } = makeFetch({ tokenStatus: 401, tokenBody: JSON.stringify({ error: "bad_verification_code" }) });
   const r = await completeOauth2Login(baseConn, { code: "bad", redirectUri: REDIRECT, clientSecret: SECRET }, fetch);
-  ok("a token-exchange non-200 rejects", r.ok === false);
+  ok("a token-exchange non-200 rejects with the token endpoint's status", r.ok === false && r.reason.startsWith("token endpoint returned 401"));
   ok("  -> no API calls are made after a failed exchange", reqs.find((q) => q.url === PROFILE_URL) === undefined);
 }
 
@@ -172,7 +172,7 @@ console.log("OAuth2 (GitHub-class) adapter\n");
 {
   const { fetch } = makeFetch({ tokenBody: JSON.stringify({ error: "incorrect_client_credentials", error_description: "bad" }) });
   const r = await completeOauth2Login(baseConn, { code: "x", redirectUri: REDIRECT, clientSecret: SECRET }, fetch);
-  ok("a 200 token response with no access_token rejects (GitHub error-in-200 quirk)", r.ok === false);
+  ok("a 200 token response with no access_token rejects (GitHub error-in-200 quirk)", r.ok === false && r.reason.startsWith("token response carried no access_token"));
 }
 
 // 2c. Subject-collision guard: a NUMERIC id above 2^53 (a snowflake id, e.g. Discord ~1.7e17) loses precision
@@ -185,7 +185,8 @@ console.log("OAuth2 (GitHub-class) adapter\n");
   // Both are non-safe integers, which is all the refusal arm needs.
   const r1 = await completeOauth2Login(baseConn, { code: "c", redirectUri: REDIRECT, clientSecret: SECRET }, makeFetch({ profileBody: { id: 2 ** 53, login: "a" } }).fetch);
   const r2 = await completeOauth2Login(baseConn, { code: "c", redirectUri: REDIRECT, clientSecret: SECRET }, makeFetch({ profileBody: { id: 2 ** 53 + 4, login: "b" } }).fetch);
-  ok("a non-safe-integer numeric id is refused (no precision-loss subject collision)", r1.ok === false && r2.ok === false);
+  const unsafe = "profile id is not a safe integer; configure the provider to emit the id as a string";
+  ok("a non-safe-integer numeric id is refused by the safe-integer guard (no precision-loss subject collision)", r1.ok === false && r1.reason === unsafe && r2.ok === false && r2.reason === unsafe);
   const s1 = await completeOauth2Login(baseConn, { code: "c", redirectUri: REDIRECT, clientSecret: SECRET }, makeFetch({ profileBody: { id: "9007199254740993", login: "a" } }).fetch);
   const s2 = await completeOauth2Login(baseConn, { code: "c", redirectUri: REDIRECT, clientSecret: SECRET }, makeFetch({ profileBody: { id: "9007199254740995", login: "b" } }).fetch);
   ok("the same ids as STRINGS are accepted and do NOT collide", s1.ok === true && s2.ok === true && (s1.ok && s2.ok ? s1.principal.subject !== s2.principal.subject : false));
@@ -213,7 +214,7 @@ console.log("OAuth2 (GitHub-class) adapter\n");
 {
   const { fetch } = makeFetch({ profileBody: { login: LOGIN, name: "no id here" } });
   const r = await completeOauth2Login(baseConn, { code: "c", redirectUri: REDIRECT, clientSecret: SECRET }, fetch);
-  ok("a profile with no id at subjectPath rejects (no immutable subject)", r.ok === false);
+  ok("a profile with no id at subjectPath rejects (no immutable subject)", r.ok === false && r.reason === 'profile carried no immutable id at "id"');
 }
 
 // 4b. The login must NEVER be used as the subject, even when the id is present alongside it.

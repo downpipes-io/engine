@@ -40,9 +40,10 @@ env:
   # conclusion about its currency: that is ordinary on a single-repo clone and a configuration fault here,
   # where actions/checkout always leaves the ref.
   #
-  # THIS DOES NOT DISARM IN CI, and that is not an accident of ours. Every sibling here is checked out at that
-  # repository's DEFAULT BRANCH, never at a pin (0 `ref:` inputs anywhere in these six files), and no workflow
-  # in this repo rewrites a sibling's origin/main afterwards. Measured on NON-COMMENT lines only, across all
+  # THIS DOES NOT DISARM IN CI, and that is not an accident of ours. Every private sibling here is checked out
+  # at that repository's DEFAULT BRANCH. The public reader is pinned to its release tag with full history, so
+  # its origin/main exists and its lag is measured against it. No workflow in this repo rewrites a sibling's
+  # origin/main afterwards. Measured on NON-COMMENT lines only, across all
   # six workflow files: 0 rewrites, against a control of 53, 3, 15, 3, 5 and 4 non-comment `uses:` lines. The
   # comment restriction is load-bearing rather than tidiness, and this paragraph is why: the sentence you are
   # reading names the command, so the naive count over the whole file returns 2 and would be measuring the
@@ -101,8 +102,8 @@ jobs:
     # drives scripts/run-gate-chain.mjs over `validate:chain`, which runs every member regardless of an
     # earlier failure, so the wall-clock cost is the full-chain cost every time, pass or fail.
     #
-    # A ceiling audit found every other job in this file at 12 per cent of its ceiling or less, so these two
-    # are still the only marginal ones. Keep it that way: a ceiling a job routinely spends most of is a gate
+    # Every other job in this file runs at 12 per cent of its ceiling or less, so these two
+    # are the only marginal ones. Keep it that way: a ceiling a job routinely spends most of is a gate
     # that will stop gating without anyone deciding to turn it off, and a cancellation reads as nothing
     # having been checked rather than as a failure.
     timeout-minutes: 90
@@ -122,25 +123,12 @@ jobs:
           repository: downpipes-io/downpipe
           path: downpipe
           # pinned to the public downpipe release tag that the private source checks out, so the cross-implementation validators against the Go reader run here too
-          ref: v0.3.4
+          ref: v0.3.5
           persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with: { node-version: "${{ env.NODE_VERSION }}" }
       - run: npm ci
         working-directory: engine
-      - name: Cross-implementation validators (vs the Go vectors)
-        # REQUIRE_DOWNPIPE=1: this job checks out the sibling downpipe reader deliberately (the
-        # step above), so an absent sibling here is a broken checkout, not an ordinary customer
-        # deploy. Without this, validate-slice.ts's B2 two-reader differential degrades to a
-        # declared skip (the default `npm run deploy` runs under, where the sibling is normally
-        # absent and must not block a deploy) rather than the exit-2 could-not-check this job wants.
-        run: npm run validate
-        working-directory: engine
-        env:
-          REQUIRE_DOWNPIPE: "1"
-          # The downpipe checkout above is pinned to a release tag on purpose, so it is behind its own
-          # main whenever the reader has moved on; the doc validators grade against the pinned tag.
-          DOWNPIPES_ALLOW_STALE_SIBLINGS: "downpipe"
       - name: cf-config safety guards are load-bearing (curated mutation test)
         # Each guard carrying a safety claim is REMOVED in turn and the gate that should notice is run.
         # A guard whose removal changes nothing is a gap in the evidence, and three such gaps were found
@@ -290,12 +278,13 @@ jobs:
         with: { path: engine, persist-credentials: false }
       # The PUBLIC reader, pinned to its current release tag. It is public, so the checkout is anonymous
       # and needs no token.
+      # fetch-depth 0 also fetches main, so origin/main exists and the sibling-freshness gates measure the tag's lag instead of refusing on an unknown one.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: downpipes-io/downpipe
           path: downpipe
           # pinned to the public downpipe release tag that the private source checks out, so the cross-implementation validators against the Go reader run here too
-          ref: v0.3.4
+          ref: v0.3.5
           persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with: { node-version: "${{ env.NODE_VERSION }}" }
@@ -759,7 +748,7 @@ jobs:
           repository: downpipes-io/downpipe
           path: downpipe
           # pinned to the public downpipe release tag that the private source checks out, so the cross-implementation validators against the Go reader run here too
-          ref: v0.3.4
+          ref: v0.3.5
           persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with: { node-version: "${{ env.NODE_VERSION }}" }

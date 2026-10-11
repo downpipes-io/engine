@@ -12,13 +12,14 @@ import type { PasskeyChallenge } from "../admin/passkey.ts";
 import { log } from "../log.ts";
 import { flushAuditFolds } from "./audit-fold.ts";
 import { isValidTimeZone, nextFireAfter, parseCron } from "./cron.ts";
-import { allDestinationIds, gapBelowSeed, nextReplAnchors, setHeldAbove } from "./destinations.ts";
+import { allDestinationIds, failedDestinationOf, gapBelowSeed, nextReplAnchors, setHeldAbove } from "./destinations.ts";
 import { rekeyHold } from "./rekey-handover.ts";
 import { recordCompletionFloor } from "./runlog-floor.ts";
-import { runlogSeedHold } from "./runlog-seed.ts";
+import { readRunlogIndexHeld, runlogSeedHold } from "./runlog-seed.ts";
 import { classifyReplicationReason, isMalformedDestList, recordAlertingHealth, recordCompletionDiagnostics, recordContractFault, recordDestResolveFallback } from "./sched-fault-ledger.ts";
 import { deferPastBlackoutsResolved, jitteredCadence, scheduleTimeZone } from "./schedule-window.ts";
-import { ALARM_MIN_DELAY_MS, CONFIG_SCHEMA_VERSION, type CompleteRunReq, type DestReplState, DO_LIST_MAX_PAGES, DO_LIST_PAGE, type DownpipeConfig, type DownpipeSchedule, type DownpipeState, DUE_INDEX_HEALTH_KEY, DUE_INDEX_PREFIX, DUE_RECONCILE_TICK_KEY, INFLIGHT_LEASE_MS, migrateOrRejectConfig, PASSKEY_CHALLENGE_PREFIX, pad16, RECONCILE_EVERY_TICKS, REPL_REASON_SITES, type ReplReasonSite, RING_CAP, type RunHistoryEntry, SCHED_HEALTH_KEY, type SchedulerDOCtor, SEEN_ASSERTION_PREFIX, STATE_REFUSED_PREFIX, STATE_REFUSED_READ_CAP, STEPUP_TOKEN_PREFIX, STORAGE_FAULT_KEY, StateRefusedError, TICK_LEASE_MS, TICK_OUTCOME_KEY } from "./scheduler-do-base.ts";
+import { sweepOidcGroups } from "./oidc-groups-record.ts";
+import { ALARM_MIN_DELAY_MS, CONFIG_SCHEMA_VERSION, type CompleteRunReq, type DestReplState, DO_LIST_MAX_PAGES, DO_LIST_PAGE, type DownpipeConfig, type DownpipeSchedule, type DownpipeState, DUE_INDEX_HEALTH_KEY, DUE_INDEX_PREFIX, DUE_RECONCILE_TICK_KEY, INFLIGHT_LEASE_MS, migrateOrRejectConfig, OIDC_GROUPS_PREFIX, PASSKEY_CHALLENGE_PREFIX, pad16, RECONCILE_EVERY_TICKS, REPL_REASON_SITES, type ReplReasonSite, RING_CAP, type RunHistoryEntry, SCHED_HEALTH_KEY, type SchedulerDOCtor, SEEN_ASSERTION_PREFIX, STATE_REFUSED_PREFIX, STATE_REFUSED_READ_CAP, STEPUP_TOKEN_PREFIX, STORAGE_FAULT_KEY, StateRefusedError, TICK_LEASE_MS, TICK_OUTCOME_KEY } from "./scheduler-do-base.ts";
 import { appendTickOutcome, classifyStorageFault, EMPTY_SCHED_HEALTH, EMPTY_STORAGE_FAULTS, newULID, nowMillisISO, type StorageFaultCounter, schedHealthView, stateRefusalView, type TickOutcome, type TickReport } from "./scheduler-helpers.ts";
 import type { BlackoutResolve, CronResolve, CronResolveClass, SchedHealthCounters, StateRefusal } from "./types.ts";
 
@@ -236,8 +237,8 @@ export function SchedulerCoreMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
           if (!(d.config.enabled && !this.leased(d, now) && d.nextRunAt <= now)) continue;
           // A blackout window is re-checked at DISPATCH, not only when nextRunAt is computed. nextWithJitter
           // defers a computed fire out of a window, but dispatch rides the fifteen-minute tick, so a run due
-          // at 01:55 before a 02:00 window used to start on the 02:00 tick, inside the window. A window added
-          // after nextRunAt was computed was missed the same way. Such a run is re-deferred to the window end
+          // at 01:55 before a 02:00 window would start on the 02:00 tick, inside the window, and so would a run
+          // when a window is added after nextRunAt was computed. Such a run is re-deferred to the window end
           // and not dispatched on this tick. It is only ever moved LATER, never dropped.
           // The re-deferral is bounded so that no window set can hold a backup back for ever:
           //   - it happens only when the deferral PROVABLY leaves the windows (class ok or
@@ -317,6 +318,9 @@ export function SchedulerCoreMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
       // After a recovery the counter may not be anchored to the RUNLOG yet, so an index could repeat one in it.
       const held = await runlogSeedHold(this.state.storage);
       if (held !== null) return { skipped: `run allocation is held until the recovery path reads the destination RUNLOG (${held}); it retries every tick` };
+      // An append met an index its archive already holds: the counter is behind that archive. Hold until the cron
+      // pass has read every archive and moved the counter past the highest index any of them holds.
+      if ((await readRunlogIndexHeld(this.state.storage)) !== null) return { skipped: "run allocation is held until the counter is advanced past the highest index any archive holds; it retries every tick" };
       if (await rekeyHold(this.state.storage, now)) return { skipped: "run allocation is held while a signer re-key hands over the destination RUNLOGs" };
       // If it is inFlight but the lease expired, the previous run crashed (the isolate was evicted, hit a
       // CPU/wall-clock limit, or was redeployed between trigger and complete). Reclaim it: resolve the
@@ -540,6 +544,17 @@ export function SchedulerCoreMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
         // stale digest, and absent when an older driver omitted it.
         if (row.status === "failed" && req.causeDigest) row.causeDigest = req.causeDigest;
         else delete row.causeDigest;
+        // Which destination a FAILED run was writing to. Re-gated here at the trust boundary: the id must be
+        // the shape of a destination id and the basis a member of the closed set; anything else is dropped.
+        // A resolved ok row never keeps a stale attribution.
+        const attempted = failedDestinationOf(req.attemptedDestinationId, req.attemptedDestinationBasis);
+        if (row.status === "failed" && attempted !== undefined) {
+          row.failedDestinationId = attempted.id;
+          row.failedDestinationBasis = attempted.basis;
+        } else {
+          delete row.failedDestinationId;
+          delete row.failedDestinationBasis;
+        }
         // Record the destination this run SEALED to (the failover-chosen origin) on a successful row,
         // and seed its replication state: the origin is now PROVEN to hold this run. A failed run sealed
         // nowhere, so it records no origin (a resolver then falls back to the configured primary).
@@ -782,6 +797,9 @@ export function SchedulerCoreMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
         for (const [k, rec] of stepupCh) if (!rec || typeof rec.expiresAt !== "number" || rec.expiresAt <= nowMs) await this.state.storage.delete(k);
         const stepupTok = await this.state.storage.list<{ expiresAt: number }>({ prefix: STEPUP_TOKEN_PREFIX });
         for (const [k, rec] of stepupTok) if (!rec || typeof rec.expiresAt !== "number" || rec.expiresAt <= nowMs) await this.state.storage.delete(k);
+        // Stamp a bare group list with migratedAt and delete it 14 days later. Delete a group record not refreshed for 90 days.
+        // Remove once the migration window has closed: the bare group-list form is read only during it.
+        await sweepOidcGroups(this.state.storage, OIDC_GROUPS_PREFIX, nowMs);
         // Session ref and single-revocation rows past their exp.
         await this.sweepSessionRecords(nowMs);
         await flushAuditFolds(this.state, (d) => this.appendAudit(d)); // pending refused-attempt counts (audit-fold.ts)

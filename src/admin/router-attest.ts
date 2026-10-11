@@ -14,7 +14,7 @@
 // differs from the session's creator (403), and a null-subject bare-token caller can never own a session.
 import type { Env } from "../env.d.ts";
 import { type RouterCtx, doURL } from "./router-helpers.ts";
-import { jsonResponse, jsonError, gate, callerHeaders, rateLimited, recordAudit, stampAttendedVerification } from "./router-core.ts";
+import { jsonResponse, jsonError, gate, callerHeaders, rateLimited, recordAudit, stampAttendedVerification, peekObjectBody, readObjectBody } from "./router-core.ts";
 import { withRunDestFallback } from "./router-sources.ts";
 import { fetchRunlogFloor } from "./restore-open.ts";
 import { loadConfigWrapKey } from "./config-secret.ts";
@@ -79,7 +79,17 @@ export async function handleAttest(ctx: RouterCtx): Promise<Response | null> {
   switch (`${req.method} ${sub}`) {
     // ---- start a session: pin the latest completed run per downpipe + issue the live-possession challenge --
     case "POST /attest/session/create": {
-      const body = (await req.json().catch(() => ({}))) as { scope?: unknown; sampleRate?: unknown };
+      // The gate runs before any body field is read. A refused caller's body is peeked only for the sampleRate the
+      // denied row records.
+      const rateOf = (b: { sampleRate?: unknown }): number => (typeof b.sampleRate === "number" && Number.isInteger(b.sampleRate) && b.sampleRate >= 1 && b.sampleRate <= 100 ? b.sampleRate : 100);
+      const denied = gate(caller, "drill.run");
+      if (denied) {
+        const peek = await peekObjectBody<{ sampleRate?: unknown }>(req);
+        await recordAudit(scheduler, caller, sourceIp, "attest-session-started", "denied", { kind: "attest-session", sessionId: "", runs: 0, sampleRate: rateOf(peek) });
+        return denied;
+      }
+      const body = await readObjectBody<{ scope?: unknown; sampleRate?: unknown }>(req, { malformedAsEmpty: true });
+      if (body instanceof Response) return body;
       // ABSENT means the full 100% pass. A PRESENT sampleRate is refused unless it is a whole percentage from
       // 1 to 100, rather than being clamped and truncated into one: clamping would let 0 become 1, a billion
       // become 100, 50.9 become 50 and a string become 100, and the session would then report back the rate
@@ -88,12 +98,7 @@ export async function handleAttest(ctx: RouterCtx): Promise<Response | null> {
       // all, so an operator who asked for one thing and got another is left with an assurance record that
       // misdescribes the check they ran.
       const sampleRateBad = body.sampleRate !== undefined && body.sampleRate !== null && (typeof body.sampleRate !== "number" || !Number.isInteger(body.sampleRate) || body.sampleRate < 1 || body.sampleRate > 100);
-      const sampleRate = typeof body.sampleRate === "number" && Number.isInteger(body.sampleRate) && body.sampleRate >= 1 && body.sampleRate <= 100 ? body.sampleRate : 100;
-      const denied = gate(caller, "drill.run");
-      if (denied) {
-        await recordAudit(scheduler, caller, sourceIp, "attest-session-started", "denied", { kind: "attest-session", sessionId: "", runs: 0, sampleRate });
-        return denied;
-      }
+      const sampleRate = rateOf(body);
       // Refused AFTER the capability gate, so an unauthorised caller still gets the 403 they would have got
       // before: a body check that ran first would answer a caller who holds nothing a different status from
       // the one the gate gives, which is a shape the gate-observed-as-refused suite reads as a leak.

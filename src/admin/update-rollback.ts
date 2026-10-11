@@ -50,8 +50,8 @@ export interface StandaloneRollbackArgs {
 
 export interface StandaloneRollbackResult {
   outcome: RollbackOutcome;
-  fromVersion?: string; // the version that was live before the rollback (what we reverted away from)
-  toVersion: string; // the known-good version we reverted to (or attempted to)
+  fromVersion?: string; // the version that was live before the rollback (the version rolled back from)
+  toVersion: string; // the known-good version rolled back to (or attempted to)
   canaryVerdict?: CanaryLiveness;
   steps: StepLog[];
   reason?: string;
@@ -79,7 +79,7 @@ async function readLiveForRollback(
     if (typeof driver.currentLiveVersions === "function") {
       const slices = await driver.currentLiveVersions();
       const liveSingle = liveSingleVersion(slices);
-      // fromVersion (what we reverted away from) is the dominant slice; reuse currentLiveVersionId for it so
+      // fromVersion (the version rolled back from) is the dominant slice; reuse currentLiveVersionId for it so
       // the recorded value is identical to the apply path's rollback target.
       const fromVersion = await driver.currentLiveVersionId();
       log("read-live-version", true, liveSingle === null ? `${fromVersion} (split: ${slices.map((s) => `${s.versionId}@${s.percentage}%`).join(", ")})` : fromVersion);

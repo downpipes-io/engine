@@ -200,7 +200,7 @@ function testImmutabilityReport(): void {
     ok("immutability: break-glass posture stated", data.breakGlassConfigured === true && /break-glass recipient is configured/.test(data.attestation));
     ok("immutability: no-custody posture stated when no operational-private", data.operationalPrivatePresent === false && /strict no-custody posture is in force/.test(data.attestation));
     // The attestation is what a customer hands an auditor, so both branches are pinned on their CLAIMS.
-    // The absent branch used to state only what is missing, and an auditor reading that alone could
+    // The absent branch must not state only what is missing, because an auditor reading that alone could
     // reasonably conclude nothing is verified in this posture. It must state the assurance that remains.
     ok("attestation: the strict posture states that runs are still verified at seal", /verified at seal/i.test(data.attestation));
     ok("attestation: the strict posture states the canary still runs", /canary still proves/i.test(data.attestation));
@@ -341,9 +341,9 @@ function testImmutabilityRetentionAxis(): void {
   // CONTROL 2: enforced + a VALID policy + NO bucket default rule. STILL the strong claim: the engine writes
   // the retention header on every archive, so the bucket's default rule is not what the claim rests on.
   const armedNoRule = { configured: true, misconfigured: false, mode: "governance" as const, retentionDays: 30, bucketEnforces: true as const, defaultRetention: false };
-  // GOVERNANCE. This assertion used to require the unqualified strong claim for a governance
-  // policy, which pinned the defect: under governance a principal holding s3:BypassGovernanceRetention can
-  // shorten or remove the window. The claim now carries the bypass, and never says "no credential".
+  // GOVERNANCE. Under governance a principal holding s3:BypassGovernanceRetention can
+  // shorten or remove the window, so an unqualified strong claim would be wrong. The claim carries the
+  // bypass, and never says "no credential".
   ok("retention/armed, no rule: a governance policy carries the claim only with the bypass named", /the bucket enforces S3 Object-Lock \(governance mode, 30 days retention\); in governance mode a compromised delete-credential cannot hard-delete or overwrite an archive within its retention window unless it holds s3:BypassGovernanceRetention; a principal that holds it, usually the backup administrator, can shorten or remove the window/.test(propertyOf(armedNoRule)));
   ok("retention/armed, no rule: the governance attestation names the bypass too", /enforces S3 Object-Lock \(WORM\), so in governance mode a compromised delete-credential cannot hard-delete or overwrite an archive within its retention window unless it holds s3:BypassGovernanceRetention/.test(attestationOf(armedNoRule)));
   ok("retention/armed, governance: neither surface says no credential can delete", !/no credential/.test(propertyOf(armedNoRule)) && !/no credential/.test(attestationOf(armedNoRule)));

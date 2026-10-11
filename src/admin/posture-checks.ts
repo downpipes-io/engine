@@ -447,26 +447,70 @@ export function buildEnvironmentSelfBackup(input: PostureInput): CheckDraft | nu
 
 // redundant-copies (high, 3-2-1): the VERIFIABLE part of 3-2-1. Every protected source should write to
 // >=2 distinct destinations, so a backed-up source exists in two places (3 copies incl. the live
-// source). Fails when any downpipe writes to fewer than two (it follows the default, or pins one). The
-// "2 different MEDIA" criterion is NOT verifiable for cloud-only storage and is the operator-attested
-// media-diversity check below; "1 offsite" is inherent (all cloud is offsite from the source).
+// source). The "2 different MEDIA" criterion is NOT verifiable for cloud-only storage and is the
+// operator-attested media-diversity check below; "1 offsite" is inherent (all cloud is offsite from the
+// source).
+//
+// VERDICT RULE: a downpipe counts as redundant only once at least two of its destinations are
+// PROVEN to hold the run each is fairly graded on (provenCopies, gathered from the engine's own
+// replication state via destinations.ts assessRedundancy), not merely pinned. A destination added five
+// minutes ago that has not yet replicated anything, and a destination whose copies have been failing for
+// months, both read the same way here: neither has EARNED the "two places" claim yet, however many
+// destinations the downpipe is pinned to. A fresh run the replication pass has not reached yet grades a
+// destination on the older run it is still proven current on instead (the same gather that fills
+// provenCopies), so a deferred cron tick, or the instant a new run lands, never flaps a healthy estate to
+// fail. This also covers the single-destination case too, since a downpipe pinned to fewer than two
+// destinations can never reach two proven copies either. FAIL (not cannot-verify) is correct because the
+// engine can always observe this directly from its own replication records; cannot-verify is reserved
+// for what the platform genuinely cannot see (media-diversity below, admin-strong-auth with no identity
+// data). With no downpipes there is nothing to grade, unchanged.
+const REDUNDANCY_DETAIL_NAMED_MAX = 3;
+
+// redundantCopiesFailDetail builds the per-downpipe explanation for a failed check: the overall count,
+// then how many downpipes are pinned to only one destination, how many have never replicated at all, and,
+// bounded, which fan-out downpipes are genuinely short a proven copy and why (catching up or failing),
+// read off the worst gap destinations.ts found for each. Present tense, no history words.
+function redundantCopiesFailDetail(all: readonly PostureDownpipeInput[], nonRedundant: readonly PostureDownpipeInput[], provenCount: number): string {
+  const parts: string[] = [`${provenCount} of ${all.length} downpipe(s) have a proven second copy.`];
+  const singlePinned = nonRedundant.filter((d) => (d.destinationCount ?? 0) < 2);
+  const pendingFirstRun = nonRedundant.filter((d) => (d.destinationCount ?? 0) >= 2 && d.lastRunId === undefined);
+  const catchingUp = nonRedundant.filter((d) => (d.destinationCount ?? 0) >= 2 && d.lastRunId !== undefined);
+  if (singlePinned.length > 0) parts.push(`${singlePinned.length} downpipe(s) have only one destination.`);
+  if (pendingFirstRun.length > 0) {
+    parts.push(`For ${pendingFirstRun.map((d) => d.name).join(", ")}, the first replication is pending.`);
+  }
+  const named = catchingUp.slice(0, REDUNDANCY_DETAIL_NAMED_MAX);
+  for (const d of named) {
+    const gap = (d.redundancyGaps ?? [])[0];
+    if (gap === undefined) continue;
+    parts.push(
+      gap.lastOk
+        ? `${d.name}: replication is catching up: ${gap.destinationId} holds ${gap.heldRuns} of ${gap.totalRuns} runs.`
+        : `${d.name}: copies to ${gap.destinationId} are failing.`,
+    );
+  }
+  if (catchingUp.length > named.length) parts.push(`${catchingUp.length - named.length} more downpipe(s) have fewer than two proven copies.`);
+  return parts.join(" ");
+}
+
 export function buildRedundantCopies(input: PostureInput): CheckDraft {
-  const nonRedundant = input.downpipes.filter((d) => (d.destinationCount ?? 0) < 2);
+  const nonRedundant = input.downpipes.filter((d) => (d.provenCopies ?? 0) < 2);
   const failed = input.downpipes.length > 0 && nonRedundant.length > 0;
+  const provenCount = input.downpipes.length - nonRedundant.length;
   return {
     id: "redundant-copies",
     title: "Sources fan out to two destinations",
     control: "3-2-1",
     auto: failed ? "fail" : "pass",
-    how: "Counts each downpipe's distinct pinned destinations. Fails when any downpipe writes to fewer than two (the verifiable leg of 3-2-1); with no downpipes there is nothing to grade.",
+    how: "For each downpipe, grades every non-origin destination on the newest successful run the replication pass has visited it for since that run finished, or the newest run outright once six hours pass with no visit. Counts it only when its holds-index reaches that run. Fails when fewer than two destinations hold the run they are graded on; with no downpipes there is nothing to grade.",
     detail:
       input.downpipes.length === 0
         ? "No downpipes yet, so there is nothing to copy redundantly."
         : failed
-          ? `${nonRedundant.length} of ${input.downpipes.length} downpipe(s) write to only one destination; that source exists in just one place off-source.`
-          : "Every downpipe fans out to at least two destinations, so each backed-up source exists in two places.",
+          ? redundantCopiesFailDetail(input.downpipes, nonRedundant, provenCount)
+          : "Every downpipe has at least two destinations holding its latest run. Each backed-up source exists in two places.",
     remediation:
-      "In a downpipe's destination picker, tick two or more destinations (the first is the primary; the rest get copies of every run). Add destinations under Destinations.",
+      "In a downpipe's destination picker, tick two or more destinations (the first is the primary; the rest get copies of every run). Add destinations under Destinations. A newly added destination earns the pass once it finishes replicating.",
   };
 }
 

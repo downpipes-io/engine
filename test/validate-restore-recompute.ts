@@ -372,7 +372,7 @@ async function proofLyingRequest(ctx: Ctx): Promise<void> {
     //
     // The comment above said "A successful apply consumes the approval, which also tidies it for PROOF 2's
     // fresh request", and that was true until `23938a50` made restore dual control owner-opt-in. This
-    // estate has NOT armed the policy, so router-restore.ts:311 skips both the reserve and the single-use
+    // estate has NOT armed the policy, so router-restore.ts:313 skips both the reserve and the single-use
     // consume, on the stated premise that "there is no approval record" when the policy is unarmed.
     //
     // THAT PREMISE DOES NOT HOLD, measured here: with the policy unarmed, POST /admin/restore/request

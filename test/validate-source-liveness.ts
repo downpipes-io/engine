@@ -164,6 +164,24 @@ async function r2d1Tests(): Promise<void> {
     () => new D1Source(d1Double(() => { throw new Error("no such database"); }), "app-vague").probeLiveness(),
     "unavailable",
   );
+  // The binding's own throw for a deleted database, measured on a live estate: an Error whose message
+  // carries the "D1_ERROR: " prefix and whose string cause is the same text without it.
+  const gone = "D1 database 404223c8-fb1d-4712-b315-13be2abe1967 has been deleted.";
+  const measured = (message: string): D1Database => d1Double(() => { throw new Error(message, { cause: gone }); });
+  await expectMissing("a deleted D1 database, measured binding text with prefix -> kind 'deleted'", () => new D1Source(measured(`D1_ERROR: ${gone}`), "app-del1").probeLiveness(), "deleted");
+  await expectMissing("a deleted D1 database, measured binding text without prefix -> kind 'deleted'", () => new D1Source(measured(gone), "app-del2").probeLiveness(), "deleted");
+  ok("classifyLivenessFault: measured deleted-D1 text with prefix is 'deleted' (404 class)", (() => { const r = classifyLivenessFault("d1", "x", new Error(`D1_ERROR: ${gone}`)); return r.kind === "deleted" && r.faultClass === "404"; })());
+  ok("classifyLivenessFault: measured deleted-D1 text without prefix is 'deleted'", classifyLivenessFault("d1", "x", new Error(gone)).kind === "deleted");
+  // Negative controls: outages stay "unavailable"; a different deleted thing is not a deleted database.
+  for (const [label, text] of [
+    ["a network fault", "D1_ERROR: Network connection lost."],
+    ["a timeout", "D1_ERROR: D1 DB storage operation exceeded timeout which caused object to be reset."],
+    ["a 5xx-shaped D1 error", "D1_ERROR: D1 database is overloaded. Too many requests queued. (500)"],
+    ["a deleted table", "D1_ERROR: table users has been deleted"],
+    ["a deleted row set", "D1_ERROR: rows in the database have been deleted"],
+  ] as const) {
+    await expectMissing(`${label} -> kind 'unavailable'`, () => new D1Source(measured(text), "app-neg").probeLiveness(), "unavailable");
+  }
 }
 
 // ---- error classification ---------------------------------------------------

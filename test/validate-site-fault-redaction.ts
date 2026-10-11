@@ -108,7 +108,8 @@ async function main(): Promise<void> {
   ok("the forged row with a class outside the closed list is dropped (the limiter row counts its two real reads only)", byId.get("ratelimit.health-read")?.count === 2);
   ok("an error whose name is a token is recorded as class other", byId.get("source.kv-resume-cursor")?.cls === "other");
   ok("a forged row with valid fields merges its count only; its extra fields do not ride", byId.get("source.kv-resume-cursor")?.count === 2);
-  ok("every row carries only the fixed fields", rows.every((r) => Object.keys(r).sort().join(",") === "cls,count,firstAt,fixClass,id,lastAt,subsystem,what"));
+  // undermines is a legend field, present on a row only for a site whose class undermines; it is never taken from a stored row.
+  ok("every row carries only the fixed fields", rows.every((r) => Object.keys(r).sort().join(",") === (r.undermines === undefined ? "cls,count,firstAt,fixClass,id,lastAt,subsystem,what" : "cls,count,firstAt,fixClass,id,lastAt,subsystem,undermines,what")));
 
   console.log("none of the planted values is in the pack or in DO storage:");
   for (const [label, value] of Object.entries(PLANTS)) {

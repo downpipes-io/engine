@@ -153,7 +153,7 @@ export const AUTH_SIGNAL_NAMES = [
   "oidc-tenant-not-accepted", // an Entra multitenant id_token carried a tid that is NOT in the connection's acceptedTenantIds allowlist (a /common misconfiguration, distinct from a plain wrong-issuer)
   "oidc-hd-not-accepted", // a Google id_token's hd (hosted-domain) claim did NOT match the connection's required Workspace domain (a personal/other-domain Google account attempted sign-in)
   // --- IdP connection configuration refusals (owner-facing) ---
-  "private-key-jwt-unsupported", // a connection create/update was refused because private_key_jwt client auth is not wired in this build
+  "private-key-jwt-unsupported", // a connection create/update was refused because private_key_jwt client auth is not supported
   // --- Cloudflare Access front-door denials (the reason a verified-looking assertion was refused) ---
   "cf-access-aud-mismatch", // a signed Access JWT was refused because its aud did not include the configured CF_ACCESS_AUD (wrong Access application tag)
   "cf-access-issuer-mismatch", // a signed Access JWT was refused because its iss did not equal the configured team-domain issuer (a CF_ACCESS_TEAM_DOMAIN typo / wrong team)
@@ -177,7 +177,7 @@ export const AUTH_SIGNAL_NAMES = [
   // through passkeySignalName (passkey-types.ts). The client-facing response is unchanged and stays coarse, so
   // none of these classes is ever oracled back to a caller (the anti-enumeration property is preserved).
   "passkey-not-configured", // a ceremony was refused 501 because CONSOLE_ORIGIN is unset/unparseable: the engine has no origin to bind a credential to (a deploy-config fault, not a user fault)
-  "passkey-origin-mismatch", // clientData origin != CONSOLE_ORIGIN - the classic "every sign-in broke after we moved the console to a custom domain"
+  "passkey-origin-mismatch", // clientData origin != CONSOLE_ORIGIN - the usual cause is a console served from a custom domain that differs from CONSOLE_ORIGIN, so every sign-in fails
   "passkey-rpid-mismatch", // authData rpIdHash != SHA-256(rp.id) - PASSKEY_RP_ID is no longer a registrable-domain suffix of the console origin
   "passkey-uv-unmet", // the authenticator did not set user-verified: a UV-incapable security key against a front door that requires UV (a whole fleet can be locked out this way)
   "passkey-up-unmet", // the authenticator did not set user-present

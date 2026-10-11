@@ -20,6 +20,7 @@ import { certNotAfter, } from "../admin/saml/response.ts";
 import { classifySsoFailure, SSO_FAIL_CODES, SSO_NO_ACCESS_REASON, type SsoFailCode } from "../admin/sso-failure-class.ts";
 import { log } from "../log.ts";
 import { recordExpiryObserveFault, recordStorageAnomaly, recordVocabDrop } from "./sched-fault-ledger.ts";
+import { makeOidcGroupsRecord } from "./oidc-groups-record.ts";
 import { IDP_EPOCH_PREFIX, OIDC_GROUPS_PREFIX, PASSKEY_CRED_PREFIX, type SchedulerDOCtor, SESSION_EPOCH_SUB_PREFIX } from "./scheduler-do-base.ts";
 import { mappingForConnection, nowMillisISO } from "./scheduler-helpers.ts";
 import type { SessionClient } from "./scheduler-do-session.ts";
@@ -542,7 +543,7 @@ export function IdpMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
         await this.recordAuthSignal("sso-no-grant-refused");
         return { ok: false, reason: SSO_NO_ACCESS_REASON };
       }
-      await this.state.storage.put(`${OIDC_GROUPS_PREFIX}${subject}`, boundedGroups);
+      await this.state.storage.put(`${OIDC_GROUPS_PREFIX}${subject}`, makeOidcGroupsRecord(email, boundedGroups, nowMs));
       const key = await this.sessionSigningKey();
       // End the session this browser presented before the epoch read below, so the token minted here
       // carries the bumped epoch and the presented one fails verification from now on.
@@ -621,7 +622,7 @@ export function IdpMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
       const created = await createIdpConnection(this.idpKv, proposal, caller?.email ?? null, nowMillisISO());
       if (!created.ok) {
         // private-key-jwt-unsupported: the connection was refused. When the operator requested private_key_jwt
-        // client authentication (not wired in this build - the pure validator rejects it at config time), record
+        // client authentication (not supported; the pure validator rejects it at config time), record
         // the bounded signal so a "my private-key-JWT connection will not save" ticket is diagnosable from the pack
         // rather than only surfacing as a failed idp-connection-change audit row. Keyed off the requested
         // clientAuth (a closed enum on the proposal), never the reason string; only the closed event name is stored.

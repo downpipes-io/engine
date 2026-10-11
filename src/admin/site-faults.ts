@@ -19,7 +19,7 @@
 // bounded by the size of the legend, because an id outside the legend is dropped at every step.
 
 import { doURL } from "../do-url.ts";
-import { isSiteFaultId, SITE_FAULT_LEGEND, type SiteFaultFixClass, type SiteFaultId } from "./site-fault-legend.ts";
+import { isSiteFaultId, SITE_FAULT_LEGEND, type SiteFaultFixClass, type SiteFaultId, type SiteFaultLegendEntry } from "./site-fault-legend.ts";
 
 export const SITE_FAULT_CLASSES = ["error", "type", "range", "syntax", "abort", "timeout", "quota", "do-overloaded", "do-retryable", "do-remote", "other", "non-error"] as const;
 export type SiteFaultClass = (typeof SITE_FAULT_CLASSES)[number];
@@ -230,6 +230,7 @@ export interface SiteFaultPackRow {
   subsystem: string;
   what: string;
   fixClass: SiteFaultFixClass;
+  undermines?: readonly string[];
   cls: SiteFaultClass;
   count: number;
   firstAt: string;
@@ -245,8 +246,8 @@ export async function fetchSiteFaults(scheduler: DurableObjectStub): Promise<Sit
   const rows: SiteFaultPackRow[] = [];
   for (const [id, row] of Object.entries(merged)) {
     if (!isSiteFaultId(id) || row === undefined) continue;
-    const legend = SITE_FAULT_LEGEND[id];
-    rows.push({ id, subsystem: legend.subsystem, what: legend.what, fixClass: legend.fixClass, cls: row.lastCls, count: row.count, firstAt: new Date(row.firstAt).toISOString(), lastAt: new Date(row.lastAt).toISOString() });
+    const legend: SiteFaultLegendEntry = SITE_FAULT_LEGEND[id];
+    rows.push({ id, subsystem: legend.subsystem, what: legend.what, fixClass: legend.fixClass, ...(legend.undermines === undefined ? {} : { undermines: legend.undermines }), cls: row.lastCls, count: row.count, firstAt: new Date(row.firstAt).toISOString(), lastAt: new Date(row.lastAt).toISOString() });
   }
   return rows.sort((a, b) => (a.lastAt < b.lastAt ? 1 : a.lastAt > b.lastAt ? -1 : 0));
 }

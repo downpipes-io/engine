@@ -22,7 +22,6 @@
 //
 // Usage: node scripts/build-deploy-bundle.mjs --config <wrangler config> --outdir <dir> [--main-module index.js]
 //
-//
 
 import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";

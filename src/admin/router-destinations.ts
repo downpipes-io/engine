@@ -16,6 +16,8 @@ import { isInternalSinkHost } from "../notify.ts";
 import type { TestDeleteProbe } from "../sched/sched-fault-ledger.ts";
 import { envFlagEnabled } from "./auth.ts";
 import { loadConfigWrapKey, maybeWrapConfigSecret } from "./config-secret.ts";
+import { clearRefusalClass, type DestRefused, recordDestRefusal, refusedDetail } from "./dest-refusal-record.ts";
+import type { DestProbeFailClass, DestRefusalProvider, DestSaveRefusal } from "./dest-save-refusal.ts";
 import { recordAdminRefusal } from "./diag-admin.ts";
 import { bumpAdminCounter, noteTestOutcome } from "./diag-counters.ts";
 import { callerHeaders, gate, jsonError, jsonResponse, rateLimited } from "./router-core.ts";
@@ -63,18 +65,27 @@ interface ValidatedDest {
 /**
  * storedDefaultRetention picks the probe's default-retention read for the stored destination record. It is
  * kept only beside objectLock "enforced", where it means something: on any other verdict the bucket applies no
- * lock, so a rule read there would describe nothing. The DO write boundary re-gates it the same way.
+ * lock, so a rule read there would describe nothing. The default rule's mode and period ride with it. The DO write boundary re-gates them the same way.
  *
  * @param probe - the successful live probe of the submitted destination.
  * @returns a spreadable object that carries defaultRetention, or an empty one.
  */
-function storedDefaultRetention(probe: ProbeOk): { defaultRetention?: boolean } {
-  return probe.objectLock === "enforced" && probe.defaultRetention !== undefined ? { defaultRetention: probe.defaultRetention } : {};
+function storedDefaultRetention(probe: ProbeOk): { defaultRetention?: boolean; lockMode?: string; lockRetentionDays?: number } {
+  return probe.objectLock === "enforced" ? { ...(probe.defaultRetention !== undefined ? { defaultRetention: probe.defaultRetention } : {}), ...(probe.lockMode !== undefined ? { lockMode: probe.lockMode } : {}), ...(probe.lockRetentionDays !== undefined ? { lockRetentionDays: probe.lockRetentionDays } : {}) } : {};
 }
 
-async function validateAndProbeDestConfig(env: RouterCtx["env"], rawConfig: unknown, scheduler?: DurableObjectStub): Promise<ValidatedDest | Response> {
+async function validateAndProbeDestConfig(env: RouterCtx["env"], rawConfig: unknown, scheduler?: DurableObjectStub): Promise<ValidatedDest | DestRefused> {
   const c = (rawConfig ?? {}) as RawDestConfigBody;
   const str = (v: unknown): string => (typeof v === "string" ? v.trim() : "");
+  // The provider the submitted endpoint names, when it is a well-formed https endpoint (else unknown).
+  const rawEndpoint = str(c.endpoint);
+  const refusalProvider: DestRefusalProvider | undefined = /^https:\/\/[^\s]+$/.test(rawEndpoint) ? providerForEndpoint(rawEndpoint) : undefined;
+  const refuse = (refusal: DestSaveRefusal, message: string, probe?: { probeClass: DestProbeFailClass; probeStatus?: number; regionHint?: string }): DestRefused => ({
+    response: jsonError(message, 400),
+    refusal,
+    ...(refusalProvider !== undefined ? { provider: refusalProvider } : {}),
+    ...(probe !== undefined ? { probeClass: probe.probeClass, ...(probe.probeStatus !== undefined ? { probeStatus: probe.probeStatus } : {}), ...(probe.regionHint !== undefined ? { regionHint: probe.regionHint } : {}) } : {}),
+  });
   // assumeRole is the OPTIONAL STS policy: when present the accessKeyId/secretAccessKey are the
   // assume-role PRINCIPAL and the probe (and every run) mints temporary credentials via buildDestination.
   // Read from c (the null-safe (rawConfig ?? {})), so an absent config body is a clean 400, not a throw.
@@ -84,7 +95,7 @@ async function validateAndProbeDestConfig(env: RouterCtx["env"], rawConfig: unkn
   // (validateAssumeRolePolicy, and clampDuration at request time) stays fail-safe for a value already in
   // storage; this is the one moment the operator can still fix it.
   const assumeRoleReason = assumeRolePolicyRejection(c.assumeRole);
-  if (assumeRoleReason !== null) return jsonError(assumeRoleReason, 400);
+  if (assumeRoleReason !== null) return refuse("assume-role-invalid", assumeRoleReason);
   const assumeRole = validateAssumeRolePolicy(c.assumeRole);
   const addressing = validateAddressing(c.addressing);
   const storageClass = validateStorageClass(c.storageClass);
@@ -94,7 +105,7 @@ async function validateAndProbeDestConfig(env: RouterCtx["env"], rawConfig: unkn
   // would store a destination that answers 200, reports itself verified, and then tries to use the client
   // secret as a storage account key on every write.
   const azureEntraReason = azureEntraDirectoryRejection(c.azureEntra);
-  if (azureEntraReason !== null) return jsonError(azureEntraReason, 400);
+  if (azureEntraReason !== null) return refuse("azure-entra-invalid", azureEntraReason);
   const azureEntra = validateAzureEntraDirectory(c.azureEntra);
   const submitted: RuntimeDestConfig = {
     endpoint: str(c.endpoint),
@@ -108,7 +119,7 @@ async function validateAndProbeDestConfig(env: RouterCtx["env"], rawConfig: unkn
     ...(azureEntra ? { azureEntra } : {}),
   };
   if (!/^https:\/\/[^\s]+$/.test(submitted.endpoint)) {
-    return jsonError("the destination endpoint must be an https URL (for R2: https://<account-id>.r2.cloudflarestorage.com)", 400);
+    return refuse("endpoint-not-https", "the destination endpoint must be an https URL (for R2: https://<account-id>.r2.cloudflarestorage.com)");
   }
   // An endpoint that is a real, well-known object store we CANNOT write to is refused here by name, and
   // its ONE member is now the ADLS Gen2 `dfs` endpoint: Azure BLOB became a supported destination
@@ -120,7 +131,7 @@ async function validateAndProbeDestConfig(env: RouterCtx["env"], rawConfig: unkn
   // in the sense of being cheap and host-only; it does not weaken it, because an Azure host is a public
   // name and the SSRF guard still runs on every endpoint that gets past here.
   const unusable = unusableEndpoint(submitted.endpoint);
-  if (unusable !== null) return jsonError(UNUSABLE_ENDPOINT_REASON[unusable], 400);
+  if (unusable !== null) return refuse("endpoint-unusable", UNUSABLE_ENDPOINT_REASON[unusable]);
   // SSRF defence in depth (the webhook/IdP-test discipline): before probeDestination issues a live
   // GET/PUT against the endpoint, refuse a host that classifies as internal/private/loopback/link-local
   // (incl. cloud metadata at 169.254.169.254). The platform restricts some link-local egress, but the
@@ -129,17 +140,17 @@ async function validateAndProbeDestConfig(env: RouterCtx["env"], rawConfig: unkn
   try {
     endpointHost = new URL(submitted.endpoint).hostname;
   } catch {
-    return jsonError("the destination endpoint must be a valid https URL", 400);
+    return refuse("endpoint-invalid", "the destination endpoint must be a valid https URL");
   }
   if (isInternalSinkHost(endpointHost)) {
     // The SSRF guard HELD, and nothing anywhere recorded that it had to. "Did anyone aim the destination
     // probe at 169.254.169.254?" is a post-incident question with a real answer, and the pack could not give it.
     // The refused HOST never rides (it is caller-chosen and could be anything); only the closed signal name.
     if (scheduler !== undefined) void recordAuthSignalEdge(scheduler, "ssrf-endpoint-refused");
-    return jsonError("the destination endpoint resolves to an internal/private/loopback/link-local address (incl. cloud metadata); these are refused", 400);
+    return refuse("endpoint-private", "the destination endpoint resolves to an internal/private/loopback/link-local address (incl. cloud metadata); these are refused");
   }
   if (submitted.bucket === "" || submitted.accessKeyId === "" || submitted.secretAccessKey === "") {
-    return jsonError("the destination needs the bucket name and both credential halves (Access Key ID and Secret Access Key)", 400);
+    return refuse("missing-fields", "the destination needs the bucket name and both credential halves (Access Key ID and Secret Access Key)");
   }
   // A service principal on an endpoint that is not Azure Blob is refused rather than stored. Nothing reads
   // it there (only the Azure client has a bearer path), so storing it would leave a destination that
@@ -148,9 +159,9 @@ async function validateAndProbeDestConfig(env: RouterCtx["env"], rawConfig: unkn
   // rule pointing the other direction, so neither cloud's credential can be stored against the other's
   // store.
   if (submitted.azureEntra !== undefined && providerForEndpoint(submitted.endpoint) !== "azure") {
-    return jsonError(
+    return refuse(
+      "entra-not-azure",
       "a Microsoft Entra service principal only authenticates against Azure Blob Storage, and that endpoint is not an Azure Blob endpoint. Leave the tenant and application ids blank and use the credential pair this store accepts.",
-      400,
     );
   }
   // An addressing style was submitted but is not one of auto/path/vhost. Refuse it explicitly rather than
@@ -162,17 +173,17 @@ async function validateAndProbeDestConfig(env: RouterCtx["env"], rawConfig: unkn
   // already refused on the audit-export surface (router-push.ts) off the SAME predicate, so the two surfaces
   // cannot drift. An absent or blank value is not a rejection; it is the auto default.
   const addressingReason = addressingRejection(c.addressing);
-  if (addressingReason !== null) return jsonError(addressingReason, 400);
+  if (addressingReason !== null) return refuse("addressing-invalid", addressingReason);
   // A storage class was submitted but is not one downpipes will write to (e.g. GLACIER/DEEP_ARCHIVE).
   // Reject it explicitly rather than silently dropping it: those tiers are not immediately readable, so
   // they would break verify-at-seal (the read-back at seal time) and any restore.
   if (typeof c.storageClass === "string" && c.storageClass.trim() !== "" && submitted.storageClass === undefined) {
-    return jsonError("that storage class is not supported. downpipes only writes to immediately-readable classes (STANDARD, STANDARD_IA, INTELLIGENT_TIERING, ONEZONE_IA); GLACIER and DEEP_ARCHIVE need an async thaw that would break verify-at-seal and restore.", 400);
+    return refuse("storage-class-unsupported", "that storage class is not supported. downpipes only writes to immediately-readable classes (STANDARD, STANDARD_IA, INTELLIGENT_TIERING, ONEZONE_IA); GLACIER and DEEP_ARCHIVE need an async thaw that would break verify-at-seal and restore.");
   }
   // STS region guard (defence in depth on the SSRF surface, plus a clear error): when an AssumeRole
   // policy is set, the region is host-bearing for the STS call, so it must be a real AWS region.
   if (submitted.assumeRole && !isValidStsRegion(submitted.region)) {
-    return jsonError(`STS AssumeRole needs a real AWS region (the destination region is "${submitted.region}"); set it to the role's region (Cloudflare R2's "auto" is not a valid STS region).`, 400);
+    return refuse("assume-role-region", `STS AssumeRole needs a real AWS region (the destination region is "${submitted.region}"); set it to the role's region (Cloudflare R2's "auto" is not a valid STS region).`);
   }
   // Google Cloud Storage and Azure Blob Storage each refuse a set of Amazon-specific fields, and each
   // refusal carries a remedy an operator of THAT store can act on.
@@ -211,11 +222,11 @@ async function validateAndProbeDestConfig(env: RouterCtx["env"], rawConfig: unkn
       addressing: submitted.addressing !== undefined,
     };
     const refused = refusedFields.find((f) => present[f.field] === true);
-    if (refused !== undefined) return jsonError(refused.reason, 400);
+    if (refused !== undefined) return refuse("provider-field-refused", refused.reason);
   }
   const probe = await probeDestination(env, submitted);
   if (!probe.ok) {
-    return jsonError(`destination verification failed: ${probe.reason}. Check the bucket name, the endpoint and that the credentials allow object read and write on that bucket.`, 400);
+    return refuse("probe-failed", `destination verification failed: ${probe.reason}. Check the bucket name, the endpoint and that the credentials allow object read and write on that bucket.`, { probeClass: probe.failClass, ...(probe.status !== undefined ? { probeStatus: probe.status } : {}), ...(probe.regionHint !== undefined ? { regionHint: probe.regionHint } : {}) });
   }
   // Envelope-encrypt the credential at rest when CONFIG_WRAP_KEY is set (the probe above ran on the
   // plaintext; the DO will only ever hold the ciphertext). No key => plaintext floor (unchanged).
@@ -226,7 +237,7 @@ async function validateAndProbeDestConfig(env: RouterCtx["env"], rawConfig: unkn
   try {
     storedSecret = await maybeWrapConfigSecret(loadConfigWrapKey(env.CONFIG_WRAP_KEY), submitted.secretAccessKey);
   } catch (e) {
-    return jsonError(`the engine's CONFIG_WRAP_KEY is misconfigured (${(e as Error).message}); set a valid CONFIG_WRAP_KEY Worker secret on the engine before adding a destination (the credential is encrypted at rest under this key)`, 400);
+    return refuse("wrap-key-misconfigured", `the engine's CONFIG_WRAP_KEY is misconfigured (${(e as Error).message}); set a valid CONFIG_WRAP_KEY Worker secret on the engine before adding a destination (the credential is encrypted at rest under this key)`);
   }
   // worm is the OPTIONAL per-destination immutability policy (mode + retention days). It is added ONLY to
   // the stored config by the caller, NEVER to the `submitted` config the probe ran under: arming WORM on the
@@ -244,7 +255,7 @@ async function validateAndProbeDestConfig(env: RouterCtx["env"], rawConfig: unkn
   const wormReason = wormPolicyRejection(c.worm);
   if (wormReason !== null) {
     if (scheduler !== undefined) void bumpAdminCounter(scheduler, "dest-config-worm-policy-submitted-dropped");
-    return jsonError(wormReason, 400);
+    return refuse("worm-policy-invalid", wormReason);
   }
   const worm = validateWormPolicyValue(c.worm);
   // A WORM policy on a bucket that CANNOT enforce Object-Lock is refused here, at the one moment the
@@ -268,9 +279,9 @@ async function validateAndProbeDestConfig(env: RouterCtx["env"], rawConfig: unkn
   // remedy an operator of that store cannot follow is worse than a plain refusal.
   if (worm !== null && wormCannotBeEnforced(probe)) {
     const store = immutabilityStoreNoun(providerForEndpoint(submitted.endpoint));
-    return jsonError(
+    return refuse(
+      "worm-not-enforceable",
       `this ${store} cannot enforce an immutability policy, so every backup written to it would be refused by the store and nothing would be archived there. ${immutabilityRemedy(providerForEndpoint(submitted.endpoint))}`,
-      400,
     );
   }
   return { submitted, storedSecret, worm, probe, pricing: c.pricing };
@@ -343,22 +354,32 @@ export async function handleDestinations(ctx: RouterCtx): Promise<Response | nul
       if (limited) return limited;
       const body = (await req.json()) as { config?: unknown };
       if (body.config === null) {
-        return scheduler.fetch(doURL("/dest-config"), {
+        const cleared = await scheduler.fetch(doURL("/dest-config"), {
           method: "POST",
           body: JSON.stringify({ config: null }),
           headers: callerHeaders(caller),
         });
+        // A refused clear of the default (downpipes still name it, or it holds the only proven copy of runs) is a
+        // 400 into a browser and nothing else. The row says that the clear was tried and which guard refused it.
+        // The scheduler already wrote the row for the two guards, with the facts that blocked the clear (the
+        // destination, the downpipes that name it, the runs at risk); the router writes only the residual class.
+        if (cleared.status >= 400) {
+          const refusal = await clearRefusalClass(cleared);
+          if (refusal === "clear-refused") await recordDestRefusal(ctx, { op: "clear", refusal });
+        }
+        return cleared;
       }
       const validated = await validateAndProbeDestConfig(env, body.config, scheduler);
-      if (validated instanceof Response) {
+      if ("response" in validated) {
         // "We tried to add our S3 destination three times last week." EVERY refusal on this path -- a
         // failed live write probe, an unusable endpoint, a misconfigured CONFIG_WRAP_KEY, an unsupported
         // storage class -- was a 400 into a browser and nothing else, so the pack could not show that the
         // customer had even attempted it, let alone which validator refused. A not-configured refusal (the
         // engine's own wrap key is unusable) is kept distinct from a validation refusal (the customer's input),
         // because they are opposite tickets. Never the endpoint, the bucket, the key id or the secret.
-        fireInBackground(runtime, recordAdminRefusal(scheduler, "dest-add", validated.status >= 500 ? "not-configured" : "validation"));
-        return validated;
+        fireInBackground(runtime, recordAdminRefusal(scheduler, "dest-add", validated.refusal === "wrap-key-misconfigured" ? "not-configured" : "validation"));
+        await recordDestRefusal(ctx, refusedDetail(validated));
+        return validated.response;
       }
       const { submitted, storedSecret, worm, probe, pricing } = validated;
       // envDestConfigured is the same pure env read POST /destinations sends. The DO refuses the set while the
@@ -369,6 +390,7 @@ export async function handleDestinations(ctx: RouterCtx): Promise<Response | nul
         body: JSON.stringify({ envDestConfigured, config: { ...submitted, secretAccessKey: storedSecret, verifiedAt: Date.now(), deleteProbe: probe.deleteProbe, ...(probe.deleteStatusClass !== undefined ? { deleteStatusClass: probe.deleteStatusClass } : {}), objectLock: probe.objectLock, ...storedDefaultRetention(probe), ...(probe.checksumRequired === true ? { checksumRequired: true } : {}), ...(worm ? { worm } : {}), ...(pricing !== undefined ? { pricing } : {}) } }),
         headers: callerHeaders(caller),
       });
+      if (setResp.status >= 400) await recordDestRefusal(ctx, { op: "set", refusal: "store-refused", provider: providerForEndpoint(submitted.endpoint) });
       // Real-time alert on the destination surface (repoint = exfil, remove = destroy). Fail-open.
       if (setResp.ok) fireInBackground(runtime, routeAuthChangeAlert(env, scheduler, "dest-change", "dest-change", `A backup destination was set/repointed${caller.email ? ` by ${caller.email}` : ""}.`));
       return setResp;
@@ -487,7 +509,12 @@ export async function handleDestinations(ctx: RouterCtx): Promise<Response | nul
       if (limited) return limited;
       const body = (await req.json()) as { id?: unknown; label?: unknown; config?: unknown };
       const validated = await validateAndProbeDestConfig(env, body.config, scheduler);
-      if (validated instanceof Response) return validated;
+      if ("response" in validated) {
+        // The same record the singular set keeps: the counter, and the row that names the class (and, on an edit, the id).
+        fireInBackground(runtime, recordAdminRefusal(scheduler, "dest-add", validated.refusal === "wrap-key-misconfigured" ? "not-configured" : "validation"));
+        await recordDestRefusal(ctx, refusedDetail(validated, body.id));
+        return validated.response;
+      }
       const { submitted, storedSecret, worm, probe, pricing } = validated;
       // envDestConfigured is read HERE (the router is the one place
       // with env binding access; the DO cannot see DEST_R2 or the DEST_* vars itself) and carried into the
@@ -506,6 +533,7 @@ export async function handleDestinations(ctx: RouterCtx): Promise<Response | nul
         }),
         headers: callerHeaders(caller),
       });
+      if (putResp.status >= 400) await recordDestRefusal(ctx, { op: "set", refusal: "store-refused", provider: providerForEndpoint(submitted.endpoint), ...(typeof body.id === "string" && body.id.trim() !== "" ? { id: body.id.trim() } : {}) });
       if (putResp.ok) fireInBackground(runtime, routeAuthChangeAlert(env, scheduler, "dest-change", "dest-change", `A backup destination was added or edited${caller.email ? ` by ${caller.email}` : ""}.`));
       return putResp;
     }

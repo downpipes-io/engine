@@ -19,6 +19,7 @@ import { dominantSubsystem, foldRetryMeter, hasPressure, type RunPressure, sealA
 import {
   cfConfigToken,
   DOC_KEY,
+  attemptedDestinationFlag,
   downDestinationFlag,
   fanoutMinRecords,
   fanoutRangeCount,
@@ -55,7 +56,7 @@ const BACKOFF_EXP_CAP = 20;
 // scheduler in-flight lease is kept warm through a long parallel seal (the workers do not heartbeat; only
 // the coordinator holds the lease). 30 s is well inside the lease-reclaim window while not busy-spinning.
 const COORDINATOR_HEARTBEAT_MS = 30_000;
-// MERGE_BATCH_LINES caps how many renumbered manifest lines the coordinator wraps into one carried-merge DO
+// MERGE_BATCH_LINES caps how many manifest lines with new sequence numbers the coordinator wraps into one carried-merge DO
 // batch, so each batch stays under the ~128 KiB DO value cap (256 lines * ~300 B ~= 77 KiB). The carried
 // buffer is < shardMax lines, so it spans at most a handful of batches.
 const MERGE_BATCH_LINES = 256;
@@ -693,7 +694,7 @@ export class RunSealDO {
     try {
       r = await runSlice(deps, cp, master, priorOpen);
     } finally {
-      await reportRunFaults(schedulerStub(this.env), cp.downpipeId, deps.dest);
+      await reportRunFaults(schedulerStub(this.env), cp.downpipeId, deps.dest, doc.destinationId);
     }
     const stored = await sealCheckpointForStorage(signerKey, r.checkpoint);
     // Reconcile the open-shard batches with the slice's outcome. A flush (openReset) consumed the
@@ -860,7 +861,7 @@ export class RunSealDO {
     // runs AFTER that window and notes into the same ledger: the RUNLOG lock/CAS plane counters and the
     // absent-RUNLOG chain restart are both detected here; without this drain, on the sliced path they would be
     // cleared by the next run's begin before ever reaching the pack. Never throws; posts nothing for a clean finalise.
-    await reportRunFaults(scheduler, doc.config.id, deps.dest);
+    await reportRunFaults(scheduler, doc.config.id, deps.dest, doc.destinationId);
     const sealVerification = await runSealVerification({ env: this.env, scheduler, dest: deps.dest, downpipe: { id: doc.config.id, name: doc.config.name }, master }, cp.runId, cp.counts.bytes);
     await this.complete(scheduler, cp, "ok", { ...(doc.destinationId !== undefined ? { destinationId: doc.destinationId } : {}), ...(sealVerification !== undefined ? { sealVerification } : {}), dest: deps.dest });
     // A run that SUCCEEDED under pressure is the one whose evidence would otherwise be lost entirely (cleanup()
@@ -1123,6 +1124,7 @@ export class RunSealDO {
               // the map's per-destination indicator lights up for a sole-destination outage exactly as it does
               // for an inline run. Only on a destination-access class, only with a resolved destination id.
               ...downDestinationFlag(coarse, destinationId),
+              ...attemptedDestinationFlag(destinationId),
               ...multipartAbortFlag(dest),
             }),
       }),
@@ -1360,6 +1362,7 @@ export class RunSealDO {
           error: coarse,
           ...(isCauseDigest(body.causeDigest) ? { causeDigest: body.causeDigest } : {}),
           ...downDestinationFlag(coarse, doc.destinationId),
+          ...attemptedDestinationFlag(doc.destinationId),
           ...(body.multipartAbortFailed === true ? { multipartAbortFailed: true } : {}),
         }),
         headers: { "content-type": "application/json" },
@@ -1536,7 +1539,7 @@ export class RunSealDO {
           try {
             r = await mergeStep(deps, cp, master, doc.merge!, carried, runlogLockVia(scheduler, doc.destinationId));
           } finally {
-            await reportRunFaults(scheduler, doc.base.downpipeId, deps.dest);
+            await reportRunFaults(scheduler, doc.base.downpipeId, deps.dest, doc.destinationId);
           }
           if (!r.done) {
             await this.persistMerge(signerKey, doc, r);
@@ -1762,7 +1765,7 @@ export class RunSealDO {
       // has on a wedged big-customer run. A small integer; never a key or a range bound.
       await this.observeSealFault(scheduler, { kind: "fanout-range-stalled", at: Date.now(), downpipeId: doc.base.downpipeId, runId: doc.base.runId, rangeIndex: stalled });
       try {
-        await scheduler.fetch(doURL("/complete"), { method: "POST", body: JSON.stringify({ id: doc.base.downpipeId, runId: "", index: doc.base.runlogIndex, status: "failed", error: "fan-out worker stalled (no progress)" }), headers: { "content-type": "application/json" } });
+        await scheduler.fetch(doURL("/complete"), { method: "POST", body: JSON.stringify({ id: doc.base.downpipeId, runId: "", index: doc.base.runlogIndex, status: "failed", error: "fan-out worker stalled (no progress)", ...attemptedDestinationFlag(doc.destinationId) }), headers: { "content-type": "application/json" } });
       } catch (ce) {
         log("error", `fan-out stalled-range failure completion did not land: ${await redactedRunError((ce as Error).message)}`);
       }
@@ -1819,7 +1822,7 @@ export class RunSealDO {
     };
   }
 
-  // persistMerge stores the advanced merge state and the carried (renumbered, not-yet-sealed) line buffer.
+  // persistMerge stores the advanced merge state and the carried (re-sequenced, not-yet-sealed) line buffer.
   // The buffer carries record NAMES, so it rests as AES-256-GCM-wrapped append-only batches (the SAME
   // machinery the serial open shard uses), in a live range [mergeOpenSeqStart, mergeOpenSeqEnd): a fresh
   // batch run is written beyond the consumed range and the doc + new batches land in ONE atomic put, then
@@ -1900,7 +1903,7 @@ export class RunSealDO {
         try {
           // Stamp the 12-hex causeDigest of the raw fault on the failed row (never the message itself), so a
           // merge that died on a sustained destination outage joins to its Logpush lines like an inline failure.
-          await scheduler.fetch(doURL("/complete"), { method: "POST", body: JSON.stringify({ id: doc.base.downpipeId, runId: "", index: doc.base.runlogIndex, status: "failed", error: "destination unavailable (sustained throttling during merge)", causeDigest: await causeDigest(m), ...multipartAbortFlag(dest) }), headers: { "content-type": "application/json" } });
+          await scheduler.fetch(doURL("/complete"), { method: "POST", body: JSON.stringify({ id: doc.base.downpipeId, runId: "", index: doc.base.runlogIndex, status: "failed", error: "destination unavailable (sustained throttling during merge)", causeDigest: await causeDigest(m), ...attemptedDestinationFlag(doc.destinationId), ...multipartAbortFlag(dest) }), headers: { "content-type": "application/json" } });
         } catch (ce) {
           log("error", `fan-out merge throttle-terminal completion did not land: ${await redactedRunError((ce as Error).message)}`);
           // The fan-out population is exactly the one whose lost verdicts were never recoverable.
@@ -1923,7 +1926,7 @@ export class RunSealDO {
         // Coarse class + causeDigest + down-destination attribution + the stranded-parts flag,
         // the same four signals an inline strike-out posts. A merge that struck out on the destination lights
         // the map's per-destination indicator instead of failing silently against a healthy-looking bucket.
-        await scheduler.fetch(doURL("/complete"), { method: "POST", body: JSON.stringify({ id: doc.base.downpipeId, runId: "", index: doc.base.runlogIndex, status: "failed", error: coarse, causeDigest: await causeDigest(m), ...downDestinationFlag(coarse, doc.destinationId), ...multipartAbortFlag(dest) }), headers: { "content-type": "application/json" } });
+        await scheduler.fetch(doURL("/complete"), { method: "POST", body: JSON.stringify({ id: doc.base.downpipeId, runId: "", index: doc.base.runlogIndex, status: "failed", error: coarse, causeDigest: await causeDigest(m), ...downDestinationFlag(coarse, doc.destinationId), ...attemptedDestinationFlag(doc.destinationId), ...multipartAbortFlag(dest) }), headers: { "content-type": "application/json" } });
       } catch (ce) {
         log("error", `fan-out merge failure completion did not land: ${await redactedRunError((ce as Error).message)}`);
         // As above: the merge struck out with a known coarse class and the verdict evaporated.

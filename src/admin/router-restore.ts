@@ -23,7 +23,7 @@ import { recordRestoreFaultRow, recordRestoreOutcome } from "./restore-faults.ts
 import { fetchRunlogFloor } from "./restore-open.ts";
 import { bufferedRestoreMaxBytesInvalid, errId } from "./restore-sinks.ts";
 import { type BlindRestoreTest, type CapsuleResult, type KeylessAttestationResult, type RestorePlan, type RestoreRequest, type RestoreResult, restoreFailureTally } from "./restore-types.ts";
-import { callerHeaders, gate, jsonResponse, rateLimited, recordAudit, requireStepUp, stampRestoreProven, stampRestoreTested } from "./router-core.ts";
+import { callerHeaders, gate, jsonResponse, peekObjectBody, rateLimited, readObjectBody, recordAudit, refuseBadBody, requireStepUp, stampRestoreProven, stampRestoreTested } from "./router-core.ts";
 import { doURL, type RouterCtx } from "./router-helpers.ts";
 import { withRunDestFallback } from "./router-sources.ts";
 
@@ -174,7 +174,9 @@ export async function handleRestore(ctx: RouterCtx): Promise<Response | null> {
   switch (`${req.method} ${sub}`) {
     // ---- restore: dry-run any role; APPLY requires Approver/Owner (the hard rule below) ------
     case "POST /restore": {
-      const body = (await req.json()) as RestoreRequest;
+      // The body picks the gate (confirm:true is an apply); a body that is no object is no apply, so restore.dryrun decides 403 or 400.
+      const body = await readObjectBody<RestoreRequest>(req);
+      if (body instanceof Response) return refuseBadBody(caller, "restore.dryrun", body);
       if (!body.runId) return new Response(JSON.stringify({ error: "runId required" }), { status: 400, headers: { "content-type": "application/json" } });
       // Reject a runId that is not a canonical ULID before it reaches any object-key template. A
       // dot-segment payload (e.g. "../../evil-bucket") would otherwise flow unchecked into
@@ -632,7 +634,8 @@ export async function handleRestore(ctx: RouterCtx): Promise<Response | null> {
       // boundary exactly as the sibling restore routes refuse it.
       const denied = gate(caller, "restore.verify");
       if (denied) return denied;
-      const body = (await req.json().catch(() => ({}))) as { runId?: unknown };
+      const body = await readObjectBody<{ runId?: unknown }>(req, { malformedAsEmpty: true });
+      if (body instanceof Response) return body;
       const runId = typeof body.runId === "string" ? body.runId : "";
       if (runId === "") return new Response(JSON.stringify({ error: "runId required" }), { status: 400, headers: { "content-type": "application/json" } });
       if (!isValidRunId(runId)) {
@@ -682,7 +685,9 @@ export async function handleRestore(ctx: RouterCtx): Promise<Response | null> {
       // decision fields and the apply already recomputes from the archive, so this never alters what is
       // restored; but the approver inbox and the restore-request audit event are the maker-checker
       // signal, so they must show the engine's truth, not the requester's claim.
-      const reqBody = (await req.json()) as RestoreRequest & { reason?: string; isLatest?: boolean; plannedWrites?: number; bytes?: number };
+      // The request checks below run ahead of the role gate, so a body that is no object meets the gate first.
+      const reqBody = await readObjectBody<RestoreRequest & { reason?: string; isLatest?: boolean; plannedWrites?: number; bytes?: number }>(req);
+      if (reqBody instanceof Response) return refuseBadBody(caller, "restore.request", reqBody, () => recordAudit(scheduler, caller, sourceIp, "restore-request", "denied", { kind: "restore", runId: "", redirectBinding: null, planHash: "", isLatest: false }));
       if (!reqBody.runId) return new Response(JSON.stringify({ error: "runId required" }), { status: 400, headers: { "content-type": "application/json" } });
       // Same ULID-shape gate as the other restore routes (see the comment on POST /restore).
       // Same closed-kind counter as the sibling routes (see POST /restore).
@@ -812,7 +817,7 @@ export async function handleRestore(ctx: RouterCtx): Promise<Response | null> {
       // (restore-operator/approver/owner); the DO re-checks and refuses the bare-token fallback.
       const denied = gate(caller, "restore.approve");
       if (denied) {
-        const ab = (await req.json()) as { planHash?: string };
+        const ab = await peekObjectBody<{ planHash?: string }>(req);
         await recordAudit(scheduler, caller, sourceIp, "restore-approve", "denied", {
           kind: "restore",
           runId: "",
@@ -829,20 +834,22 @@ export async function handleRestore(ctx: RouterCtx): Promise<Response | null> {
     case "POST /restore/reject": {
       // Rejecting a pending request is the approver-side counterpart of approving, so it gates on the
       // same restore.approve capability (restore-operator/approver/owner). The DO records a
-      // restore-reject event. Read the body BEFORE the gate check so planHash is available for the
-      // denied audit entry (mirroring the approve path; a denied first-class action must be audited).
-      const body = (await req.json()) as { planHash?: string; rejectReason?: string };
+      // restore-reject event. The gate runs first; a refused caller's body is peeked only for the planHash the
+      // denied audit entry names (mirroring the approve path; a denied first-class action must be audited).
       const denied = gate(caller, "restore.approve");
       if (denied) {
+        const peek = await peekObjectBody<{ planHash?: string; rejectReason?: string }>(req);
         await recordAudit(scheduler, caller, sourceIp, "restore-reject", "denied", {
           kind: "restore",
           runId: "",
           redirectBinding: null,
-          planHash: String(body.planHash ?? ""),
+          planHash: String(peek.planHash ?? ""),
           isLatest: false,
         });
         return denied;
       }
+      const body = await readObjectBody<{ planHash?: string; rejectReason?: string }>(req);
+      if (body instanceof Response) return body;
       const limited = await rateLimited(scheduler, caller);
       if (limited) return limited;
       // The checker's CLOSED rejection reason, gated at the edge as well as in the DO. A value outside the
@@ -878,7 +885,8 @@ export async function handleRestore(ctx: RouterCtx): Promise<Response | null> {
       // plaintext hash, return counts + a restoreDigest, NEVER any plaintext. restore.verify gated.
       // The request checks (runId, its shape, the selector) run before the role gate, as on POST /restore
       // and POST /restore/request: a malformed request is a 400 whatever the caller holds.
-      const body = (await req.json()) as RestoreRequest;
+      const body = await readObjectBody<RestoreRequest>(req);
+      if (body instanceof Response) return refuseBadBody(caller, "restore.verify", body, async () => fireInBackground(runtime, recordAdminRefusal(scheduler, "restore-proof", "forbidden")));
       if (!body.runId) return new Response(JSON.stringify({ error: "runId required" }), { status: 400, headers: { "content-type": "application/json" } });
       // Reject a runId that is not a canonical ULID before it reaches any object-key template. A
       // dot-segment payload (e.g. "../../evil-bucket") would otherwise flow unchecked into
@@ -942,19 +950,13 @@ export async function handleRestore(ctx: RouterCtx): Promise<Response | null> {
     case "POST /restore/attest": {
       // The Tier 0 KEYLESS integrity attestation: signature + completeness + anti-rollback, NO decryption
       // key and NO data, so it runs even in the break-glass-only posture. restore.verify gated.
-      // A restorability PROOF that is refused before it ever runs. The pack carries the stale
-      // lastRestoreProvenAt and nothing else, so "we have been unable to re-prove restorability all week" is
-      // byte-identical to "nobody tried all week", and they are opposite tickets: one is a fleet whose operators
-      // are locked out of their own proof, the other is a fleet nobody is drilling. The reason class is
-      // what separates them: forbidden (a role/capability that cannot verify) from rate-limited (the
-      // limiter turning a large fleet's sweep away). Neither leaves any other trace: a refused proof runs no
-      // restore, writes no evidence, and stamps no downpipe.
       const denied = gate(caller, "restore.verify");
       if (denied) {
         fireInBackground(runtime, recordAdminRefusal(scheduler, "restore-proof", "forbidden"));
         return denied;
       }
-      const body = (await req.json()) as RestoreRequest;
+      const body = await readObjectBody<RestoreRequest>(req);
+      if (body instanceof Response) return body;
       if (!body.runId) return new Response(JSON.stringify({ error: "runId required" }), { status: 400, headers: { "content-type": "application/json" } });
       // Reject a runId that is not a canonical ULID before it reaches any object-key template. A
       // dot-segment payload (e.g. "../../evil-bucket") would otherwise flow unchecked into

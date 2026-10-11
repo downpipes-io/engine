@@ -17,7 +17,8 @@ import { encodeCaller, CALLER_HEADER, type Caller } from "../src/admin/identity.
 import { FLEET_DRILL_ACTIVE_KEY, FLEET_DRILL_LAST_KEY, FLEET_DRILL_INFLIGHT_TIMEOUT_MS, FLEET_DRILL_FAILED_SAMPLE } from "../src/sched/scheduler-do-limits.ts";
 import { DESTINATIONS_KEY, ORG_POLICY_KEY } from "../src/sched/scheduler-do-records.ts";
 import { EXPIRY_PREFIX } from "../src/admin/expiry.ts";
-import { POSTURE_ACCEPT_PREFIX, POSTURE_SNAPSHOT_KEY, type PostureReport, type PostureCheck, type RiskAccept } from "../src/admin/posture.ts";
+import { POSTURE_ACCEPT_PREFIX, POSTURE_SNAPSHOT_KEY, type PostureReport, type PostureCheck, type RiskAccept, type PostureInput } from "../src/admin/posture.ts";
+import { buildRedundantCopies } from "../src/admin/posture-checks.ts";
 import { verdictReached } from "./lib/verdict-guard.ts";
 
 // fleetDrillProgress + persistOrFinishFleetDrill are real methods the ObservabilityMixin adds to the
@@ -511,11 +512,197 @@ async function main(): Promise<void> {
     const a = gathered.downpipes.find((d) => d.id === "A")!;
     const b = gathered.downpipes.find((d) => d.id === "B")!;
     ok("gatherPostureState: a fully-tested downpipe projects cadence + recency + a verified seal verdict", a.restoreTestCadenceSeconds === 604800 && a.lastRestoreTestAt === AT && a.lastRestoreTestOk === true && a.lastSealVerifyOk === true && a.destinationCount === 2);
+    // A has never completed a run (no hist:A row), so even with two pinned destinations there is no
+    // successful run yet for a second copy to be proven against: provenCopies 0, not left to read
+    // as "redundant" off destinationCount alone.
+    ok("gatherPostureState: a fan-out downpipe with no completed run yet reports zero proven copies", a.provenCopies === 0);
     ok("gatherPostureState: an untested downpipe omits the recency fields and reports a non-verified seal verdict", b.restoreTestCadenceSeconds === undefined && b.lastRestoreTestAt === undefined && b.lastRestoreTestOk === undefined && b.lastSealVerifyOk === false && b.destinationCount === 0);
+    // B is pinned to no destination at all, so there is nothing to prove; provenCopies is left absent
+    // rather than a fabricated zero (buildRedundantCopies reads an absent count the same as zero).
+    ok("gatherPostureState: a destination-less downpipe omits provenCopies rather than reporting zero", b.provenCopies === undefined);
     const e1 = gathered.expiry.find((e) => e.label === "Spent attach token")!;
     const e2 = gathered.expiry.find((e) => e.label === "Functional key")!;
     ok("gatherPostureState: an ephemeral expiry item carries its lifecycleClass + cleanupState", e1.lifecycleClass === "ephemeral" && e1.cleanupState === "pending");
     ok("gatherPostureState: a bare expiry item omits lifecycleClass + cleanupState", e2.lifecycleClass === undefined && e2.cleanupState === undefined);
+  }
+
+  // ========================================================================================
+  // gatherPostureState / provenCopies: the proven-replica half of redundant-copies, read from the
+  // SAME replication state (hist:/repl:) reconcileReplicationAlerts reads, over a fan-out downpipe whose
+  // latest successful run is index 5 sealed to its primary (dC1/dD1/dE1 below).
+  // ========================================================================================
+  {
+    const { storage, dobj } = makeScheduler();
+    const latestOkRun = (destinationId: string) => [{ runId: "r5", index: 5, startedAt: "2026-01-01T00:00:00.000Z", status: "ok", destinationId }];
+
+    // dC: the second destination has NEVER reported (no repl:C row at all) -- a destination added
+    // recently and still catching up. Only the origin is proven: provenCopies 1.
+    await storage.put("dp:C", dpState("C", {}, { destinationIds: ["dC1", "dC2"] }));
+    await storage.put("hist:C", latestOkRun("dC1"));
+
+    // dD: the second destination HOLDS A RUN, but an OLDER one (index 3 < the latest's 5) -- a sustained
+    // replica failure, not a catch-up. Still only the origin is proven: provenCopies 1.
+    await storage.put("dp:D", dpState("D", {}, { destinationIds: ["dD1", "dD2"] }));
+    await storage.put("hist:D", latestOkRun("dD1"));
+    await storage.put("repl:D", { dD2: { holdsRunId: "r3", holdsIndex: 3, lastOk: true, lastAttemptAt: AT } });
+
+    // dE: the second destination has CAUGHT UP to the latest run (holdsIndex 5): both destinations are
+    // proven, provenCopies 2.
+    await storage.put("dp:E", dpState("E", {}, { destinationIds: ["dE1", "dE2"] }));
+    await storage.put("hist:E", latestOkRun("dE1"));
+    await storage.put("repl:E", { dE2: { holdsRunId: "r5", holdsIndex: 5, lastOk: true, lastAttemptAt: AT } });
+
+    // dF: the NEWEST run failed (index 6, no destinationId -- a failed run seals nowhere), but the
+    // PREVIOUS run (index 5) succeeded and both destinations are proven to hold it. A recent failure must
+    // not erase the two proven copies of the last successful run: provenCopies 2, measured against the
+    // newest OK run, not the newest resolved one.
+    await storage.put("dp:F", dpState("F", {}, { destinationIds: ["dF1", "dF2"] }));
+    await storage.put("hist:F", [
+      { runId: "r5", index: 5, startedAt: "2026-01-01T00:00:00.000Z", status: "ok", destinationId: "dF1" },
+      { runId: "r6", index: 6, startedAt: "2026-01-02T00:00:00.000Z", status: "failed" },
+    ]);
+    await storage.put("repl:F", { dF2: { holdsRunId: "r5", holdsIndex: 5, lastOk: true, lastAttemptAt: AT } });
+
+    const gathered = await dobj.gatherPostureState(Date.now());
+    const c = gathered.downpipes.find((d) => d.id === "C")!;
+    const d = gathered.downpipes.find((d) => d.id === "D")!;
+    const e = gathered.downpipes.find((d) => d.id === "E")!;
+    const f = gathered.downpipes.find((d) => d.id === "F")!;
+    ok("gatherPostureState: a second destination that has never reported proves only the origin (catch-up)", c.provenCopies === 1);
+    ok("gatherPostureState: a second destination stuck on an older run proves only the origin (sustained failure)", d.provenCopies === 1);
+    ok("gatherPostureState: a second destination caught up to the latest run is a proven second copy", e.provenCopies === 2);
+    ok("gatherPostureState: a failed newest run does not erase two proven copies of the last successful run", f.provenCopies === 2);
+  }
+
+  // ========================================================================================
+  // gatherPostureState / provenCopies: the VISIT-TIMING rule. A destination still proven on an OLDER run
+  // does not fail just because a FRESH run has not been visited yet (replication is cron-paced and often
+  // deferred for budget), and the same destination fails once the pass has genuinely visited it since the
+  // fresh run and still lacks it. A destination visited more than 6 hours ago, with no visit since, is
+  // graded on the newest run regardless (a real gap, not a deferral).
+  // ========================================================================================
+  {
+    const { storage, dobj } = makeScheduler();
+    const now = Date.now();
+    const iso = (msAgo: number) => new Date(now - msAgo).toISOString();
+    const HOUR = 60 * 60 * 1000;
+    // Every downpipe here: an OLDER run (index 5, finished 3h ago) both destinations proved current on,
+    // then a FRESH run (index 6, finished 1 minute ago) sealed to the primary only.
+    const runs = (origin: string) => [
+      { runId: "r5", index: 5, startedAt: iso(3 * HOUR), durationMs: 0, status: "ok", destinationId: origin },
+      { runId: "r6", index: 6, startedAt: iso(60_000), durationMs: 0, status: "ok", destinationId: origin },
+    ];
+
+    // dG (case a): the second destination was last visited 2h ago -- AFTER run 5 finished (3h ago) but
+    // BEFORE run 6 finished (1 minute ago). It is graded on run 5, which it holds: no flap to fail the
+    // instant the fresh run lands and the pass has not reached it yet.
+    await storage.put("dp:G", dpState("G", {}, { destinationIds: ["dG1", "dG2"] }));
+    await storage.put("hist:G", runs("dG1"));
+    await storage.put("repl:G", { dG2: { holdsRunId: "r5", holdsIndex: 5, lastOk: true, lastAttemptAt: now - 2 * HOUR } });
+
+    // dH (case b, still deferred): identical shape to dG -- a budget deferral that has not reached the
+    // second destination since the fresh run landed reads exactly the same as dG: PASS.
+    await storage.put("dp:H", dpState("H", {}, { destinationIds: ["dH1", "dH2"] }));
+    await storage.put("hist:H", runs("dH1"));
+    await storage.put("repl:H", { dH2: { holdsRunId: "r5", holdsIndex: 5, lastOk: true, lastAttemptAt: now - 2 * HOUR } });
+
+    // dH2 (case b, pass has now visited): the SAME destination, but the pass has visited it 30 SECONDS ago
+    // -- AFTER the fresh run finished -- and it still only holds run 5. Graded on run 6 now: FAIL, truthfully.
+    await storage.put("dp:I", dpState("I", {}, { destinationIds: ["dI1", "dI2"] }));
+    await storage.put("hist:I", runs("dI1"));
+    await storage.put("repl:I", { dI2: { holdsRunId: "r5", holdsIndex: 5, lastOk: false, lastAttemptAt: now - 30_000 } });
+
+    // dJ (case c, 6h fallback): the newest (and only) run finished 7 hours ago; the second destination has
+    // NEVER been visited (no repl:J row at all). No run is ever "visited since", so gradedRunFor falls back
+    // to the newest run once it is older than the 6h bound: a real gap, graded FAIL.
+    await storage.put("dp:J", dpState("J", {}, { destinationIds: ["dJ1", "dJ2"] }));
+    await storage.put("hist:J", [{ runId: "r9", index: 9, startedAt: iso(7 * HOUR), durationMs: 0, status: "ok", destinationId: "dJ1" }]);
+
+    const gathered = await dobj.gatherPostureState(now);
+    const g = gathered.downpipes.find((d) => d.id === "G")!;
+    const h = gathered.downpipes.find((d) => d.id === "H")!;
+    const i = gathered.downpipes.find((d) => d.id === "I")!;
+    const j = gathered.downpipes.find((d) => d.id === "J")!;
+    ok("gatherPostureState: a fresh run not yet visited keeps the destination graded on the older proven run (no flap)", g.provenCopies === 2);
+    ok("gatherPostureState: a budget-deferred destination (not visited since the fresh run) still passes", h.provenCopies === 2);
+    ok("gatherPostureState: once the pass visits the destination after the fresh run and it still lacks it, it fails", i.provenCopies === 1);
+    ok("gatherPostureState: the gap names the destination and that it is failing (lastOk false)", i.redundancyGaps?.[0]?.destinationId === "dI2" && i.redundancyGaps?.[0]?.lastOk === false);
+    ok("gatherPostureState: a destination never visited, with the newest run over 6h old, fails on the fallback bound", j.provenCopies === 1);
+  }
+
+  // ========================================================================================
+  // redundant-copies: the check can never pass VACUOUSLY. Two scenarios that look superficially alike --
+  // a second destination with no visit evidence at all, inside the fallback bound -- must NOT read as a
+  // proven second copy, and must say why; the population-control assertions prove the fixtures really
+  // hold the population each case claims, so a fixture that silently lost its runs or destinations would
+  // fail loudly here instead of passing the case above for the wrong reason.
+  // ========================================================================================
+  {
+    const { storage, dobj } = makeScheduler();
+    const now = Date.now();
+    const HOUR = 60 * 60 * 1000;
+    const iso = (msAgo: number) => new Date(now - msAgo).toISOString();
+
+    // Case 1: ALL UN-VISITED, NO PRIOR PROOF. dM2 has no repl row at all (never attempted); dN2 has a repl
+    // row, but its one recorded attempt was BEFORE the downpipe's only run finished (stale, not a visit
+    // since). Both are well inside the 6h fallback bound (runs finished 20 and 60 minutes ago).
+    const dMRun = { runId: "rM", index: 10, startedAt: iso(20 * 60_000), durationMs: 0, status: "ok", destinationId: "dM1" };
+    await storage.put("dp:M", dpState("M", { lastRunId: "rM" }, { name: "Catalogue", destinationIds: ["dM1", "dM2"] }));
+    await storage.put("hist:M", [dMRun]);
+    // No repl:M row at all -- dM2 has never been attempted.
+
+    const dNRunFinish = now - HOUR;
+    const dNRun = { runId: "rN", index: 10, startedAt: new Date(dNRunFinish).toISOString(), durationMs: 0, status: "ok", destinationId: "dN1" };
+    const dNLastAttemptAt = dNRunFinish - 5 * 60_000; // 5 minutes BEFORE the run finished: stale, not a visit since
+    await storage.put("dp:N", dpState("N", { lastRunId: "rN" }, { name: "Ledger", destinationIds: ["dN1", "dN2"] }));
+    await storage.put("hist:N", [dNRun]);
+    await storage.put("repl:N", { dN2: { holdsRunId: null, holdsIndex: -1, lastOk: true, lastAttemptAt: dNLastAttemptAt } });
+
+    // Case 2: PRIOR PROOF HOLDS. Same shape, except the second destination (dO2) WAS visited after an
+    // OLDER run finished and holds it, and has not been visited again since the newest run.
+    const dOOlderFinish = now - 3 * HOUR;
+    const dONewestFinish = now - 10 * 60_000;
+    const dOOlderRun = { runId: "rO-old", index: 5, startedAt: new Date(dOOlderFinish).toISOString(), durationMs: 0, status: "ok", destinationId: "dO1" };
+    const dONewestRun = { runId: "rO-new", index: 6, startedAt: new Date(dONewestFinish).toISOString(), durationMs: 0, status: "ok", destinationId: "dO1" };
+    const dOLastAttemptAt = dOOlderFinish + HOUR; // after the older run finished, before the newest finished
+    await storage.put("dp:O", dpState("O", { lastRunId: "rO-new" }, { name: "Mirror", destinationIds: ["dO1", "dO2"] }));
+    await storage.put("hist:O", [dOOlderRun, dONewestRun]);
+    await storage.put("repl:O", { dO2: { holdsRunId: "rO-old", holdsIndex: 5, lastOk: true, lastAttemptAt: dOLastAttemptAt } });
+
+    const gathered = await dobj.gatherPostureState(now);
+    const m = gathered.downpipes.find((d) => d.id === "M")!;
+    const n = gathered.downpipes.find((d) => d.id === "N")!;
+    const o = gathered.downpipes.find((d) => d.id === "O")!;
+
+    // ---- Case 3: POPULATION CONTROL -- the fixtures really hold the population each case claims. ----
+    ok("population: M is configured for two destinations", m.destinationCount === 2);
+    ok("population: N is configured for two destinations", n.destinationCount === 2);
+    ok("population: O is configured for two destinations", o.destinationCount === 2);
+    ok("population: M has at least one successful run", typeof m.lastRunId === "string" && m.lastRunId.length > 0);
+    ok("population: N has at least one successful run", typeof n.lastRunId === "string" && n.lastRunId.length > 0);
+    ok("population: O has at least one successful run", typeof o.lastRunId === "string" && o.lastRunId.length > 0);
+    ok("population: N's repl row was actually written (not silently dropped)", (await storage.get("repl:N")) !== undefined);
+    ok("population: dN2's recorded attempt really is BEFORE its downpipe's newest (only) run finished", dNLastAttemptAt < dNRunFinish);
+    ok("population: dO2's recorded attempt really is AFTER the older run and BEFORE the newest run", dOLastAttemptAt > dOOlderFinish && dOLastAttemptAt < dONewestFinish);
+    ok("population: dO2 really holds the OLDER run's index, not the newest", 5 === dOOlderRun.index && 5 < dONewestRun.index);
+
+    // ---- Case 1 assertions: never pass, never claim a proven second copy, always say why. ----
+    ok("case 1: M is not proven redundant (origin only)", m.provenCopies === 1);
+    ok("case 1: N is not proven redundant (origin only)", n.provenCopies === 1);
+    const case1Input = { downpipes: [m, n] } as unknown as PostureInput;
+    const case1Check = buildRedundantCopies(case1Input);
+    ok("case 1: the check's auto status is not pass", case1Check.auto !== "pass");
+    const provenClaim = /^(\d+) of \d+ downpipe\(s\) have a proven second copy/.exec(case1Check.detail);
+    ok("case 1: the detail's proven-second-copy count is a real number", provenClaim !== null);
+    ok("case 1: the detail does not claim ANY downpipe has a proven second copy", provenClaim !== null && provenClaim[1] === "0");
+    ok("case 1: the detail names M's second destination as catching up (it has a run; nothing is pending)", /Catalogue: replication is catching up: dM2 holds \d+ of \d+ runs/.test(case1Check.detail));
+    ok("case 1: the detail names N's second destination as catching up (it has a run; nothing is pending)", /Ledger: replication is catching up: dN2 holds \d+ of \d+ runs/.test(case1Check.detail));
+
+    // ---- Case 2 assertions: prior proof on an older run is a genuine pass. ----
+    ok("case 2: O is proven redundant, graded on the older run it was actually visited for", o.provenCopies === 2);
+    const case2Input = { downpipes: [o] } as unknown as PostureInput;
+    const case2Check = buildRedundantCopies(case2Input);
+    ok("case 2: the check's auto status is pass", case2Check.auto === "pass");
   }
 
   // ========================================================================================

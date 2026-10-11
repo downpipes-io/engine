@@ -42,7 +42,9 @@ console.log("AUTH RACE 2: the MAKER races a distinct checker to approve the make
   // RACE 1 names a 5xx as "the real bug" and checks for it; this race never read either status code, so a
   // crash on the maker's self-approve satisfied ">= 400" and banked as a policy refusal. Both codes are read.
   ok(`no 5xx under the maker/checker race (codes ${maker.status},${checker.status})`, maker.status < 500 && checker.status < 500);
-  ok("the maker's self-approve is REFUSED even under the race (maker != checker holds)", maker.status >= 400 && maker.status < 500);
+  // The maker is refused by the maker != checker rule itself. A refusal for another reason (the checker won the
+  // race and the change is already applied, a dwell refusal) would also be a 4xx and would prove nothing here.
+  ok("the maker's self-approve is REFUSED even under the race (maker != checker holds)", maker.status === 400 && /cannot approve your own change/.test(await maker.text()));
   ok("the distinct checker applied it exactly once", (await listDownpipes()).filter((d) => d.config.id === "dp_race2").length === 1);
 }
 

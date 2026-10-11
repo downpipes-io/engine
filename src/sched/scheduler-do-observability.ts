@@ -22,9 +22,9 @@ import { ruleSelects } from "../notify.ts";
 import { type ReconcileSignal, sanitiseReconcileSignal } from "../seal/reconcile.ts";
 import { type SealFault, sanitiseSealFault } from "../seal/seal-faults.ts";
 import { foldSealFaultSpan, SEAL_FAULT_SPANS_KEY, type SealFaultSpans } from "../seal/seal-fault-spans.ts";
-import { allDestinationIds } from "./destinations.ts";
+import { allDestinationIds, assessRedundancy, type DestinationRedundancyGap, latestSuccessfulRun, primaryDestinationId } from "./destinations.ts";
 import { recordCapTruncation, recordDrillDrop, recordPostureInputFault, recordStorageAnomaly, recordVocabDrop } from "./sched-fault-ledger.ts";
-import { AuthError, BEACON_ATTEMPT_RING_CAP, BEACON_STATE_KEY, type BeaconAttempt, type BeaconAttemptState, type DownpipeState, DRIVE_BUDGET_YIELD_KEY, type DriveBudgetYieldState, FLEET_DRILL_ACTIVE_KEY, FLEET_DRILL_FAILED_SAMPLE, FLEET_DRILL_INFLIGHT_TIMEOUT_MS, FLEET_DRILL_LAST_KEY, FLEET_DRILL_MAX, type FleetDrillCampaign, type FleetDrillProgress, PASSKEY_USER_PREFIX, REASON_MAX_LEN, type RestoreProvenMethod, type SchedulerDOCtor } from "./scheduler-do-base.ts";
+import { AuthError, BEACON_ATTEMPT_RING_CAP, BEACON_STATE_KEY, type BeaconAttempt, type BeaconAttemptState, type DestReplState, type DownpipeState, DRIVE_BUDGET_YIELD_KEY, type DriveBudgetYieldState, FLEET_DRILL_ACTIVE_KEY, FLEET_DRILL_FAILED_SAMPLE, FLEET_DRILL_INFLIGHT_TIMEOUT_MS, FLEET_DRILL_LAST_KEY, FLEET_DRILL_MAX, type FleetDrillCampaign, type FleetDrillProgress, PASSKEY_USER_PREFIX, REASON_MAX_LEN, type RestoreProvenMethod, type SchedulerDOCtor } from "./scheduler-do-base.ts";
 import { INFLIGHT_LEASE_MS } from "./scheduler-do-records.ts";
 import { newULID, nowMillisISO, validateFreeText } from "./scheduler-helpers.ts";
 import type { RunHistoryEntry } from "./types.ts";
@@ -787,32 +787,75 @@ export function ObservabilityMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
       identity?: PostureIdentityInput;
     }> {
       const states = await this.listDownpipes();
-      const downpipes: PostureDownpipeInput[] = states.map((d) => ({
-        id: d.config.id,
-        name: d.config.name,
-        // How many DISTINCT destinations this downpipe is pinned to (3-2-1 redundancy). 0 = it follows
-        // the default = one effective copy (not redundant); >=2 = a source written to two places.
-        destinationCount: allDestinationIds(d.config).length,
-        ...(d.config.restoreTestCadenceSeconds !== undefined ? { restoreTestCadenceSeconds: d.config.restoreTestCadenceSeconds } : {}),
-        // lastRunId (the last SUCCESSFUL run's id; null = never completed a run) -> the
-        // restore-test-recency check's has-a-run GATE. Only a downpipe with a sealed archive is graded
-        // for restore-test staleness; a never-run downpipe is named, not failed. Carried only when set
-        // (absent = never run), so the gate reads "has completed a run" exactly. Projecting it is what
-        // makes the critical check actually evaluate: gating on a `lastRunAt` epoch the DownpipeState never
-        // holds would leave the check always passing.
-        ...(typeof d.lastRunId === "string" && d.lastRunId !== "" ? { lastRunId: d.lastRunId } : {}),
-        ...(d.lastRestoreTestAt !== undefined ? { lastRestoreTestAt: d.lastRestoreTestAt } : {}),
-        ...(d.lastRestoreTestOk !== undefined ? { lastRestoreTestOk: d.lastRestoreTestOk } : {}),
-        // The durable keyed attested-verification stamp (restoreProven) + the deferral discriminator
-        // (lastRestoreTestDeferred), so buildRestoreTestRecency can credit a full attended proof across a
-        // scheduled-test DEFERRAL (break-glass-only posture) without ever masking a genuine fresh
-        // restore-test failure. See posture-checks.ts buildRestoreTestRecency for the full predicate.
-        ...(d.restoreProven !== undefined ? { restoreProvenAt: d.restoreProven.at, restoreProvenMethod: d.restoreProven.method } : {}),
-        ...(d.lastRestoreTestDeferred !== undefined ? { lastRestoreTestDeferred: d.lastRestoreTestDeferred } : {}),
-        // Verify-at-seal verdict -> the seal-verification check: a SUSPECT last verdict
-        // (status !== "verified") fails it. Absent when the downpipe has never run with the feature on.
-        ...(d.lastSealVerify !== undefined ? { lastSealVerifyOk: d.lastSealVerify.status === "verified", lastSealVerifyAt: d.lastSealVerify.at } : {}),
-      }));
+      // The redundant-copies check needs PROVEN copies, not just pinned ones, so gather the two
+      // per-downpipe storage prefixes the proof needs (run history for the latest successful run, repl
+      // state for which destinations have caught up to it) once, the same bulk-read shape
+      // reconcileReplicationAlerts uses, rather than a round trip per downpipe.
+      const histMap = await this.listAllByPrefix<RunHistoryEntry[]>("hist:");
+      const replMap = await this.listAllByPrefix<Record<string, DestReplState>>("repl:");
+      const downpipes: PostureDownpipeInput[] = states.map((d) => {
+        const allDests = allDestinationIds(d.config);
+        // provenCopies is left absent for a single-destination (or destination-less) downpipe: there is
+        // nothing to prove, and buildRedundantCopies already treats an absent count as failing, exactly
+        // as it did when it read destinationCount alone. For a fan-out downpipe it is measured against
+        // the newest SUCCESSFUL run, not merely the newest resolved one: a downpipe whose latest run
+        // failed, while its last good backup is still held on two destinations, has not lost its proven
+        // copies, so a recent failure must not read as zero here (that failure is reported by the
+        // separate backup-failure/backup-stale checks). Each NON-origin destination is then graded on
+        // the run gradedRunFor actually finds it visited since (destinations.ts): a fresh run the
+        // replication pass has not reached yet, or a whole downpipe the pass deferred for budget, credits
+        // the destination on the older run it IS proven current on instead of flapping the check to fail
+        // the instant a new run seals, with a 6-hour fallback once a destination goes that long without a
+        // visit at all. It is 0 only when no run has ever succeeded (never-run reads the same as
+        // never-replicated), else the proven set size that rule finds. redundancyGaps carries the
+        // destinations assessRedundancy found genuinely short, for the check's detail text.
+        let provenCopies: number | undefined;
+        let redundancyGaps: DestinationRedundancyGap[] | undefined;
+        if (allDests.length >= 2) {
+          const ring = histMap.get(`hist:${d.config.id}`) ?? [];
+          const latest = latestSuccessfulRun(ring);
+          if (latest !== undefined) {
+            const runs = ring.filter((e) => e.status === "ok");
+            const origin = latest.destinationId ?? primaryDestinationId(d.config);
+            const repl = replMap.get(`repl:${d.config.id}`) ?? {};
+            const assessment = assessRedundancy(allDests, origin, runs, repl, now);
+            provenCopies = assessment.provenCopies;
+            if (assessment.gaps.length > 0) redundancyGaps = assessment.gaps;
+          } else {
+            provenCopies = 0;
+          }
+        }
+        return {
+          id: d.config.id,
+          name: d.config.name,
+          // How many DISTINCT destinations this downpipe is pinned to (3-2-1 redundancy). 0 = it follows
+          // the default = one effective copy (not redundant); >=2 = a source written to two places. Still
+          // carried for the media-diversity check, which asks only whether a fan-out exists, not whether
+          // it is proven yet.
+          destinationCount: allDests.length,
+          ...(provenCopies !== undefined ? { provenCopies } : {}),
+          ...(redundancyGaps !== undefined ? { redundancyGaps } : {}),
+          ...(d.config.restoreTestCadenceSeconds !== undefined ? { restoreTestCadenceSeconds: d.config.restoreTestCadenceSeconds } : {}),
+          // lastRunId (the last SUCCESSFUL run's id; null = never completed a run) -> the
+          // restore-test-recency check's has-a-run GATE. Only a downpipe with a sealed archive is graded
+          // for restore-test staleness; a never-run downpipe is named, not failed. Carried only when set
+          // (absent = never run), so the gate reads "has completed a run" exactly. Projecting it is what
+          // makes the critical check actually evaluate: gating on a `lastRunAt` epoch the DownpipeState never
+          // holds would leave the check always passing.
+          ...(typeof d.lastRunId === "string" && d.lastRunId !== "" ? { lastRunId: d.lastRunId } : {}),
+          ...(d.lastRestoreTestAt !== undefined ? { lastRestoreTestAt: d.lastRestoreTestAt } : {}),
+          ...(d.lastRestoreTestOk !== undefined ? { lastRestoreTestOk: d.lastRestoreTestOk } : {}),
+          // The durable keyed attested-verification stamp (restoreProven) + the deferral discriminator
+          // (lastRestoreTestDeferred), so buildRestoreTestRecency can credit a full attended proof across a
+          // scheduled-test DEFERRAL (break-glass-only posture) without ever masking a genuine fresh
+          // restore-test failure. See posture-checks.ts buildRestoreTestRecency for the full predicate.
+          ...(d.restoreProven !== undefined ? { restoreProvenAt: d.restoreProven.at, restoreProvenMethod: d.restoreProven.method } : {}),
+          ...(d.lastRestoreTestDeferred !== undefined ? { lastRestoreTestDeferred: d.lastRestoreTestDeferred } : {}),
+          // Verify-at-seal verdict -> the seal-verification check: a SUSPECT last verdict
+          // (status !== "verified") fails it. Absent when the downpipe has never run with the feature on.
+          ...(d.lastSealVerify !== undefined ? { lastSealVerifyOk: d.lastSealVerify.status === "verified", lastSealVerifyAt: d.lastSealVerify.at } : {}),
+        };
+      });
       const expiryItems = await this.listExpiryItemsRaw();
       const expiry: PostureExpiryInput[] = expiryStatuses(expiryItems, now).map((s) => ({ label: s.label, state: s.state, ...(s.lifecycleClass !== undefined ? { lifecycleClass: s.lifecycleClass } : {}), ...(s.cleanupState !== undefined ? { cleanupState: s.cleanupState } : {}) }));
       const notifyFailureRuleSet = await this.notifyHasFailureRule();
@@ -1107,10 +1150,10 @@ export function ObservabilityMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
         adminTokenPresent: s.adminTokenPresent !== false,
         bootstrapConsumed: false,
         breakGlassTokenRetired: false,
-        // recoveryBreakGlassReady is DO-OWNED too: seeded false here and OVERRIDDEN in computePostureReport from
-        // this DO's own recovery-ack latch + owner count, so the router cannot move the dispose finding by what
-        // it claims for this fact.
-        recoveryBreakGlassReady: false,
+        // recoveryBreakGlassReady is DO-OWNED too: seeded false and OVERRIDDEN in computePostureReport from this
+        // DO's own recovery-ack latch + owner count, so the router cannot move the dispose finding.
+        recoveryBreakGlassReady: false, // consoleOnWorkersDev is the router's CONSOLE_ORIGIN reading; a non-boolean leaves the check out.
+        ...(typeof s.consoleOnWorkersDev === "boolean" ? { consoleOnWorkersDev: s.consoleOnWorkersDev } : {}),
       };
     }
 

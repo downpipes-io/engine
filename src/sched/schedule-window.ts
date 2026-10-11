@@ -112,7 +112,7 @@ function blackoutEndEpoch(epochMs: number, w: BlackoutWindow, schedule: Downpipe
 
 // deferPastBlackouts pushes a computed fire time OUT of any active maintenance window: if the fire
 // lands inside a window it is moved to the first instant after that window, repeated in case the
-// next window butts up against the previous one (back-to-back windows). It only ever moves a fire
+// next window follows directly after the previous one (back-to-back windows). It only ever moves a fire
 // LATER, never earlier, and never cancels it. With no windows (the common case) it returns the input
 // unchanged, so the cadence/cron path is untouched for every schedule-less or window-less config.
 export function deferPastBlackouts(epochMs: number, schedule: DownpipeSchedule | undefined): number {

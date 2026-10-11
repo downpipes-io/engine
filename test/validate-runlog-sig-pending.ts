@@ -224,6 +224,35 @@ async function main(): Promise<void> {
     ok("a deleted .sig with no usable pending reads sig-absent", (await resolveRunlogSignature(dest, (await dest.get(RUNLOG))!.body, v)) === "sig-absent" && (await dest.get(RUNLOG_SIG)) === null);
   }
   {
+    // A .sig deleted after a completed write: the pending signature still verifies the body, so the resolver
+    // publishes it again. That restore is recorded as a sig-restored anomaly row, so the pack names it.
+    const dest = new MemoryDestination();
+    await appendRunlog(dest, signer, entry(R1, 1, null));
+    await dest.delete(RUNLOG_SIG);
+    drainIntegrityFaultLedger();
+    const state = await resolveRunlogSignature(dest, (await dest.get(RUNLOG))!.body, v);
+    const rows = drainIntegrityFaultLedger().runlogAnomalies.filter((a) => a.kind === "sig-restored");
+    ok(`a deleted .sig with a verifying pending is published again (${state})`, state === "promoted" && (await sigOver(dest, RUNLOG_SIG, v)));
+    ok("the restore over an absent .sig records one sig-restored anomaly row", rows.length === 1);
+    ok("the sig-restored row carries the 12-hex digest of the RUNLOG bytes", rows.length === 1 && typeof rows[0]?.digest === "string" && /^[0-9a-f]{12}$/.test(rows[0].digest));
+  }
+  {
+    // CONTROL: the crash window (a stale .sig is present) resumes with no sig-restored row. That is an
+    // interrupted write, and the .sig was never absent.
+    const dest = new CrashingDestination();
+    await appendRunlog(dest, signer, entry(R1, 1, null));
+    dest.failNextPutOf = RUNLOG_SIG;
+    try {
+      await appendRunlog(dest, signer, entry(R2, 2, R1));
+    } catch {
+      // the simulated crash
+    }
+    drainIntegrityFaultLedger();
+    const state = await resolveRunlogSignature(dest, (await dest.get(RUNLOG))!.body, v);
+    const rows = drainIntegrityFaultLedger().runlogAnomalies.filter((a) => a.kind === "sig-restored");
+    ok(`control: the crash-window resume promotes (${state}) and records no sig-restored row`, state === "promoted" && rows.length === 0);
+  }
+  {
     const other = await makeSigner();
     const dest = new MemoryDestination();
     await appendRunlog(dest, other, entry(R1, 1, null));

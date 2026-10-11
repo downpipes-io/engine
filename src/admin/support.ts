@@ -189,7 +189,7 @@ export async function buildSupportBundle(env: Env, scheduler: DurableObjectStub,
   // verdict, the SIEM pull-credential recency, and the CONFIG_WRAP_KEY decrypt health, each guarded through
   // section() like every other DO-backed fetch so a blip degrades to honest absence.
   const notifyHealth = await section<Record<string, unknown>>("notifyHealth", () => fetchNotifyHealth(scheduler), {}, (v) => Object.keys(v).length === 0);
-  const recovery = await section<Record<string, unknown>>("recovery", () => fetchRecoveryStatus(scheduler), {}, (v) => Object.keys(v).length === 0);
+  const recovery = await section<Record<string, unknown>>("recovery", () => fetchRecoveryStatus(scheduler, env), {}, (v) => Object.keys(v).length === 0);
   const audit = await section<Record<string, unknown>>("audit", () => fetchAuditStatus(scheduler), {}, (v) => Object.keys(v).length === 0);
   const auditFeed = await section<Record<string, unknown>>("auditFeed", () => fetchAuditFeedState(scheduler), {}, (v) => Object.keys(v).length === 0);
   // metricsFeed: the metrics-scope ingest-credential grant state (mirror of auditFeed), so a

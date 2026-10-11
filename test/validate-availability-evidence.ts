@@ -899,7 +899,7 @@ async function g202g218(): Promise<void> {
   ok("DISCRIMINATOR: the sub-cause splits a MIXED signer rotation from a tamper and from a truncated .sig", status.refusedSubCause === "mldsa-mismatch");
   ok("the candidate scan rides with the refusal", (status.refusedScan as Record<string, number>)?.conflictingAtLatestGen === 2);
 
-  const projected = await fetchRecoveryStatus(sched.stub);
+  const projected = await fetchRecoveryStatus(sched.stub, {});
   ok("the pack projector forwards the code", projected.refusedCode === "signature");
   ok("the pack projector forwards the SUB-CAUSE", projected.refusedSubCause === "mldsa-mismatch");
   ok("the pack projector forwards the scan", (projected.refusedScan as Record<string, number>)?.malformedNames === 1);

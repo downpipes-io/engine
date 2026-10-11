@@ -11,7 +11,6 @@
 // with the tampered entry (so it cannot silently rubber-stamp the product's hashing).
 //
 // The ONLY product symbol imported is the AuditEvent TYPE, which is erased at runtime and carries no logic.
-//
 
 import { createHash } from "node:crypto";
 import type { AuditEvent } from "../src/admin/audit.ts";

@@ -12,7 +12,6 @@
 //
 // Run: node test/validate-capability-gate-denied-logged.ts
 //
-//
 
 import { gate } from "../src/admin/router-core.ts";
 import type { Caller } from "../src/admin/identity.ts";

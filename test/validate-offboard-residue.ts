@@ -1,11 +1,9 @@
 // validate-offboard-residue: what a person still holds after they have been offboarded, enumerated from the
 // STORAGE layer outwards and driven against a real Durable Object through the production routes.
 //
-// WHY IT IS WRITTEN FROM THE STORAGE SIDE. The registration-invite bypass closed at 73df7292 was missed for
-// one generalisable reason: `passkeyInvite:` is keyed by the TOKEN, so the code that removes a PERSON could
-// not see it, and deleteRole's own comment claimed a guard that could not exist. Reading outwards from the
-// offboarding code is precisely the method that missed it, because that code can only show you the keys it
-// already knows the name of. So this file starts from the key namespaces the DO writes and asks of each one:
+// WHY IT IS WRITTEN FROM THE STORAGE SIDE. A registration invite is one example: `passkeyInvite:` is keyed
+// by the TOKEN, so the code that removes a PERSON cannot see it. Reading outwards from the offboarding code
+// misses such keys, because that code can only show the keys it already knows the name of. So this file starts from the key namespaces the DO writes and asks of each one:
 // what does holding it let somebody do, what is it keyed by, and does each offboarding route actually remove
 // it. The routes are NOT equivalent, and an artefact cleaned by one and not another is worse than one cleaned
 // by none, because the gap becomes intermittent.
@@ -120,8 +118,7 @@ async function main(): Promise<void> {
       // would look exactly like the revocation this file is about.
       store.rawPut(`${CONN_PREFIX}${CONN}`, { id: CONN, kind: "oidc", enabled: true });
       for (const [email, sub] of [[LEAVER, `oidc:${CONN}|iss|leaver`], [SCIM_LEAVER, `oidc:${CONN}|iss|scimleaver`]] as const) {
-        store.rawPut(`${OIDC_GROUPS_PREFIX}${sub}`, [GROUP]);
-        void email;
+        store.rawPut(`${OIDC_GROUPS_PREFIX}${sub}`, { email, groups: [GROUP], updatedAt: Date.now() });
       }
     }
 
@@ -204,9 +201,12 @@ async function main(): Promise<void> {
       // D-ii: and the fix ends SESSIONS, it does not remove AUTHORITY. A session minted after the bump
       // carries the current epoch and resolves the same role, so anybody still entitled simply signs in
       // again. This is the arm that would fail if the bump had been implemented as a deny-list.
+      // Signing in writes the snapshot again, as the real sign-in does, so the record is seeded before the session.
+      store.rawPut(`${OIDC_GROUPS_PREFIX}${subOf("leaver")}`, { email: LEAVER, groups: [GROUP], updatedAt: Date.now() });
       const fresh = await signSession(key, { method: "oidc", email: LEAVER, subject: subOf("leaver"), connId: CONN, epoch: 1 }, Date.now());
       const re = await whoami(fresh);
       ok("D2: a FRESH session for the same person still resolves operator, so nobody is locked out", re.status === 200 && re.role === "operator");
+      store.rawDelete(`${OIDC_GROUPS_PREFIX}${subOf("leaver")}`);
 
       // D-iii: the member the roster DOES carry is untouched by any of it.
       ok("D3: the staying member still holds their granted role", store.keysWithPrefix("role:").some((k) => k.includes(STAYER)));
@@ -261,35 +261,32 @@ async function main(): Promise<void> {
       // security; it is asserted here so that "it survives" stays a measured fact rather than an assumption,
       // and so a future reader who finds it does not have to re-derive whether it matters.
       ok("E13: RESIDUE, and deliberately not closed: the passkey USER record survives both routes, and grants nothing", store.keysWithPrefix(`${PASSKEY_USER_PREFIX}${EQUIPPED}`).length === 1);
-      // The group snapshot survives too, but the REASON THIS FILE GAVE FOR TOLERATING IT WAS WRONG, and it
-      // was already wrong when it was written. It read "once the sessions that could quote it are dead it
-      // confers nothing". d3099399 made that false in the same week: spendTimeGroupsFor reads
-      // `oidcgroups:<subject>` DIRECTLY when a stored governance record re-resolves its recorded principal's
-      // authority, with no session in hand and no session required. So the snapshot IS quoted after every
-      // session is dead, and it is the sole source of a group-conferred person's authority at spend time.
-      // That is the exact shape this repo keeps being bitten by: a comment asserting a closure, stopping the
-      // next reader looking. The residue is still tolerated, but for the reason that is actually true.
-      //
-      // WHY IT IS STILL TOLERATED. The snapshot confers authority only through the group->role MAPPING, and
-      // the estate can revoke it: delete the mapping and every holder of that group loses the role, at spend
-      // time as at request time. What it cannot do is revoke ONE person that way. The per-person answers are
-      // to reject the record, or -- since the replay now re-reads connection liveness -- to disable or delete
-      // the IdP connection they signed in through, which the spend refuses on exactly as a request does.
-      // Deleting the snapshot itself would be a THIRD revocation surface keyed on a subject no operator
-      // holding an address can name, which is why it is not the answer here.
-      ok("E14: RESIDUE, and deliberately not closed: the oidc group snapshot survives an offboard, keyed by a subject an offboard cannot name", store.keysWithPrefix(`${OIDC_GROUPS_PREFIX}${subOf("leaver")}`).length === 1);
-      // E15 is the assertion the old comment's premise would have failed. It states, as a measured fact
-      // rather than a claim, that the surviving snapshot is read by a path that presents NO session: a bare
-      // re-resolution of the recorded subject answers with the group's role. If a future change ever does
-      // sweep the snapshot on offboard, this goes red and says the tolerated residue stopped being tolerated,
-      // which is the direction a reader wants to be told about.
+      // The group snapshot names the address it was written for, so the offboard by address finds and deletes
+      // it. The group->role MAPPING is estate policy and stays (D1).
+      ok("E14: the oidc group snapshot is deleted by the offboard, found by the address it records", store.keysWithPrefix(`${OIDC_GROUPS_PREFIX}${subOf("leaver")}`).length === 0);
+      // E15 states, as a measured fact, that a bare re-resolution of the recorded subject, which presents no
+      // session, answers with no group once the offboard has deleted the snapshot.
       // Cast rather than widen SchedulerDOSurface. spendTimeGroupsFor is deliberately NOT on that interface
       // (it is called only from within the mixin that defines it, and the surface's own size exemption argues
       // in as many words for keeping such helpers off it), so a test that needs it reaches it here instead of
       // pushing a declaration onto the shared type for one assertion's sake.
       const spendTimeGroupsFor = (sched.dobj as unknown as { spendTimeGroupsFor(subject: string, recorded: readonly string[] | undefined): Promise<string[]> }).spendTimeGroupsFor.bind(sched.dobj);
       const spendGroups = await spendTimeGroupsFor(subOf("leaver"), []);
-      ok("E15: MEASURED, and the reason E14's old premise was false: the snapshot is quoted with NO session at all", spendGroups.includes(GROUP));
+      ok("E15: MEASURED: with no session at all, the offboarded person's spend-time groups are empty", spendGroups.length === 0);
+    }
+    // ===========================================================================================
+    // SECTION F: an ACTIVE person whose group record is a bare group list keeps their role, and
+    // their next authenticated request upgrades the record in place.
+    // ===========================================================================================
+    {
+      const ACTIVE = "activeold-ofr@acme.example";
+      const sub = `oidc:${CONN}|iss|activeold`;
+      store.rawPut(`${OIDC_GROUPS_PREFIX}${sub}`, [GROUP]);
+      const tok = await signSession(key, { method: "oidc", email: ACTIVE, subject: sub, connId: CONN, epoch: 0 }, Date.now());
+      const who = await whoami(tok);
+      ok("F1: an active person with a bare group list keeps their group role", who.status === 200 && who.role === "operator");
+      const rec = store.rawGet<{ email?: string; groups?: string[]; updatedAt?: number }>(`${OIDC_GROUPS_PREFIX}${sub}`);
+      ok("F2: and the request rewrites the record in place as a group record with email, groups and updatedAt", rec?.email === ACTIVE && rec.groups?.join() === GROUP && typeof rec.updatedAt === "number");
     }
   } finally {
     globalThis.fetch = ctx.realFetch;

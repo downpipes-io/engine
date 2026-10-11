@@ -258,7 +258,7 @@ async function caseNegativeControls({ makeEnv, bootstrap }: Harness): Promise<vo
     const { env, call } = makeEnv({ EMAIL: binding, INVITE_EMAIL_FROM: "invites@acme.example" });
     await bootstrap(env); // OWNER is now the sole Owner
     const r = await call(OWNER, "/admin/roles", { email: OWNER, role: "viewer" });
-    ok("negative: self-demotion of the only Owner is refused 400", r.status === 400);
+    ok("negative: self-demotion of the only Owner is refused 400 by the owner-floor guard", r.status === 400 && ((await r.json()) as { refusal?: string }).refusal === "owner-floor");
     ok("negative: a FAILED grant fires NO invite (send only on the DO 200 commit)", sent.length === 0);
   }
   // 5b) A grant to a NON-custom-domain recipient sends nothing (the recipient fails the address gate).

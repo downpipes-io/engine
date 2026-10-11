@@ -36,7 +36,7 @@ Declared in `downpipe/go.mod` and hash-pinned in `downpipe/go.sum`:
 | Module | Version | go.sum hash (h1:) | Role |
 |---|---|---|---|
 | `golang.org/x/crypto` | `v0.57.0` | `3ZVCjf8Ggz7zneR/EHRVx68Ctf+2pmIMP2UFhh9cC6M=` | HKDF (`golang.org/x/crypto/hkdf`) |
-| `filippo.io/mldsa` | `v0.0.0-20260215214346-43d0283efc3e` | `VsUbObBMxXlc23Eb9VeeJYE4jvTs87qa5RqSN2U5FJU=` | ML-DSA-87 signatures (post-quantum signing half) |
+| `filippo.io/mldsa` | `v1.0.0` | `DSyjDhIEKrGEO/RZfI60iuXI83Yzy8jDcbqMuPySK5U=` | ML-DSA-87 signatures (post-quantum signing half) |
 
 The Go standard library supplies the other primitives directly. `crypto/mlkem`, `crypto/ecdh` and `crypto/ed25519` supply ML-KEM-1024, X25519 and Ed25519. `crypto/aes`, `crypto/cipher`, `crypto/sha512` and `crypto/rand` supply AES-256-GCM, SHA-384 and secure random. The standard library carries no external version. The `go 1.26.0` directive (`go.mod:3`) sets the minimum Go version, and the `toolchain go1.26.6` line (`go.mod:14`) selects the build toolchain.
 
