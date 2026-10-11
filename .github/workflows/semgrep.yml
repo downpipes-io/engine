@@ -61,9 +61,10 @@ jobs:
       # captured `rc=$?` on the next line, which makes rc unconditionally 0 and the fatal branch below
       # dead code, so the fix would have read as though it worked while changing nothing. Check it for
       # yourself: `(exit 7) || true; echo $?` prints 0, `(exit 7); echo $?` prints 7.
+      - name: Install semgrep
+        run: pipx install semgrep==1.167.0
       - name: Semgrep scan (rules p/default + p/secrets), write SARIF
         run: |
-          pipx install semgrep==1.167.0
           set +e
           semgrep scan --config p/default --config p/secrets --metrics off --sarif --output semgrep.sarif
           rc=$?

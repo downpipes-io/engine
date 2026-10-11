@@ -6,7 +6,8 @@
 // becomes a precise thrown message. Run: node test/validate-cf-deploy.ts.
 
 import { makeCfDeployDriver } from "../src/admin/cf-deploy.ts";
-import { hexEncode } from "../src/crypto/bytes.ts";
+import { readBackUploaded } from "../src/admin/update-apply.ts";
+import { hexEncode, utf8 } from "../src/crypto/bytes.ts";
 import { sha384 } from "../src/crypto/primitives.ts";
 import { verdictReached } from "./lib/verdict-guard.ts";
 
@@ -399,6 +400,73 @@ console.log("-- rampVersion: a CF error becomes a cfErr message; the prior versi
   let threw = "";
   try { await makeCfDeployDriver({ token: TOKEN, accountId: ACCT, scriptName: SCRIPT, fetchImpl: stub }).rampVersion!("v-new", "v-old", 30); } catch (e) { threw = (e as Error).message; }
   ok("a ramp failure surfaces the reason and says the prior version is still serving 100%", /Authentication error/.test(threw) && /still serving 100%/.test(threw));
+}
+
+console.log("-- fetchVersionModule / readBackUploaded: the version-content endpoint, not the metadata one --");
+{
+  const goodBytes = utf8("downpipe-engine-bundle-content");
+  const goodHash = hexEncode(await sha384(goodBytes));
+  const readbackInput = (expectedSha384: string): Parameters<typeof readBackUploaded>[1] => ({
+    artefact: goodBytes,
+    expectedSha384,
+    meta: { version: "1.0.0", mainModule: "index.js" },
+    runningVersion: "0.9.0",
+    recommendedVersion: "1.0.0",
+    dryRun: false,
+  });
+
+  // (a) WRONG SHAPE: the metadata-endpoint response shape (fields kept, long strings as placeholders,
+  // the same structure Cloudflare's /workers/scripts/.../versions/{id} returns) carries no module bytes
+  // anywhere, so it must not parse as a module and must give the honest "unavailable" verdict.
+  const wrongShapeBody = {
+    success: true,
+    result: {
+      id: "version-id-placeholder",
+      number: 14,
+      metadata: { created_on: "2026-01-01T00:00:00Z", source: "api", author_id: "author-id-placeholder", author_email: "", has_preview: false },
+      annotations: { "workers/triggered_by": "version_upload" },
+      resources: {
+        script: { etag: "etag-placeholder", handlers: ["fetch", "scheduled"], named_handlers: [], last_deployed_from: "api" },
+        script_runtime: { migration_tag: "v3", compatibility_date: "2026-06-01", usage_model: "standard" },
+        bindings: [{ name: "WORKER_NAME", text: "engine-name-placeholder", type: "plain_text" }],
+      },
+    },
+    errors: [],
+    messages: [],
+  };
+  const wrongShapeStub = (async () => new Response(JSON.stringify(wrongShapeBody), { status: 200 })) as typeof fetch;
+  const wrongShapeDriver = makeCfDeployDriver({ token: TOKEN, accountId: ACCT, scriptName: SCRIPT, fetchImpl: wrongShapeStub });
+  const wrongShapeResult = await readBackUploaded(wrongShapeDriver, readbackInput(goodHash), "v-x", "enforce");
+  ok("(a) the metadata-shaped response does not parse as a module -> unavailable", wrongShapeResult.verdict === "unavailable");
+
+  // (b) RIGHT SHAPE: the content endpoint's modules[].content_base64 parses to exactly those bytes, and
+  // readBackUploaded returns verified when their sha384 equals expectedSha384. The stub only serves the
+  // module bytes at the CONTENT endpoint path, so a call to any other path (the metadata endpoint, say)
+  // gets a 404 instead of silently succeeding -- this is what makes (b), (c) and (d) prove the endpoint.
+  const contentUrl = `${CF}/accounts/${ACCT}/workers/workers/${SCRIPT}/versions/v-x?include=modules`;
+  let rightShapeUrl = "";
+  const rightShapeStub = (async (input: RequestInfo | URL) => {
+    rightShapeUrl = String(input);
+    if (String(input) !== contentUrl) return new Response(JSON.stringify({ success: false, errors: [{ code: 0, message: "not found at this path" }] }), { status: 404 });
+    return new Response(JSON.stringify({ success: true, result: { modules: [{ name: "index.js", content_base64: Buffer.from(goodBytes).toString("base64") }] } }), { status: 200 });
+  }) as typeof fetch;
+  const rightShapeDriver = makeCfDeployDriver({ token: TOKEN, accountId: ACCT, scriptName: SCRIPT, fetchImpl: rightShapeStub });
+  const rightShapeResult = await readBackUploaded(rightShapeDriver, readbackInput(goodHash), "v-x", "enforce");
+  ok("(b) modules[].content_base64 parses to the exact uploaded bytes -> verified", rightShapeResult.verdict === "verified" && rightShapeResult.deployedSha384 === goodHash);
+
+  // (d) the fetch goes to the /workers/workers/ content endpoint, not the metadata one.
+  ok("(d) fetchVersionModule calls the /workers/workers/ content endpoint", rightShapeUrl === contentUrl);
+
+  // (c) MISMATCH CONTROL: the same shape with DIFFERENT bytes, at the same content endpoint, returns
+  // mismatch, never verified.
+  const wrongBytes = utf8("a different engine bundle entirely");
+  const mismatchStub = (async (input: RequestInfo | URL) => {
+    if (String(input) !== contentUrl) return new Response(JSON.stringify({ success: false, errors: [{ code: 0, message: "not found at this path" }] }), { status: 404 });
+    return new Response(JSON.stringify({ success: true, result: { modules: [{ name: "index.js", content_base64: Buffer.from(wrongBytes).toString("base64") }] } }), { status: 200 });
+  }) as typeof fetch;
+  const mismatchDriver = makeCfDeployDriver({ token: TOKEN, accountId: ACCT, scriptName: SCRIPT, fetchImpl: mismatchStub });
+  const mismatchResult = await readBackUploaded(mismatchDriver, readbackInput(goodHash), "v-x", "enforce");
+  ok("(c) different bytes at the same shape -> mismatch, never verified", mismatchResult.verdict === "mismatch");
 }
 
 verdictReached(failures);

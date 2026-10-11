@@ -6,6 +6,7 @@
 // keeps its original redaction contract (see the per-function comments). Behaviour is
 // unchanged.
 
+import { gateLockFacts } from "../dest/lock-facts.ts";
 import { BEACON_FAIL_CLASSES } from "../cron/cron-fault-ledger.ts";
 import { recipientFingerprint } from "../crypto/capsule.ts";
 import { classifyEnvDestAnomalies, DEST_CONFIG_ANOMALIES } from "../dest/config-anomalies.ts";
@@ -557,6 +558,26 @@ const DELETE_PROBE_STATES: ReadonlySet<string> = new Set(TEST_DELETE_PROBES);
 const STORAGE_CLASS_SET: ReadonlySet<string> = new Set(STORAGE_CLASSES);
 // DEST_CONFIG_ANOMALY_SET re-gates the env-derived destination-config anomalies at the pack boundary.
 const DEST_CONFIG_ANOMALY_SET: ReadonlySet<string> = new Set(DEST_CONFIG_ANOMALIES);
+// projectLockFacts turns a destination row's stored lock verdict and default-rule facts into the pack's closed
+// lock block. Every value is re-gated here (lock-facts.ts and OBJECT_LOCK_STATES), so a drifted row cannot
+// carry text: enabled is yes/no/unknown, defaultMode is GOVERNANCE/COMPLIANCE/none/unknown (unknown when the
+// probe could not read a rule), the period is a whole number of days and learnedAt an epoch-ms number.
+function projectLockFacts(d: { objectLock?: unknown; lockMode?: unknown; lockRetentionDays?: unknown; verifiedAt?: unknown; checksumRequired?: unknown }): Record<string, unknown> {
+  const enabled = d.objectLock === "enforced" ? "yes" : d.objectLock === "not-enforced" ? "no" : "unknown";
+  const facts = gateLockFacts(d.objectLock, d.lockMode, d.lockRetentionDays);
+  const defaultMode = enabled === "no" ? "none" : (facts.lockMode ?? "unknown");
+  const learnedAt = typeof d.verifiedAt === "number" && Number.isFinite(d.verifiedAt) && d.verifiedAt > 0 ? Math.floor(d.verifiedAt) : undefined;
+  return {
+    enabled,
+    defaultMode,
+    ...(facts.lockRetentionDays !== undefined ? { defaultRetentionDays: facts.lockRetentionDays } : {}),
+    ...(learnedAt !== undefined ? { learnedAt } : {}),
+    // checksumRequired: the probe learnt that the bucket refuses a write with no checksum (an AWS default retention
+    // rule). Only ever true; absent means not learnt.
+    ...(d.checksumRequired === true ? { checksumRequired: true } : {}),
+  };
+}
+
 export async function fetchDestResolution(env: Env, scheduler: DurableObjectStub, downpipes?: DestEvidenceDownpipe[]): Promise<Record<string, unknown>> {
   const raw = typeof env.DEST_RATE_PER_SEC === "string" ? env.DEST_RATE_PER_SEC.trim() : "";
   const parsed = raw !== "" ? Number(raw) : Number.NaN;
@@ -573,7 +594,7 @@ export async function fetchDestResolution(env: Env, scheduler: DurableObjectStub
   let storedRows: DestEvidenceStoredRow[] | null = null;
   try {
     const r = await scheduler.fetch(doURL("/destinations"), { method: "GET" });
-    const j = (await r.json()) as { destinations?: Array<{ id?: unknown; endpointHost?: unknown; bucket?: unknown; addressing?: unknown; storageClass?: unknown; worm?: unknown; objectLock?: unknown; deleteProbe?: unknown; isDefault?: unknown; source?: unknown; deleteStatusClass?: unknown }> };
+    const j = (await r.json()) as { destinations?: Array<{ id?: unknown; endpointHost?: unknown; bucket?: unknown; addressing?: unknown; storageClass?: unknown; worm?: unknown; objectLock?: unknown; lockMode?: unknown; lockRetentionDays?: unknown; checksumRequired?: unknown; verifiedAt?: unknown; deleteProbe?: unknown; isDefault?: unknown; source?: unknown; deleteStatusClass?: unknown }> };
     storedRows = Array.isArray(j.destinations) ? j.destinations.slice(0, 32) : [];
     destinations = (Array.isArray(j.destinations) ? j.destinations : []).slice(0, 32).flatMap((d) => {
       const host = typeof d.endpointHost === "string" ? d.endpointHost : "";
@@ -608,6 +629,10 @@ export async function fetchDestResolution(env: Env, scheduler: DurableObjectStub
           ...(d.worm !== undefined && d.worm !== null ? { wormPolicyConfigured: true } : {}),
           ...(OBJECT_LOCK_STATES.has(d.objectLock as string) ? { bucketEnforces: d.objectLock as string } : {}),
           ...(DELETE_PROBE_STATES.has(d.deleteProbe as string) ? { deleteProbe: d.deleteProbe as string } : {}),
+          // The bucket lock facts the save-time probe learnt, as closed values: lock enabled yes/no/unknown,
+          // the default retention mode, the period in days and when the probe read them (the row's verifiedAt).
+          // Without them a reader sees that a write was refused but not the lock rule or the retention behind it.
+          lock: projectLockFacts(d),
         }];
       } catch {
         return [];
@@ -699,7 +724,16 @@ export async function buildKeysHealth(env: Env): Promise<Record<string, unknown>
   // with an operational secret still bound beside it. The engine then uses neither half, but the private still
   // decrypts runs sealed to it, and only the break-glass-only switch (POST /admin/keys/break-glass-only)
   // deletes it. Two booleans, no value.
-  const operational = { markerSet: operationalRetired(env), staleKeyHeld: retiredOperationalKeyHeld(env) };
+  // state: "stale-key-held" (marker bound, operational key still bound), "applied" (marker bound, no key bound)
+  // or "not-set" (no marker). action is the removal route, given only for the stale state.
+  const markerSet = operationalRetired(env);
+  const staleKeyHeld = retiredOperationalKeyHeld(env);
+  const operational: { markerSet: boolean; staleKeyHeld: boolean; state: string; action?: string } = {
+    markerSet,
+    staleKeyHeld,
+    state: staleKeyHeld ? "stale-key-held" : markerSet ? "applied" : "not-set",
+  };
+  if (staleKeyHeld) operational.action = "POST /admin/keys/break-glass-only deletes OPERATIONAL_PRIVATE and OPERATIONAL_PUBLIC";
   // updateSigner.signerFingerprint: the edmldsa1 fingerprint of UPDATE_SIGNER_PUBLIC, the key the engine verifies
   // update-channel signatures with, from the same parse the channel check runs (update-signer-pin.ts). Support
   // compares it with the published update-signer key. malformed: set but does not parse.

@@ -23,6 +23,7 @@ import { fileURLToPath } from "node:url";
 import { handleAdmin } from "../src/admin/router.ts";
 import { STEPUP_SUBS } from "../src/admin/router-core.ts";
 import { passkeySubject } from "../src/admin/identity.ts";
+import { buildSupportBundle } from "../src/admin/support.ts";
 import { CSRF_COOKIE_NAME, SESSION_COOKIE_NAME, SESSION_TTL_MS, STEPUP_FRESH_MS, signSession } from "../src/admin/session.ts";
 import { b64urlDecode, b64urlEncode, concat, hexEncode } from "../src/crypto/bytes.ts";
 import { sha384 } from "../src/crypto/primitives.ts";
@@ -208,6 +209,40 @@ async function main(): Promise<void> {
     ok(`the runlog-resigned alert reached the all-events webhook at warning (${alerts.length})`, alerts.length === 1 && /warning/.test(alerts[0] ?? ""), hookPosts.map((p) => p.slice(0, 120)));
     const again = await admin(e.env, "GET", "/runlog/signature?destinationId=", e.cookie);
     ok("afterwards GET reads verified", again.body.state === "verified");
+  }
+
+  console.log("\n-- 1b. a deleted .sig with the pending signature intact is resumed, and the resume is audited --");
+  {
+    const e = await estate();
+    ok("the estate holds a pending signature that verifies the RUNLOG", e.store.has(RUNLOG_PENDING));
+    await e.dest.delete(RUNLOG_SIG);
+    const digest = hexEncode(await sha384(e.store.get(RUNLOG)!));
+    const done = await admin(e.env, "POST", "/runlog/resign", e.cookie, { destinationId: "", digest }, await freshStepUp(e.env, e.key, e.cookie));
+    ok(`the attended resign resumes from the pending signature (got ${done.status})`, done.status === 200 && done.body.outcome === "resumed", done.body);
+    ok("the .sig is published again and verifies", await sigVerifies(e.store, e.v));
+    const rows = (await audit(e)).filter((a) => a.action === "runlog-resumed");
+    const t = rows[0]?.target as Record<string, unknown> | undefined;
+    ok("one runlog-resumed audit row is written", rows.length === 1 && rows[0]?.outcome === "success", rows);
+    ok("the row names the destination, the digest prefix and the highest index", t?.kind === "runlog-signature" && t.op === "resume" && t.digest === digest.slice(0, 24) && t.maxIndex === 2 && JSON.stringify(t.destinationIds) === '[""]', t);
+    ok("the row carries no signature or key material", rows.length === 1 && !/sig|secret|private/i.test(JSON.stringify(rows[0] ?? {}).replace(/runlog-signature|runlog-resumed/g, "")), rows[0]);
+    const ev = (((await buildSupportBundle(e.env, e.stub)).configEvents ?? []) as Array<Record<string, unknown>>).filter((c) => c.action === "runlog-resumed");
+    ok("the support pack's configEvents lists the resume with runlogOp resume and no identifiers", ev.length === 1 && ev[0]?.runlogOp === "resume" && !("destinationIds" in (ev[0] ?? {})) && !("digest" in (ev[0] ?? {})), ev);
+    ok("the resume writes no runlog-resigned row", !(await audit(e)).some((a) => a.action === "runlog-resigned"));
+  }
+  {
+    const e = await estate();
+    const digest = hexEncode(await sha384(e.store.get(RUNLOG)!));
+    const r = await admin(e.env, "POST", "/runlog/resign", e.cookie, { destinationId: "", digest }, await freshStepUp(e.env, e.key, e.cookie));
+    ok(`CONTROL: a resign over an existing valid .sig is refused (got ${r.status})`, r.status === 409, r.body);
+    ok("CONTROL: ...and it writes no runlog-resumed row", !(await audit(e)).some((a) => a.action === "runlog-resumed"));
+  }
+  {
+    const e = await estate();
+    e.store.set(RUNLOG_SIG, new TextEncoder().encode("AAAA"));
+    const digest = hexEncode(await sha384(e.store.get(RUNLOG)!));
+    const r = await admin(e.env, "POST", "/runlog/resign", e.cookie, { destinationId: "", digest }, await freshStepUp(e.env, e.key, e.cookie));
+    ok(`CONTROL: a stale .sig over a verifying pending signature is resumed (got ${r.status})`, r.status === 200 && r.body.outcome === "resumed", r.body);
+    ok("CONTROL: ...and, because no .sig was absent, it writes no runlog-resumed row", !(await audit(e)).some((a) => a.action === "runlog-resumed"));
   }
 
   console.log("\n-- 2. what a signature cannot repair is refused --");

@@ -918,9 +918,8 @@ async function pacerActuallyPaces(): Promise<void> {
   // not doing. This is the line that makes take() load-bearing: a burst of one and a low rate means the
   // SECOND request cannot go out until the bucket refills, so the elapsed time is the witness.
   const restore = installStatuses([{ status: 201 }]);
-  // THE WAITS ARE COUNTED, NOT TIMED. The control used to assert the unpaced pair finished in under 25 ms of
-  // wall clock, which a loaded machine breaks with no defect in the code: the same two stubbed writes took
-  // longer than that while a busy validate ran beside it. What the control means is "the unpaced client
+  // THE WAITS ARE COUNTED, NOT TIMED. A wall-clock ceiling on the unpaced pair would fail on a loaded
+  // machine with no defect in the code. What the control means is "the unpaced client
   // never asked to wait", and that is a fact about which timers it requested, not about how long a
   // scheduler took to run it. The pacer sleeps with setTimeout in bounded steps (src/dest/pace.ts take()),
   // so every delay it asks for is recorded here. Only pacer-shaped delays count: take() sleeps at most about

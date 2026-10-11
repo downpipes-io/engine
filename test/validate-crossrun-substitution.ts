@@ -15,7 +15,6 @@
 //
 // NET-ZERO: in-process seal, a locally built Go binary, harness-minted keys, fake data, ephemeral temp dirs only
 // (assertEphemeralWorkdir refuses a repo-tree or live-keys path). No estate, bucket, network, seed or spend.
-//
 import { join } from "node:path";
 
 import { x25519 } from "@noble/curves/ed25519.js";

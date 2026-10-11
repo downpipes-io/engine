@@ -17,6 +17,7 @@ import {
   type RoleSource,
 } from "./identity.ts";
 import { type AdminRuntime, doURL, recordAuthSignalEdge } from "./router-helpers.ts";
+import { ipSourceGroup } from "./sign-in-context.ts";
 
 
 
@@ -340,7 +341,7 @@ export async function adminTokenRateLimitedViaDO(scheduler: DurableObjectStub, r
   try {
     const resp = await scheduler.fetch(doURL("/rate-check"), {
       method: "POST",
-      body: JSON.stringify({ key: `admin-token-ip:${ip}`, max: ADMIN_TOKEN_RATE_LIMIT_MAX_PER_WINDOW }),
+      body: JSON.stringify({ key: `admin-token-ip:${ipSourceGroup(ip)}`, max: ADMIN_TOKEN_RATE_LIMIT_MAX_PER_WINDOW }),
       headers: { "content-type": "application/json" },
     });
     const verdict = (await resp.json()) as { allowed?: boolean };

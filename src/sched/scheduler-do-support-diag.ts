@@ -304,10 +304,10 @@ export function SupportDiagMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
           const prior = await this.state.storage.get<SourceFaults>(SOURCE_FAULTS_KEY);
           await this.state.storage.put(SOURCE_FAULTS_KEY, applySourceFaults(prior, id, body.source, now));
         }
-        const d = (typeof body.dest === "object" && body.dest !== null ? body.dest : null) as { faults?: unknown; io?: unknown } | null;
+        const d = (typeof body.dest === "object" && body.dest !== null ? body.dest : null) as { faults?: unknown; io?: unknown; destinationId?: unknown } | null;
         if (d !== null) {
           const prior = await this.state.storage.get<DestFaults>(DEST_FAULTS_KEY);
-          await this.state.storage.put(DEST_FAULTS_KEY, applyDestFaults(prior, id, d.faults, d.io, now));
+          await this.state.storage.put(DEST_FAULTS_KEY, applyDestFaults(prior, id, d.faults, d.io, now, d.destinationId));
         }
       } catch {
         /* best-effort: a fault WHILE recording a fault must not mask the run's own outcome */

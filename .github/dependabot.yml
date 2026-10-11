@@ -25,6 +25,7 @@ updates:
       npm-security-updates:
         applies-to: security-updates
         patterns: ["*"]
+    open-pull-requests-limit: 0
   - package-ecosystem: github-actions
     directory: "/"
     schedule: { interval: weekly, day: saturday, time: "20:00", timezone: "Australia/Melbourne" }
@@ -32,3 +33,4 @@ updates:
       github-actions-security-updates:
         applies-to: security-updates
         patterns: ["*"]
+    open-pull-requests-limit: 0

@@ -32,7 +32,6 @@
 //
 // Run with `node test/validate-attended-cadence-policy.ts`.
 //
-//
 
 import { ok, failureCount, buildContext } from "./validate-owner-action-dualcontrol-harness.ts";
 import { verdictReached } from "./lib/verdict-guard.ts";

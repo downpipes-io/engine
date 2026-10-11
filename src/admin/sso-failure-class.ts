@@ -169,14 +169,14 @@ export function classifySsoStartFailure(reason: string): string {
 // The 10 SSO_FAIL_CODES above name the STAGE that refused (issuer / key / signature / replay / malformed).
 // They do not name the CAUSE, and the cause is what the operator has to fix. Support cannot tell:
 //   - an EXPIRED Entra client secret (the token endpoint answered `invalid_client`) from any other token-
-//     endpoint failure. The answer WAS in the token response and was thrown away. This is the single most
-//     common "SSO broke overnight and we changed nothing" ticket.
+//     endpoint failure. The answer is in the token response, so it must be kept. This is the single most
+//     common "SSO broke overnight and nothing changed on our side" ticket.
 //   - a kid-not-found after a JWKS rotation from a duplicate-kid document that refuses the whole JWKS.
 //   - state-missing (no cookie) from state-replayed (a double-submitted callback) from state-expired.
 // And two SAML classes are ACTIVELY MISCLASSIFIED by the coarse code: an IdP-initiated POST at an
 // SP-initiated-only connection files under `replay` (it is a CONFIG toggle, not an attack), and the IdP's own
 // non-Success StatusCode -- the one field that says "your IdP DECLINED this user" (unassigned app, MFA
-// refused) -- was never even READ, so it fell into `other`.
+// refused) -- is not read by the coarse code, so it falls into `other`.
 //
 // The sub-code is recorded ALONGSIDE the coarse code (never instead of it) in the SAME bounded auth-signal
 // aggregate the rest of the auth evidence uses, as the closed `sso-sub-*` names in auth-signals.ts. So this

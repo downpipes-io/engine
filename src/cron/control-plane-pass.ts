@@ -29,6 +29,7 @@ import {
   candidateVersionMatchesExport, type ExportSkipReason,
   controlPlaneArtefactKey,
   controlPlaneDestCredFingerprint,
+  controlPlaneExportBytesOrNull,
   controlPlaneRecipientPinHash,
   isControlPlaneExport,
   plaintextGenerationKeysToPurge,
@@ -41,13 +42,14 @@ import {
   verifyControlPlaneSignature,
 } from "../admin/control-plane.ts";
 import { envRecipientFingerprint } from "../admin/key-vintages.ts";
-import { buildControlPlaneArtefactToWrite, isSealedControlPlaneExport, sealedArtefactKey, serialiseSealedControlPlaneExport, unsealAndResignForAutoHeal, verifySealedControlPlaneSignature } from "../admin/control-plane-seal.ts";
+import { buildControlPlaneArtefactToWrite, isSealedControlPlaneExport, sealedArtefactKey, sealedControlPlaneExportBytesOrNull, serialiseSealedControlPlaneExport, unsealAndResignForAutoHeal, verifySealedControlPlaneSignature } from "../admin/control-plane-seal.ts";
 import { doURL, type schedulerStub } from "../admin/router.ts";
 import { b64urlDecode, utf8 } from "../crypto/bytes.ts";
 import { type HybridVerifier, hybridVerifyDetailed } from "../crypto/sign.ts";
 import { buildDestination, DestResolutionError, resolveDefaultDestConfig, resolveDestination } from "../dest/factory.ts";
 import type { Env } from "../env.d.ts";
 import { readVerifiedRunlogSeed, type RunlogSeedResult } from "../format/freshness.ts";
+import { advanceAfterIndexHeld, configuredArchiveReaders, pinnedVerifier, seedAcrossArchives } from "./runlog-index-advance.ts";
 import { ENGINE_VERSION } from "../format/version.ts";
 import { loadControlPlaneExportRecipients, loadIdentity, loadSigner, operationalSealPublic, verifierFrom } from "../keys-env.ts";
 import { log } from "../log.ts";
@@ -85,20 +87,22 @@ interface RecoveryStatus {
   refused: { reason: string; at: string } | null;
   staged: { sourceKey: string; version: number; stagedAt: string; downpipes: number; resumeApplied: boolean } | null;
   runlogSeed?: { seed?: number; noSeed?: string } | null;
+  runlogIndexHeld?: { index: number; downpipeId: string } | null; // a refused RUNLOG index awaiting the counter advance
 }
 
 // readRecoveryRunlogSeed reads the destination's own RUNLOG for the recovery path and returns the closed
 // outcome (format/freshness.ts readVerifiedRunlogSeed). An absent or unloadable SIGNER_PRIVATE is "no-signer",
 // the same as the export pass's own guard: without it the document cannot be verified.
-async function readRecoveryRunlogSeed(env: Env, dest: Awaited<ReturnType<typeof buildDestination>>): Promise<RunlogSeedResult> {
-  if (typeof env.SIGNER_PRIVATE !== "string" || env.SIGNER_PRIVATE.length === 0) return { noSeed: "no-signer" };
-  let verifier: HybridVerifier;
-  try {
-    verifier = verifierFrom(await loadSigner(env.SIGNER_PRIVATE));
-  } catch {
-    return { noSeed: "no-signer" };
-  }
-  return readVerifiedRunlogSeed((key) => dest.get(key).then((r) => r?.body ?? null), verifier);
+//
+// The run counter is per engine and a RUNLOG is per destination, so the seed is also widened to every other
+// configured destination's verified RUNLOG (runlog-index-advance.ts seedAcrossArchives). The other archives are
+// listed from the scheduler's own configuration, which is empty on the first read after a wipe: they take part
+// from the first per-tick retry after the configuration returns.
+async function readRecoveryRunlogSeed(env: Env, dest: Awaited<ReturnType<typeof buildDestination>>, scheduler: ReturnType<typeof schedulerStub>): Promise<RunlogSeedResult> {
+  const verifier = await pinnedVerifier(env);
+  if (verifier === null) return { noSeed: "no-signer" };
+  const primary = await readVerifiedRunlogSeed((key) => dest.get(key).then((r) => r?.body ?? null), verifier);
+  return seedAcrossArchives(primary, await configuredArchiveReaders(env, scheduler), verifier);
 }
 
 // retryRunlogSeed re-reads the RUNLOG on a tick after the recovery latch recorded no seed, and posts the
@@ -107,7 +111,7 @@ async function readRecoveryRunlogSeed(env: Env, dest: Awaited<ReturnType<typeof 
 async function retryRunlogSeed(env: Env, scheduler: ReturnType<typeof schedulerStub>): Promise<void> {
   try {
     const dest = await buildDestination(env, undefined, await resolveDefaultDestConfig(env, scheduler, loadConfigWrapKey(env.CONFIG_WRAP_KEY)));
-    const runlogSeed = await readRecoveryRunlogSeed(env, dest);
+    const runlogSeed = await readRecoveryRunlogSeed(env, dest, scheduler);
     await scheduler.fetch(doURL("/control-plane/runlog-seed"), { method: "POST", body: JSON.stringify({ runlogSeed }) });
   } catch (e) {
     log("error", `control-plane health pass could not retry the RUNLOG seed read this tick: ${(e as Error).message}`);
@@ -548,6 +552,9 @@ export async function runControlPlaneHealthPass(env: Env, scheduler: ReturnType<
     // A recovery that latched with no RUNLOG seed re-reads the RUNLOG on every later tick, whatever the latch
     // and the plane now say, until a seed is recorded.
     if (status.runlogSeed != null && status.runlogSeed.seed === undefined) await retryRunlogSeed(env, scheduler);
+    // A RUNLOG append met an index its archive already holds: allocation is held until the counter moves past
+    // the highest index in every archive.
+    if (status.runlogIndexHeld != null) await advanceAfterIndexHeld(env, scheduler, status.runlogIndexHeld);
 
     if (!status.recoveryRequired) {
       // The plane is not empty => healthy, nothing to do (the cheap common case: one DO read).
@@ -593,7 +600,7 @@ export async function runControlPlaneHealthPass(env: Env, scheduler: ReturnType<
       // outcome into the latch: a seed anchors the counter before any trigger allocates, and a no-seed outcome
       // carries its closed reason (format/freshness.ts), which the DO records and, for a failed read or a
       // missing signer, holds allocation on until a later tick's re-read establishes a seed (sched/runlog-seed.ts).
-      const runlogSeed = await readRecoveryRunlogSeed(env, dest);
+      const runlogSeed = await readRecoveryRunlogSeed(env, dest, scheduler);
 
       const reason = "the control plane is empty but the destination bucket still holds backups -- the scheduler control plane appears to have been lost; backups have STOPPED until it is recovered";
       // Latch recovery-required in the DO (blocks the silent re-bootstrap; writes the critical audit event;
@@ -833,7 +840,7 @@ async function runControlPlaneAutoHeal(env: Env, scheduler: ReturnType<typeof sc
         // A truncated .sig, a rotated signer and a genuine tamper would all land on this ONE code without a
         // sub-cause. The sub-cause separates "re-copy the signature file" from "you are checking against the
         // wrong key" from "someone modified your recovery artefact".
-        const subCause = await signatureSubCause(serialiseSealedControlPlaneExport(parsedSealed), sealedSig, verifierFrom(signer));
+        const subCause: AutoHealSubCause = sealedControlPlaneExportBytesOrNull(parsedSealed) === null ? "ed25519-mismatch" : await signatureSubCause(serialiseSealedControlPlaneExport(parsedSealed), sealedSig, verifierFrom(signer));
         await refuseAutoHeal(env, scheduler, `the latest sealed recovery export (config v${sealedCandidate.version}) failed signature verification`, true, "signature", { subCause, scan });
         return;
       }
@@ -914,7 +921,7 @@ async function runControlPlaneAutoHeal(env: Env, scheduler: ReturnType<typeof sc
   const signer = await loadSigner(env.SIGNER_PRIVATE);
   const sigOk = await verifyControlPlaneSignature(exp, signature, verifierFrom(signer));
   if (!sigOk) {
-    const subCause = await signatureSubCause(serialiseControlPlaneExport(exp), signature, verifierFrom(signer));
+    const subCause: AutoHealSubCause = controlPlaneExportBytesOrNull(exp) === null ? "ed25519-mismatch" : await signatureSubCause(serialiseControlPlaneExport(exp), signature, verifierFrom(signer));
     await refuseAutoHeal(env, scheduler, `the latest recovery export (config v${candidate.version}) failed signature verification`, true, "signature", { subCause, scan });
     return;
   }

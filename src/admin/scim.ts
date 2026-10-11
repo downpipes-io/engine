@@ -288,7 +288,7 @@ async function offboard(env: Env, email: string, waitUntil?: (task: Promise<unkn
 function serviceProviderConfig(): Response {
   const body = {
     schemas: [SCIM_SPC],
-    documentationUri: "deprovision-only: DELETE /scim/v2/Users/{id} or PATCH /scim/v2/Users/{id} with active:false offboards a member by email; provisioning, reads and reactivation are not supported",
+    documentationUri: "deprovision-only: DELETE /scim/v2/Users/{id} or PATCH /scim/v2/Users/{id} with active:false offboards a member by email and ends their sessions here; a member who signs in through Cloudflare Access must also be removed in Cloudflare Access, which this surface cannot reach; provisioning, reads and reactivation are not supported",
     patch: { supported: true },
     bulk: { supported: false, maxOperations: 0, maxPayloadSize: 0 },
     filter: { supported: false, maxResults: 0 },
@@ -473,7 +473,7 @@ async function handleScimPatch(req: Request, env: Env, email: string, waitUntil?
   // The two shape rejections below are the Entra "unrecognised PatchOp" failure - a connector whose every
   // deprovision 400s forever while the pack shows a healthy SCIM surface. Only the rejected-shape CLASS is
   // recorded; the PatchOp body (which carries the member's id / attributes) never leaves this frame.
-  const schemas = (body as { schemas?: unknown }).schemas;
+  const schemas = typeof body === "object" && body !== null ? (body as { schemas?: unknown }).schemas : undefined; // a JSON null body is a shape reject, not a throw
   if (!Array.isArray(schemas) || !schemas.includes(SCIM_PATCH_OP)) {
     recordScimSignal(env, "scim-patch-shape-rejected", waitUntil);
     return scimError(400, `PATCH must be a SCIM PatchOp (schemas must include ${SCIM_PATCH_OP})`, "invalidSyntax");

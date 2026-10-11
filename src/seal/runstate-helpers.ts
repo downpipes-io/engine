@@ -56,6 +56,13 @@ export function downDestinationFlag(coarse: string, destinationId?: string): { d
   return coarse === REASON_DESTINATION_ACCESS && destinationId !== undefined ? { downDestinationIds: [destinationId] } : {};
 }
 
+// attemptedDestinationFlag names the destination a FAILED run was writing to, so the run row can say which
+// destination a "destination rejected the write" came from. Always basis "attempted": the destination was
+// selected and the seal wrote to it. Absent when the run had no resolved destination id (an env-only estate).
+export function attemptedDestinationFlag(destinationId?: string): { attemptedDestinationId: string; attemptedDestinationBasis: import("../sched/destinations.ts").FailedDestinationBasis } | Record<string, never> {
+  return destinationId !== undefined && destinationId !== "" ? { attemptedDestinationId: destinationId, attemptedDestinationBasis: "attempted" } : {};
+}
+
 // OPEN_PREFIX namespaces the RunSealDO's append-only OPEN-SHARD batches: the AES-256-GCM-wrapped
 // manifest lines of records sealed-but-not-yet-flushed, carried across slices so a shard spans them and
 // reaches shardMax. The batches are EPHEMERAL DO scratch (deleted at finalise / cleanup) and never enter
@@ -241,6 +248,11 @@ export function runlogLockVia(scheduler: DurableObjectStub, destKey?: string): R
     floor: async () => {
       const r = (await (await scheduler.fetch(doURL(`/runlog-floor${keyed ? `?id=${encodeURIComponent(keyed)}` : ""}`), { method: "GET" })).json()) as { floor?: unknown };
       return typeof r.floor === "number" ? r.floor : undefined;
+    },
+    // An append met an index this destination's RUNLOG already holds: the scheduler holds allocation until the
+    // cron pass moves the counter past the highest index in every archive.
+    indexHeld: async (entry) => {
+      await scheduler.fetch(doURL("/runlog-index-held"), { method: "POST", body: JSON.stringify(entry), headers: { "content-type": "application/json" } });
     },
   };
 }

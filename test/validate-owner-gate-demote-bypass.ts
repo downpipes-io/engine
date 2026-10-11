@@ -186,7 +186,7 @@ for (const move of moves) {
   note(`${move.name}: ${step.status}`);
   const create = await admin(e.env, "POST", "/idp/connections", e.cookieA, idpCreateBody(connId), await freshStepUp(e.env, e.keyA, e.cookieA));
   note(`IdP create after the move: ${create.status}`);
-  check(`the IdP create is not applied inline on Owner A alone (status is not 200) [got ${create.status}]`, create.status !== 200);
+  check(`the IdP create is queued for a second Owner, not applied inline on Owner A alone (202) [got ${create.status}]`, create.status === 202 && create.body.ownerActionQueued === true);
   check("the connection is not stored on Owner A alone", !(await connectionIds(e)).includes(connId));
 }
 
@@ -255,7 +255,7 @@ console.log("\nPart 3: two Owners agree to drop to one (A proposes, B approves)"
   if (changeId !== null) {
     ageRecord(e.storage, `${CHANGE_PREFIX}${changeId}`, "proposedAt", APPROVAL_MIN_DWELL_MS + 1000);
     const self = await admin(e.env, "POST", `/config/changes/${changeId}/approve`, e.cookieA, {}, await freshStepUp(e.env, e.keyA, e.cookieA));
-    check(`A cannot approve their own proposal [got ${self.status}]`, self.status !== 200);
+    check(`A cannot approve their own proposal: refused by maker != checker [got ${self.status}]`, self.status === 400 && self.body.error === "cannot approve your own change");
     const approve = await admin(e.env, "POST", `/config/changes/${changeId}/approve`, e.cookieB, {}, await freshStepUp(e.env, e.keyB, e.cookieB));
     check(`B (the target) approves their own removal [got ${approve.status}]`, approve.status === 200);
   }
@@ -281,7 +281,7 @@ console.log("\nPart 4: an access-admin cannot be the second approver of an Owner
   if (changeId !== null && cookieC !== null) {
     ageRecord(e.storage, `${CHANGE_PREFIX}${changeId}`, "proposedAt", APPROVAL_MIN_DWELL_MS + 1000);
     const approve = await admin(e.env, "POST", `/config/changes/${changeId}/approve`, cookieC, {}, await freshStepUp(e.env, keyC, cookieC));
-    check(`the access-admin's approval is refused [got ${approve.status}]`, approve.status !== 200);
+    check(`the access-admin's approval is refused by the Owner-approver rule [got ${approve.status}]`, approve.status === 400 && /only an Owner may approve a change that removes the Owner role/.test(String(approve.body.error)));
   }
   check("B is still an Owner", (await roleNow(e.env, e.cookieA, OWNER_B)) === "owner");
 }

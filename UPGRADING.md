@@ -19,8 +19,8 @@ cut. A migration guide is a release blocker for any breaking change.
 The on-disk archive format carries its own frozen version (`downpipe/0.1.0`) that
 is independent of the engine version. A change to a byte-level rule of the
 archive format is a new format minor version while the format major is 0. It is
-specified normatively in the sibling `downpipe` repository at
-`docs/format/SPEC.md`, and is never an engine upgrade note. The engine must keep
+specified normatively in the format specification of the sibling `downpipe`
+repository, and is never an engine upgrade note. The engine must keep
 producing archives the offline reader recovers byte-for-byte where the spec says
 writer-authoritative.
 
@@ -109,7 +109,7 @@ From 0.3.7 a person who signs in through a native connection must hold one of th
   GitLab group, an Entra App Role, an Okta, Keycloak or SAML group).
 
 A person with none of these is refused and gets no session. On 0.3.5 that person signed in as Viewer. The
-engine also no longer makes a native sign-in the first Owner when the role table is empty.
+engine does not make a native sign-in the first Owner when the role table is empty.
 
 Before you upgrade, find the people who sign in through a native connection and hold no role. The Viewer
 default writes no row, so the Roles and access tab does not list them. The audit log does: each native
@@ -137,7 +137,7 @@ bearer, exchanged for a cookie) carries a fingerprint of the secret it came from
 fingerprint against the current `ADMIN_TOKEN` on every request. Deleting the secret, or rotating it to a
 new value, now ends every session already exchanged from the old one, on its next request. Before 0.3.7,
 such a session kept Owner access for up to 12 hours after the secret was gone, which was the opposite of
-what the incident runbook (`docs/INCIDENT.md`) and the posture check already told an operator to expect.
+what the incident runbook and the posture check already told an operator to expect.
 
 This changes behaviour on upgrade for one case only: an operator holding a token-exchanged session at the
 moment ADMIN_TOKEN is deleted or rotated. That session now gets `401` on its next request, with no way to
@@ -212,7 +212,7 @@ If a script reads these responses, change it before you apply.
 
 ### Engine 0.3.7: refused and failed attempts are counted rows in the audit log
 
-A flood of failed sign-ins or refused requests no longer writes one audit row per attempt. The first
+A flood of failed sign-ins or refused requests does not write one audit row per attempt. The first
 attempt from a source in a minute writes a row. Later attempts add to a count, and the next row for that
 source carries it. A failed or recovery sign-in row carries the count in `target.attempts`, and a refused
 request's row carries it in `target.deniedAttempts`. The rows still sum to every attempt made.

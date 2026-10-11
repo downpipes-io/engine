@@ -304,7 +304,7 @@ async function partB(): Promise<void> {
       if (typeof body.id === "string") pendingIds.push(body.id);
     }
     // Clean up: withdraw the 3 pending actions (the proposer may reject their own) and disarm dual control via
-    // the second owner, leaving the gate state this test found (OFF) for anything that runs after it.
+    // the second owner, restoring the gate state this test started in (OFF) for anything that runs after it.
     for (const id of pendingIds) await doFetch("/owner-actions/reject", ownerCaller(OWNER), { id });
     await setGate(OWNER, false);
 

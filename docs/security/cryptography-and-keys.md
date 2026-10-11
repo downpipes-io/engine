@@ -37,17 +37,12 @@ SHA-384 hash/KDF/MAC family throughout. The Go package doc states this alignment
 every cryptographic call site in the engine tree by file, kind and algorithm. It also records
 primitives this document does not describe: SHA-256, SHA-512, HMAC-SHA-256, ECDSA and
 RSASSA-PKCS1-v1_5. The engine uses them for admin sign-in, passkeys, SAML, OIDC and destination
-request signing. `engine/test/validate-crypto-
-discovery.ts` walks `engine/src`, `engine/scripts` and `engine/tools`, finds every
-`crypto.subtle` call, every random-source call, every `@noble/*`, `node:crypto` or bare
-`crypto` import, and every algorithm literal, and fails the engine's validate chain when a call
-site is missing from the manifest, when a manifest row names a call site the tree no longer
-has, when the walk finds nothing, or when an algorithm outside the approved list appears.
-`console/scripts/crypto-discovery-gate.mjs` runs the same census over `console/src` and
-`console/scripts`, against its own manifest at `console/docs/security/crypto-call-sites.json`.
-`downpipe/internal/crypto/importallowlist_test.go`'s `TestCryptoDiscovery` runs the package-
-level equivalent over the Go module, comparing every package that imports `crypto/*`,
-`golang.org/x/crypto/*` or `filippo.io/*` against a committed allowlist.
+request signing. The manifest lists every `crypto.subtle` call, every random-source call,
+every `@noble/*`, `node:crypto` or bare `crypto` import, and every algorithm literal in
+`engine/src`, `engine/scripts` and `engine/tools`, and every algorithm it names is on the
+approved list. The console keeps its own manifest at `console/docs/security/crypto-call-sites.json`
+for `console/src` and `console/scripts`. The Go module lists every package that imports
+`crypto/*`, `golang.org/x/crypto/*` or `filippo.io/*`.
 
 ### 1.1 Hybrid KEM - X25519 + ML-KEM-1024
 
@@ -60,7 +55,7 @@ level equivalent over the Go module, comparing every package that imports `crypt
 | Combiner | 32-byte shared secret derived by HKDF-SHA-384 with `ikm = ssM || ssX`, empty salt, and `info = label || 0x00 || ctX || pkX`. The binding set mirrors X-Wing, generalised to ML-KEM-1024 over HKDF-SHA-384 (X-Wing itself is fixed to ML-KEM-768). TS: `engine/src/crypto/combiner.ts:18-20`. Go: `pq.go:143-159`. |
 | Contributory abort | The X25519 exchange rejects an all-zero shared secret (SPEC 4.1), because some implementations return all-zero rather than erroring (`engine/src/crypto/x25519.ts:37-49`; Go enforces via `ECDH` erroring, `pq.go:102-105,129-132`). |
 | Hybrid property | The derived secret is secure if **either** X25519 or ML-KEM-1024 holds; a break of one half alone does not expose plaintext. |
-| Direction in engine | **Posture-dependent.** The engine always encapsulates (`encapsulateHybrid` in `engine/src/crypto/kem.ts`). It also decapsulates with a LONG-LIVED key (`decapsulateHybrid`, same file) whenever `OPERATIONAL_PRIVATE` is present, which is the operational posture: the restore drill, the hourly canary, verify-at-seal, in-console restore and the retention prune all do. The console and the terminal deploy both install break-glass-only when the operator makes no choice (`console/src/screens/keys/posture.ts:299`; `engine/scripts/deploy.sh:543`). The control-plane auto-heal decapsulates with the long-lived `CONFIG_RECIPIENT_PRIVATE` in both postures (`engine/src/cron/control-plane-pass.ts:809`). Break-glass-only removes the `OPERATIONAL_PRIVATE` exposure by removing the key rather than by mitigating it. This row matters because the post-quantum library is not constant-time-guaranteed, and decapsulation with a long-lived key is the shape a timing side channel targets. The header of `engine/src/crypto/pq.ts` carries the caveat and its bounds. |
+| Direction in engine | **Posture-dependent.** The engine always encapsulates (`encapsulateHybrid` in `engine/src/crypto/kem.ts`). It also decapsulates with a LONG-LIVED key (`decapsulateHybrid`, same file) whenever `OPERATIONAL_PRIVATE` is present, which is the operational posture: the restore drill, the hourly canary, verify-at-seal, in-console restore and the retention prune all do. The console and the terminal deploy both install break-glass-only when the operator makes no choice (`console/src/screens/keys/posture.ts:299`; `engine/scripts/deploy.sh:543`). The control-plane auto-heal decapsulates with the long-lived `CONFIG_RECIPIENT_PRIVATE` in both postures (`engine/src/cron/control-plane-pass.ts:810`). Break-glass-only removes the `OPERATIONAL_PRIVATE` exposure by removing the key rather than by mitigating it. This row matters because the post-quantum library is not constant-time-guaranteed, and decapsulation with a long-lived key is the shape a timing side channel targets. The header of `engine/src/crypto/pq.ts` carries the caveat and its bounds. |
 
 ### 1.2 Hybrid signature - Ed25519 + ML-DSA-87 (both halves mandatory, no downgrade)
 
@@ -97,7 +92,7 @@ level equivalent over the Go module, comparing every package that imports `crypt
 
 Derived symmetric keys are 32 bytes (the AES-256 key size); hash and MAC-as-hash outputs are
 48 bytes (SHA-384). Constant-time comparison is used for security-relevant equality checks
-(`engine/src/crypto/bytes.ts:287-300`; Go `capsule.go:103-111`, which the reader uses in place of
+(`engine/src/crypto/bytes.ts:297-310`; Go `capsule.go:103-111`, which the reader uses in place of
 variable-time `bytes.Equal`).
 
 ### 1.5 Randomness
@@ -166,7 +161,7 @@ terminal deploy; none is a Cloudflare Secrets Store binding. The break-glass pri
 | Attribute | Detail |
 |-----------|--------|
 | Composition | 32 bytes (256-bit), the root of the per-run key tree. |
-| Generation | Fresh `crypto.getRandomValues(new Uint8Array(32))` per run, allocated into `RunClock.master` at run start (`engine/src/seal/runstate.ts:427`; type at `engine/src/seal/pipeline.ts:188-196`). |
+| Generation | Fresh `crypto.getRandomValues(new Uint8Array(32))` per run, allocated into `RunClock.master` at run start (`engine/src/seal/runstate.ts:428`; type at `engine/src/seal/pipeline.ts:236-243`). |
 | Custody | **In memory for a run that completes in one invocation.** A sliced run wraps its master with AES-256-GCM under a key derived from `SIGNER_PRIVATE`. It keeps the wrapped master in Durable Object storage until the run completes, then deletes it. `SLICED_RUNS_DISABLED` turns sliced runs off (`engine/src/seal/checkpoint.ts:35-44,164-171`). The master is never written in plaintext to any object, DO state or log. It is wrapped to each recipient (KEM-DEM), and that capsule is persisted in the archive (`engine/src/crypto/capsule.ts:118-127`). |
 | Derived material | The whole key tree hangs off the master via HKDF-SHA-384: the per-downpipe content-addressing key, per-segment file keys, the per-run manifest subkey, the name-MAC key, manifest-wrap keys, and the run key commitment (`engine/src/crypto/derive.ts:18-187`; Go `derive.go:42-163`). |
 | Recovery | The master is recoverable only by a recipient that holds a matching private identity opening the capsule, with the signed run key commitment as AAD (`engine/src/crypto/capsule.ts:62-92`). |
@@ -501,7 +496,7 @@ summarised here so the cryptographic inventory is self-contained.
 | TS engine / console | Web Crypto (`crypto.subtle`) | runtime (Workers / Node) | SHA-384, HKDF-SHA-384, HMAC-SHA-384, AES-256-GCM, Ed25519 |
 | TS streaming addressing | `@noble/hashes` | `2.4.0` (exact-pinned) | incremental SHA-384 / HMAC-SHA-384 |
 | Go reader | `golang.org/x/crypto` | `v0.57.0` (hash-pinned in `go.sum`) | `hkdf` |
-| Go reader | `filippo.io/mldsa` | `v0.0.0-20260215214346-43d0283efc3e` (hash-pinned) | ML-DSA-87 |
+| Go reader | `filippo.io/mldsa` | `v1.0.0` (hash-pinned) | ML-DSA-87 |
 | Go reader | Go stdlib (`crypto/aes`, `crypto/cipher`, `crypto/ecdh`, `crypto/ed25519`, `crypto/hmac`, `crypto/mlkem`, `crypto/rand`, `crypto/sha512`, `crypto/subtle`) | `go 1.26` toolchain | AES-256-GCM, X25519, Ed25519, ML-KEM-1024, HMAC-SHA-384, SHA-384, CSPRNG, constant-time comparison |
 
 A known caveat recorded in `engine/src/crypto/pq.ts:7-24`: the `@noble/post-quantum` library is
@@ -516,7 +511,7 @@ present mitigation.
 | ASVS V11 expectation | Where it is addressed |
 |----------------------|-----------------|
 | Documented cryptographic inventory of primitives and their uses | Section 1 |
-| Automated discovery of every cryptographic call site (V11.1.3) | Section 1's Discovery paragraph; `engine/test/validate-crypto-discovery.ts`, `console/scripts/crypto-discovery-gate.mjs`, `downpipe/internal/crypto/importallowlist_test.go` |
+| Automated discovery of every cryptographic call site (V11.1.3) | Section 1's Discovery paragraph; `engine/docs/security/crypto-call-sites.json`, `console/docs/security/crypto-call-sites.json` |
 | Approved, strong primitives (AEAD with integrity; no weak hashes/ciphers) | Section 1.3 (AES-256-GCM, 128-bit tag), 1.4 (SHA-384 family); no ECB, no unauthenticated modes, no MD5/SHA-1 |
 | Authenticated encryption with per-message uniqueness | Section 1.3 (STREAM chunk nonce + per-unit payload key; capsule AAD) |
 | Post-quantum readiness | Sections 1.1, 1.2, 4.3 (hybrid X25519+ML-KEM-1024 and Ed25519+ML-DSA-87, both halves required) |

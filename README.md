@@ -62,7 +62,7 @@ npm run deploy
 
 This repository ships one Wrangler config, `wrangler.toml`: edit it and deploy from it for your engine.
 
-`GET /admin/status` reports `ready: true` once a signer, a break-glass recipient key and a destination are configured. Destinations: native R2 (in-account binding, no credentials on the wire), any S3-compatible endpoint, Google Cloud Storage through its S3-interoperable endpoint, or Azure Blob Storage through its own client. An ambiguous destination configuration is refused and reported honestly rather than guessed at.
+`GET /admin/status` reports `ready: true` once a signer, a break-glass recipient key and a destination are configured. Destinations: native R2 (in-account binding, no credentials on the wire), any S3-compatible endpoint, Google Cloud Storage through its S3-interoperable endpoint, or Azure Blob Storage through its own client. An ambiguous destination configuration is refused and reported, never guessed at.
 
 ## Architecture
 
@@ -108,7 +108,7 @@ The complete route catalogue, with capabilities per route, is documented at [doc
 ## Conformance and validation
 
 ```bash
-npm install
+npm ci
 npm run validate        # the full validator chain
 npm run validate:crypto # byte-match against the Go reference vectors alone
 npm run typecheck

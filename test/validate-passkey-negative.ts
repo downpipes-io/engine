@@ -41,14 +41,12 @@ export async function run(): Promise<void> {
     cap.restore();
     ok("login with a WRONG challenge is rejected (reason challenge)", lfin.json.ok === false && lfin.json.reason === "challenge");
     ok("the precise reason was logged with an opaque err id", cap.errors.some((l) => /\[err:[0-9a-f]{8} /.test(l)));
-    // V16.3.1: the failed login is ALSO recorded in the tamper-evident audit chain (a brute-force sweep is
+    // The failed login is ALSO recorded in the tamper-evident audit chain (a brute-force sweep is
     // otherwise invisible there - the ceremony only returns a 200 {ok:false}).
-    // THE ASSERTION USED TO STOP AT action + outcome, AND THAT IS EXACTLY WHY THE TARGET WAS WRONG FOR MONTHS.
-    // This row carried a FIELD-LESS access-policy target, which the shipped console renders as "Access policy
-    // change (intent)", so every failed sign-in on a customer's chain read "Sign-in attempt failed / Access
-    // policy change (intent)". Nothing caught it: the console's audit-mirror drift gate compares action names
-    // and target KINDS across the two repos, never what a given row actually puts in the kind, and the only
-    // test that touched the row matched on two fields that were both already right.
+    // THE ASSERTION COVERS THE TARGET, NOT ONLY action + outcome. A field-less access-policy target renders in
+    // the console as "Access policy change (intent)", so every failed sign-in on a customer's chain would read
+    // wrongly. The console's audit-mirror drift gate compares action names and target KINDS across the two
+    // repos, never what a given row puts in the kind, so this test pins the kind and the ceremony field.
     const failRows = [...(await storage.list<{ action?: string; outcome?: string; target?: { kind?: string; ceremony?: string; attempts?: number } }>({ prefix: "audit:" })).values()].filter((e) => e.action === "authn-failure" && e.outcome === "failed");
     ok("a failed passkey login is recorded as an authn-failure audit event (V16.3.1)", failRows.length === 1);
     ok("...against the authn-attempt target, naming the passkey-login ceremony", failRows[0]?.target?.kind === "authn-attempt" && failRows[0]?.target?.ceremony === "passkey-login");

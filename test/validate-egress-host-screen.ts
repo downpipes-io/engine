@@ -1,23 +1,21 @@
 // validate-egress-host-screen: the internal-host (SSRF) screen on the engine's OWN outbound egress classes,
 // graded at the boundary that actually carries the bytes rather than at the boundary that stores the config.
 //
-// WHY THIS FILE EXISTS. Two egress classes were found unscreened during the ASVS section 4 pass,
-// and neither was disclosed anywhere:
+// WHY THIS FILE EXISTS. Two egress classes need an internal-host screen at the boundary that carries
+// the bytes:
 //
-//   THE SYSLOG-TLS SIEM SINK had no internal-host screen on ANY boundary. admin/router-push.ts took
-//   syslog.host with a non-empty check and nothing else; sched/scheduler-do-siem-push.ts's
-//   buildPushSyslogTarget said in a comment that the host was deliberately not refused because "no delivery
-//   happens from this stage anyway", and that clause was stale, because notify/siem-syslog-sender.ts calls
-//   connect({ hostname: host, port }, { secureTransport: "on" }). A stored host of 169.254.169.254 therefore
-//   had a real TLS connection attempted against it, carrying the estate's audit stream.
+//   THE SYSLOG-TLS SIEM SINK. admin/router-push.ts takes syslog.host and
+//   sched/scheduler-do-siem-push.ts's buildPushSyslogTarget builds the target from it, while
+//   notify/siem-syslog-sender.ts calls connect({ hostname: host, port }, { secureTransport: "on" }). A stored
+//   host of 169.254.169.254 would have a real TLS connection attempted against it, carrying the estate's
+//   audit stream, so the host is refused on every boundary.
 //
-//   THE ARCHIVE DESTINATION ENDPOINT was screened in exactly one place, admin/router-destinations.ts, which
-//   screens what an operator SUBMITS. sched/scheduler-do-dest-config.ts's buildDestRecord checked the shape
-//   and the https scheme only, so any path into the DO that is not that router stored an endpoint nothing had
-//   classified, and dest/s3.ts's fetch chokepoint did no host classification at all. Separately,
-//   dest/s3-addressing.ts's requireHttpsEndpoint accepted http://localhost, http://127.0.0.1 and
-//   http://[::1] from ANY caller, dest/factory.ts included, so a DEST_ENDPOINT of http://localhost:9000
-//   built a live archive destination in a deployed worker and signed the SigV4 credential onto cleartext.
+//   THE ARCHIVE DESTINATION ENDPOINT. admin/router-destinations.ts screens what an operator SUBMITS.
+//   sched/scheduler-do-dest-config.ts's buildDestRecord also screens the endpoint, so any path into the DO
+//   stores only a classified endpoint, and dest/s3.ts's fetch chokepoint classifies the host as well.
+//   dest/s3-addressing.ts's requireHttpsEndpoint refuses http://localhost, http://127.0.0.1 and
+//   http://[::1] from every caller, dest/factory.ts included, so a DEST_ENDPOINT of http://localhost:9000
+//   cannot build a live archive destination in a deployed worker or sign the SigV4 credential onto cleartext.
 //
 // WHAT IS GRADED HERE, and each one is graded where the bytes leave, not only where the value is stored:
 //   - deliverSiemSyslog refuses an internal host BEFORE it opens a socket (the mock connect counts opens);
@@ -29,7 +27,7 @@
 //     canonicalises them before the classifier sees them and the wire screen reads the parsed host.
 //
 // EVERY REFUSAL HAS A DISCRIMINATING CONTROL beside it: a public host must still deliver, still build and
-// still fetch. Without those the whole file would pass against a build that refused every egress.
+// still fetch. Without those the file would accept a build that refused every egress.
 //
 // No network. The only doubles are DO storage (MockStorage), a mock syslog connect (cloudflare:sockets
 // cannot run under Node) and the s3 suite's fetch stub. Run:

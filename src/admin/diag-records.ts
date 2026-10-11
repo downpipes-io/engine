@@ -846,10 +846,10 @@ export const ADMIN_COUNTER_NAMES = [
   // --- OPERATOR-SUBMITTED CONFIG the engine silently DROPPED at the SUBMIT boundary ---
   // The read-for-use half of this already exists above (dest-config-worm-policy-dropped, at dest/factory.ts).
   // These are the SUBMIT half: the request SUCCEEDED, the console shows the setting, and the engine never stored
-  // it. "We configured WORM and ransomware deleted our archive copies" is the first one. The submitted VALUE
-  // never rides -- it was rejected precisely for being unusable, and carrying it would be the leak.
+  // it. A WORM policy that never took effect, so ransomware can delete archive copies, is the first one. The submitted VALUE
+  // never rides -- it is unusable by definition, and carrying it would be the leak.
   "dest-config-worm-policy-submitted-dropped", // a submitted WORM policy failed validation and was DROPPED while the destination was still stored and the request still answered 2xx: the console claims immutability and writes are NOT locked
-  "restore-buffered-max-invalid", // RESTORE_BUFFERED_MAX_BYTES is set and unreadable, so the engine silently used its default: "we set the knob and records still buffer" (the destResolution.rateKnobInvalid precedent, mirrored)
+  "restore-buffered-max-invalid", // RESTORE_BUFFERED_MAX_BYTES is set and unreadable, so the engine silently used its default: the operator sets the knob and records still buffer (the destResolution.rateKnobInvalid precedent, mirrored)
   // --- the RTO drill samples the estimate SILENTLY EXCLUDED ---
   // "basedOnDrills says 2 but we ran 15 restore tests": 13 samples carried a non-finite duration or a zero byte
   // count and were dropped from the throughput maths. The DROP is correct (a zero-duration sample carries no
@@ -979,7 +979,7 @@ const STREAM_LEG_SET: ReadonlySet<string> = new Set(["source-read", "dest-write"
 export const STREAM_FAULT_CLASS_NAMES = ["short-nonce", "no-chunks", "short-chunk", "over-limit-chunks", "gcm-auth-fail", "container-framing", "master-length-mismatch"] as const;
 const STREAM_FAULT_CLASS_SET: ReadonlySet<string> = new Set(STREAM_FAULT_CLASS_NAMES);
 // The anti-rollback / RUNLOG anomaly kinds (format/integrity-fault-ledger.ts RUNLOG_ANOMALY_KINDS).
-export const RUNLOG_ANOMALY_KIND_NAMES = ["duplicate-index", "forked-prev", "dangling-prev", "chain-break", "index-regression", "parse-field", "sig-invalid", "runlog-absent", "run-missing", "root-disagreement"] as const;
+export const RUNLOG_ANOMALY_KIND_NAMES = ["duplicate-index", "forked-prev", "dangling-prev", "chain-break", "index-regression", "parse-field", "sig-invalid", "runlog-absent", "run-missing", "root-disagreement", "counter-advanced-after-recovery", "sig-restored"] as const;
 const RUNLOG_ANOMALY_KIND_SET: ReadonlySet<string> = new Set(RUNLOG_ANOMALY_KIND_NAMES);
 // The writer's loud refusals (format/integrity-fault-ledger.ts WRITER_REFUSAL_KINDS).
 export const WRITER_REFUSAL_KIND_NAMES = ["source-enumerated-zero", "stream-no-destination", "secrets-streamed"] as const;
@@ -1031,6 +1031,7 @@ export interface RunlogAnomalyRow {
   readonly lineOrdinal?: number;
   readonly entryCount?: number;
   readonly digest?: string; // 12 lower-case hex over the RUNLOG BYTES; never a line, a run id or a downpipe id
+  readonly archiveId?: string; // a destination id, shape-gated
 }
 
 export interface IntegrityLocatorRow {
@@ -1204,6 +1205,7 @@ export function applyIntegrityFaultsCounted(prior: IntegrityFaults | undefined, 
       ...(intOrUndef(r.lineOrdinal) !== undefined ? { lineOrdinal: intOrUndef(r.lineOrdinal)! } : {}),
       ...(intOrUndef(r.entryCount) !== undefined ? { entryCount: intOrUndef(r.entryCount)! } : {}),
       ...(digest !== undefined ? { digest } : {}),
+      ...(typeof r.archiveId === "string" && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/.test(r.archiveId) ? { archiveId: r.archiveId } : {}),
     });
   }
 

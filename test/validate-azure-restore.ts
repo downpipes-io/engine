@@ -423,10 +423,9 @@ async function optionalAccessorsTolerated(): Promise<void> {
   // the single-segment ceiling as the S3 and R2 clients do, and records it here. A fresh instance reports none.
   const faults = typeof dest.destFaults === "function" ? dest.destFaults() : undefined;
   ok("destFaults is present and a fresh instance reports no faults and no anomalies", faults !== undefined && faults.total === 0 && faults.anomalies === undefined);
-  // destIo MOVED from absent to present, and the line is kept rather than deleted because the
-  // absence it used to assert was the gap: the degradation vocabulary is not S3-specific the way the fault
-  // ring's <Code> table is, so an Azure destination that was throttled or black-holed had nowhere to say so
-  // and read as healthy. It is now implemented, and a caller reading it on a fresh instance must get the
+  // destIo is present: the degradation vocabulary is not S3-specific the way the fault
+  // ring's <Code> table is, so an Azure destination that is throttled or black-holed needs somewhere to say
+  // so, or it reads as healthy. A caller reading it on a fresh instance must get the
   // clean snapshot rather than nothing.
   ok("destIo is now PRESENT, because the degradation counters are shared machinery and not an S3 vocabulary", typeof dest.destIo === "function");
   const fresh = dest.destIo?.();

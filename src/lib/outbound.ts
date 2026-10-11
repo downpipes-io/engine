@@ -19,6 +19,9 @@ export const CF_API_BASE = "https://api.cloudflare.com/client/v4";
 export const CF_GRAPHQL_URL = `${CF_API_BASE}/graphql`;
 export const DOH_ENDPOINT = "https://cloudflare-dns.com/dns-query";
 export const UPDATE_CHANNEL_HOST = "update.downpipes.io";
+// The channel URL the engine ships configured with (wrangler.toml UPDATE_CHANNEL_URL). The support pack reports
+// only whether the configured URL equals it, never the URL.
+export const UPDATE_CHANNEL_SHIPPED_URL = `https://${UPDATE_CHANNEL_HOST}/stable.json`;
 export const ENTRA_LOGIN_HOST = "login.microsoftonline.com";
 
 // FIXED_EGRESS_HOSTS is the closed set a "fixed" call may reach: exact hosts, plus the suffixes whose

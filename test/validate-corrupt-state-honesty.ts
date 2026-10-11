@@ -31,7 +31,6 @@
 //
 // Run: node test/validate-corrupt-state-honesty.ts
 //
-//
 
 import { SchedulerDO } from "../src/sched/scheduler-do.ts";
 import { CALLER_HEADER, encodeCaller, type Caller } from "../src/admin/identity.ts";

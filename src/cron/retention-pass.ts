@@ -1,4 +1,4 @@
-// Retention prune pass for the cron driver (cron/drive.ts), ASVS V14.2.7. For every downpipe that has a
+// Retention prune pass for the cron driver (cron/drive.ts). For every downpipe that has a
 // retention policy, runRetentionPrunes computes the prune PLAN and, ONLY when retention.enforce === true,
 // applies it (mark superseded RUNLOG entries + re-sign under the lock, then delete run-trees + orphaned
 // segments); runOneRetentionPrune is the per-downpipe plan-and-apply; runlogLockVia adapts the DO lock;

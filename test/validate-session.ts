@@ -1558,7 +1558,7 @@ async function run(): Promise<void> {
   // 4e. requireStepUp FAILS CLOSED when the DO /stepup/check is UNAVAILABLE. The end-to-end step-up tests
   //     above all run against a healthy DO; this drives requireStepUp DIRECTLY with a scheduler stub whose
   //     fetch THROWS and asserts the sensitive action is DENIED (401 stepUpRequired), never admitted on a DO
-  //     outage (router-core.ts:248-263: the scheduler.fetch is wrapped in try/catch and falls through to the
+  //     outage (router-core.ts:293-308: the scheduler.fetch is wrapped in try/catch and falls through to the
   //     401). Contrast: a SATISFIED DO returns null (proceed), the bare token is EXEMPT and an Access caller
   //     is judged on its iat, both without a DO read, so the 401 is the outage, not a blanket deny.
   // ============================================================================================

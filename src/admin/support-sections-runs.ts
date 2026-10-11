@@ -4,9 +4,11 @@
 // assembles the bundle from these gatherers; each keeps its own redaction contract (see
 // the per-function comments).
 
+import { UPDATE_CHANNEL_SHIPPED_URL } from "../lib/outbound.ts";
 import type { Env } from "../env.d.ts";
 import { MARKER_ATTRIBUTION_ID_MAX_LEN, MARKER_ATTRIBUTION_MAX_PER_KIND, MARKER_KEYS, MARKER_UNKEYED_HANDLE_SHAPE } from "../seal/marker.ts";
 import { doURL } from "../do-url.ts";
+import { failedDestinationOf } from "../sched/destinations.ts";
 import type { BuildStatusOptions } from "./status.ts";
 import { clampNonNegInt, gateClosed, UNKNOWN_CODE } from "./support-shared.ts";
 import { checkUpdates, compareSemver } from "./updates.ts";
@@ -129,6 +131,8 @@ export async function fetchRunHistory(scheduler: DurableObjectStub, destIdSet?: 
         archiveBytesWritten?: number;
         segmentsWritten?: number;
         destinationId?: string;
+        failedDestinationId?: string;
+        failedDestinationBasis?: string;
         downDestinationIds?: string[];
         // tier0Cause (mode tier0-only-reason-unknown): WHY a verified Tier-0 row skipped the decrypt sample.
         // attempts/recovered (mode runlog-sig-stale-window): a verdict that self-healed after a read-after-
@@ -187,6 +191,14 @@ export async function fetchRunHistory(scheduler: DurableObjectStub, destIdSet?: 
       ...(r.archiveBytesWritten !== undefined ? { archiveBytesWritten: r.archiveBytesWritten } : {}),
       ...(r.segmentsWritten !== undefined ? { segmentsWritten: r.segmentsWritten } : {}),
       ...(typeof r.destinationId === "string" && r.destinationId !== "" ? { destinationId: r.destinationId.slice(0, 128) } : { destinationBasis: runDestinationBasis(r.status, destIdSet) }),
+      // A FAILED row sealed nowhere (destinationBasis above says so) but was writing to a destination: name it,
+      // with the closed basis for how the engine knows (attempted | pinned | default), or say "unknown". Re-gated
+      // to the destination-id shape and the closed basis here, so a drifted row cannot widen the pack.
+      ...((): Record<string, unknown> => {
+        if (r.status !== "failed" || (typeof r.destinationId === "string" && r.destinationId !== "")) return {};
+        const f = failedDestinationOf(r.failedDestinationId, r.failedDestinationBasis);
+        return f !== undefined ? { destinationId: f.id, destinationIdBasis: f.basis } : { destinationIdBasis: "unknown" };
+      })(),
       ...(r.downDestinationIds !== undefined ? { downDestinationIds: r.downDestinationIds } : {}),
       // Verify-at-seal verdict per run: redaction-safe status/tier/sampled/at + coarse reason,
       // with the three fields a SUSPECT verdict on a 50,000-record run actually needs. The verdict
@@ -778,6 +790,12 @@ async function updateAvailability(env: Env): Promise<Record<string, unknown>> {
     ...(gateClosed(s.riskClass, new Set(["routine", "migration", "breaking"])) !== undefined ? { riskClass: gateClosed(s.riskClass, new Set(["routine", "migration", "breaking"])) } : {}),
     // versionParseOk: both stamps comparable. Meaningless (and so omitted) before a recommendation exists.
     ...(s.recommendedVersion !== undefined ? { versionParseOk: compareSemver(s.currentVersion, s.recommendedVersion) !== null } : {}),
+    // channelUrlIsShipped: the configured URL equals the one the engine ships with (a boolean, never the URL).
+    // fetchStatus / fetchTarget: only on a failed channel fetch, the HTTP status (0 = transport failure) and
+    // whether the channel or its signature failed. A 404 on a customised URL is a wrong path, not an engine fault.
+    channelUrlIsShipped: rawBase === UPDATE_CHANNEL_SHIPPED_URL,
+    ...(s.verified !== true && s.channelFault === "fetch-failed" && typeof s.fetchStatus === "number" ? { fetchStatus: Math.max(0, Math.min(599, Math.trunc(s.fetchStatus))) } : {}),
+    ...(s.verified !== true && s.channelFault === "fetch-failed" && (s.fetchTarget === "channel" || s.fetchTarget === "signature") ? { fetchTarget: s.fetchTarget } : {}),
     ...(s.verified !== true ? { channelIssue: gateClosed(classifyChannelIssue(s.reason), CHANNEL_ISSUE_CLASSES) ?? UNKNOWN_CODE } : {}),
   };
 }

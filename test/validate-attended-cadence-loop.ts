@@ -20,7 +20,6 @@
 // REAL stored state back, projects it the way the DO does, and runs the REAL check. No hand-built proof
 // object, because a hand-built one would prove this file's idea of the stamp rather than the engine's.
 //
-//
 
 import { buildAttendedCadence, buildRestoreTestRecency } from "../src/admin/posture-checks.ts";
 import type { PostureDownpipeInput, PostureInput } from "../src/admin/posture-types.ts";

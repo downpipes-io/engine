@@ -61,7 +61,6 @@
 //                                               [--only <substring>] [--max-members N]
 //   node scripts/determinism-gate.mjs --self-test
 //
-//
 
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";

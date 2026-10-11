@@ -18,7 +18,6 @@
 //
 // Run: node test/validate-deploy-node-floor.ts
 //
-//
 
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";

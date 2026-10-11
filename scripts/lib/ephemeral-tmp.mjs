@@ -10,7 +10,6 @@
 // That is the one point every one of these gates' several exit paths (CLEAN, CANNOT_RUN, FOUND_SOMETHING)
 // shares.
 //
-//
 
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";

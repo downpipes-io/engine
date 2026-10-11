@@ -5,9 +5,9 @@
 // signer key pair at load. Outside the Worker, the offline scripts/generate-keys.ts imports both.
 //
 // The library is NOT constant-time-guaranteed, so what the engine does with it matters, and
-// the honest answer depends on the posture. This comment used to claim "the engine
-// encapsulates and signs only, so the trusted surface in production is encapsulate + sign",
-// and that is false in both postures. In the two-recipient posture the engine holds
+// the honest answer depends on the posture. The engine does not only encapsulate and sign.
+// It also decapsulates, and where it does so depends on the posture.
+// In the two-recipient posture the engine holds
 // OPERATIONAL_PRIVATE and decapsulates with it routinely: the restore drill, the hourly
 // canary, verify-at-seal, in-console restore and the retention prune all do. In either
 // posture, the control-plane auto-heal decapsulates with CONFIG_RECIPIENT_PRIVATE when it
@@ -16,7 +16,7 @@
 // load-bearing there rather than theoretical. deploy.sh and the console key ceremony default
 // a fresh engine to break-glass-only, where the operational key is absent.
 //
-// Two things bound it, and neither is the false claim it replaced. An attacker needs to
+// Two things bound it. An attacker needs to
 // measure the engine's own timing from inside the customer's Cloudflare account, and anyone
 // with that position already has the environment the keys sit in. And break-glass-only removes
 // the archive-key exposure by removing the key rather than by mitigating it. The config key

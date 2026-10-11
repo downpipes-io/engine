@@ -87,13 +87,15 @@ function kindPhrase(kind: SourceLivenessKind): string {
 //   kv: error 10041, "No KV namespace found with ID <id>" (the answer for a deleted namespace in
 //       github.com/cloudflare/wrangler-legacy/issues/1441).
 //   d1: error 7404 "the database cannot be found" and error 10181 "the D1 database UUID could not be found"
-//       (github.com/cloudflare/developer-platform/issues/69). The D1 debug page lists no binding text for a
-//       deleted database, so only these codes and texts count.
+//       (github.com/cloudflare/developer-platform/issues/69), and the binding's own text for a deleted
+//       database, "D1_ERROR: D1 database <uuid> has been deleted." The binding throws an Error with that
+//       message and a string cause equal to the text without the "D1_ERROR: " prefix, identical on every
+//       probe, measured on a live estate with SELECT 1.
 // A source type with no entry (and the "unknown" of probeSourceLiveness) can never be proven missing.
 const ABSENCE_PROOF: Readonly<Record<string, RegExp>> = {
   r2: /\b10006\b|The specified bucket does not exist/i,
   kv: /\b10041\b|No KV namespace found with ID/i,
-  d1: /\b7404\b|\b10181\b|database cannot be found|D1 database UUID could not be found/i,
+  d1: /\b7404\b|\b10181\b|database cannot be found|D1 database UUID could not be found|D1 database \S+ has been deleted|D1_ERROR:[^\n]*(?:\bno such database\b|\b(?:database|DB)\b[^\n]*\b(?:not found|does not exist)\b)/i,
 };
 
 // classifyLivenessFault maps a raw platform throw from a probe call into a SourceResourceMissingError:
@@ -107,7 +109,11 @@ export function classifyLivenessFault(sourceType: string, resource: string, e: u
   const kind: SourceLivenessKind = proof?.test(m) === true ? "deleted" : "unavailable";
   // Keep the platform's own transport verdict (a closed class) beside the engine's kind, so the pack can
   // separate "404, the resource really is gone" from "a 5xx/network fault we conservatively called unavailable".
-  return new SourceResourceMissingError(sourceType, resource, kind, undefined, classifySourceFaultStatus(e), e);
+  // A proven absence is the 404 class whatever the platform's own throw looked like: D1 and R2 answer a deleted
+  // resource with a prose error that carries no HTTP status, so the throw alone reads "other", the same class a
+  // passing outage gets. The absence proof (ABSENCE_PROOF above) is the stronger fact, so it sets the class.
+  const faultClass = kind === "deleted" ? "404" : classifySourceFaultStatus(e);
+  return new SourceResourceMissingError(sourceType, resource, kind, undefined, faultClass, e);
 }
 
 // LivenessProbe is the optional capability a binding-backed source (KV/R2/D1) implements: ONE cheap

@@ -69,7 +69,7 @@ function extractBetween(startAnchor: string, endAnchor: string, startInclusive: 
 // package.json, so npm failed, and all five parser assertions went red over a parser that was correct.
 // Both anchors still matched exactly one line each, so the extractor's own tripwire could not fire; the
 // span had widened rather than broken. Anchoring on the preflight's banner names the parser's actual end.
-const FLAG_PARSER = extractBetween("ENABLE_OPERATIONAL=0", "# BLOCKING PREFLIGHT. THIS SCRIPT USED TO GRADE NOTHING AT ALL.", true);
+const FLAG_PARSER = extractBetween("ENABLE_OPERATIONAL=0", "# BLOCKING PREFLIGHT. THE DEPLOY GRADES THE TREE BEFORE IT SHIPS.", true);
 
 // Fragment 2: the B7 operational-key check itself -- everything from the line AFTER the `SECRETS=` read
 // (the test supplies $SECRETS directly) through the line before the unrelated BOOTSTRAP_OWNER_EMAIL check.
@@ -349,8 +349,8 @@ async function main(): Promise<void> {
     ok("fresh + no flag + no TTY -> OPERATIONAL_PUBLIC is never put either", !noFlag.calls.some((c) => c.includes("secret put OPERATIONAL_PUBLIC")));
     ok("fresh + no flag + no TTY -> the OPERATIONAL_RETIRED marker IS written, so every later deploy protects the choice", noFlag.calls.some((c) => c.includes("secret put OPERATIONAL_RETIRED")));
     ok("fresh + no flag + no TTY -> the generator is told, so the recovery sheet states the real posture", noFlag.calls.some((c) => c.includes("generate-keys.ts") && c.includes("--break-glass-only")));
-    // The sheet used to say "chosen with --break-glass-only" on every break-glass-only path, because the
-    // generator only ever saw the flag. POSTURE_REASON now travels with it, so the sheet names the real path.
+    // POSTURE_REASON travels with the flag, so the recovery sheet names the real path to break-glass-only
+    // and not only the flag.
     ok("fresh + no flag + no TTY -> the generator is given the REAL reason, not the flag", noFlag.calls.some((c) => c.includes("generate-keys.ts") && c.includes("--posture-reason=no posture flag was given and this is not an interactive terminal")));
     ok("fresh + no flag -> the signer and break-glass keys still go in (only the operational pair is at issue)", noFlag.calls.some((c) => c.includes("secret put SIGNER_PRIVATE")) && noFlag.calls.some((c) => c.includes("secret put BREAK_GLASS_PUBLIC")));
     ok("fresh + no flag -> BOTH config-recipient halves still go in (config recovery is not a posture choice)", noFlag.calls.some((c) => c.includes("secret put CONFIG_RECIPIENT_PUBLIC")) && noFlag.calls.some((c) => c.includes("secret put CONFIG_RECIPIENT_PRIVATE")));

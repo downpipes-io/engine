@@ -353,7 +353,7 @@ export async function run(): Promise<void> {
   //     JSON body makes the router's `await req.json()` throw a SyntaxError. Before the fix that
   //     escaped handleAdmin to the Cloudflare runtime UNLOGGED. The worker must now catch it,
   //     return a generic 500 JSON (no stack to the client), and STILL apply CORS + the security
-  //     headers. We use POST /admin/downpipes: it `await req.json()`s the body before any DO call,
+  //     headers. We use POST /admin/drill-evidence: it `await req.json()`s the body before any DO call,
   //     and the ADMIN_TOKEN path resolves Owner without a round trip, so the malformed body reaches
   //     req.json() and throws. We capture console.error to confirm the error is logged, not silent.
   // -----------------------------------------------------------------------------------------
@@ -403,7 +403,7 @@ export async function run(): Promise<void> {
     let r: Response | undefined;
     try {
       r = await worker.fetch(
-        new Request(`https://engine.example/admin/downpipes`, {
+        new Request(`https://engine.example/admin/drill-evidence`, {
           method: "POST",
           headers: { authorization: "Bearer test-token-500", "content-type": "application/json", Origin: ORIGIN },
           body: MALFORMED,
@@ -430,7 +430,7 @@ export async function run(): Promise<void> {
     ok("dispatch-fault ring: the record carries NO byte of the malformed request body", !dispatchFaultBody.includes("not valid json"));
     ok("dispatch-fault ring: the record carries the closed surface + route family + 8-hex errId only", (() => {
       const b = JSON.parse(dispatchFaultBody === "" ? "{}" : dispatchFaultBody) as Record<string, unknown>;
-      return b.surface === "admin" && b.routeFamily === "downpipes" && typeof b.errId === "string" && /^[0-9a-f]{8}$/.test(b.errId) && b.httpStatus === 500;
+      return b.surface === "admin" && b.routeFamily === "restore" && typeof b.errId === "string" && /^[0-9a-f]{8}$/.test(b.errId) && b.httpStatus === 500;
     })());
     if (r !== undefined) {
       ok("V16.3.4: malformed JSON body yields a 500 (not an unhandled crash)", r.status === 500);

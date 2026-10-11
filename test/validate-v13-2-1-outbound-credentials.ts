@@ -21,7 +21,6 @@
 //
 // Run with `node test/validate-v13-2-1-outbound-credentials.ts`.
 //
-//
 
 import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";

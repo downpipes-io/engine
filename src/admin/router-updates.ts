@@ -26,7 +26,7 @@ import { enumerateBoundSources, fetchArtefactBytesDetailed, resolveEngineAccount
 import { executeConsoleApply, handleComponentApply, type QueuedConsole, recordConsoleQueueResolution, resolveConsoleComponent } from "./router-updates-components.ts";
 import { handleRampSettle, handleRampStart } from "./router-updates-ramp.ts";
 import { handleStandaloneRollback } from "./router-updates-rollback.ts";
-import { freshnessRefusal, noteUpdateAttempt, noteUpdateDegradations, noteUpdateGuardRefusal, pendingUpdateRefusal, readUpdateFloor } from "./router-updates-shared.ts";
+import { freshnessRefusal, recordChannelFault, noteUpdateAttempt, noteUpdateDegradations, noteUpdateGuardRefusal, pendingUpdateRefusal, readUpdateFloor } from "./router-updates-shared.ts";
 import { decideKeep, type HealthGate, liveSingleVersion, planAndPromote, type SafeApplyInput, settleAfterPromote } from "./update-apply.ts";
 import { DESTINATION_GATE_REASON, destinationConfigured, makeHealthGate, probeSettleVerdict } from "./update-gate.ts";
 // HARNESS-ONLY test-fault injection (owner-gated engine test-fault-hook). Every helper is a no-op unless
@@ -96,7 +96,11 @@ export async function handleUpdates(ctx: RouterCtx): Promise<Response | null> {
       return scheduler.fetch(doURL("/downpipes"), { method: "GET" });
     }
     case "GET /updates":
-      return new Response(JSON.stringify(await checkUpdates(env)), { headers: { "content-type": "application/json" } });
+    {
+      const status = await checkUpdates(env);
+      await recordChannelFault(scheduler, status);
+      return new Response(JSON.stringify(status), { headers: { "content-type": "application/json" } });
+    }
     case "GET /history": {
       // Thin authenticated forwarder: pass ?id=... straight through to the DO, which is the
       // history authority (it reads searchParams.get("id")). The doURL host is ignored by
@@ -391,7 +395,7 @@ export async function handleUpdates(ctx: RouterCtx): Promise<Response | null> {
           // key-pinning problem, a truncated CDN object is not, a shape drift is OUR bug), and they otherwise
           // all arrive at the operator as one sentence and at the pack as nothing. Component `channel`,
           // because the fault is in neither the engine nor the console: it is upstream of both.
-          await recordUpdateFault(scheduler, { component: "channel", step: channelFaultStep(art.causeClass), cause: art.causeClass });
+          await recordUpdateFault(scheduler, { component: "channel", step: channelFaultStep(art.causeClass), cause: art.causeClass, ...(art.fetchStatus !== undefined ? { httpStatus: art.fetchStatus } : {}) });
           // The audit detail carries the closed guard class rather than the resolver's own sentence, which
           // the pack's excerpt drops anyway; the class rides the counter too.
           await noteUpdateGuardRefusal(scheduler, caller, sourceIp, "artefact-resolve");

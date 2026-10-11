@@ -19,7 +19,6 @@
 // When a pq.ts or env.d.ts edit moves lines, re-pin the document and the matching key below in the same
 // change. Run with `node test/validate-crypto-doc-citations.ts`.
 //
-//
 
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";

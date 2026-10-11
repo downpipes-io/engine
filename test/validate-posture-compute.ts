@@ -20,6 +20,10 @@ import {
   type PostureInput,
 } from "../src/admin/posture.ts";
 import { ok, byId, healthyInput, overrideFor, NOW, DAY } from "./validate-posture-shared.ts";
+import { statusSliceForPosture } from "../src/admin/router-posture.ts";
+import type { Env } from "../src/env.d.ts";
+import { SchedulerDO } from "../src/sched/scheduler-do.ts";
+import { MockStorage } from "./mock-storage.ts";
 
 export function runCompute(): void {
   computeHealthyBaseline();
@@ -38,6 +42,7 @@ export function runCompute(): void {
   computeDestCredEncryption();
   computeAuditMirror();
   computeUpdateIntegrityChecks();
+  computeConsoleOnWorkersDev();
   computeKnownCheckIds();
   computeSeverityMapDriftGate();
   computeRestoreTestRecencyKeyedCredit();
@@ -221,10 +226,10 @@ function computeEachCheckFails(): void {
 
     // This check FAILS when the key is present, so its verdict pushes toward the strict posture. Its
     // copy therefore has to be right about what the strict posture costs, or the score says "remove it"
-    // while the text overstates the price of doing so. It used to claim the key is what makes self-test
-    // and self-restore work, and that removing it leaves recovery "break-glass, offline" -- both untrue
-    // since verify-at-seal and the canary moved onto the run's own per-run key, and since the console
-    // gained a break-glass restore panel for exactly that posture.
+    // while the text overstates the price of doing so. The key is not what makes self-test and
+    // self-restore work, and removing it does not leave recovery "break-glass, offline": verify-at-seal and
+    // the canary use the run's own per-run key, and the console has a break-glass restore panel for exactly
+    // that posture.
     //
     // Asserted on CLAIMS rather than exact sentences so the copy stays improvable, and asserted in both
     // directions so a revert fails rather than passing quietly.
@@ -296,11 +301,63 @@ function computeEachCheckFails(): void {
   }
   {
     // redundant-copies (high, weight 3): a downpipe fanning out to only one destination
-    // (destinationCount < 2) fails the 3-2-1 redundancy check.
+    // (destinationCount < 2) fails the 3-2-1 redundancy check. gatherPostureState never sets
+    // provenCopies above destinationCount (it is a subset of the SAME destination set), so the fixture
+    // drops it too, exactly as an actual single-destination downpipe reports.
     const i = healthyInput();
     const first = i.downpipes[0];
-    if (first) first.destinationCount = 1;
+    if (first) { first.destinationCount = 1; delete first.provenCopies; }
     ok("fail: redundant-copies fails when a downpipe writes to only one destination", byId(computePosture(i, NOW)).get("redundant-copies")?.status === "fail");
+  }
+  {
+    // redundant-copies: a downpipe pinned to two destinations whose second copy has never been
+    // reported (a destination added recently, still catching up) must not pass on the pinned count
+    // alone. gatherPostureState reads this as provenCopies 1 (only the origin proven); see the
+    // dedicated hist:/repl: vectors in validate-cov-sched-scheduler-do-observability.ts for the raw
+    // replication-state shape (never-reported versus a stale holdsIndex) this count is built from.
+    const i = healthyInput();
+    const first = i.downpipes[0];
+    if (first) { first.destinationCount = 2; first.provenCopies = 1; }
+    ok("fail: redundant-copies fails when a fan-out downpipe has only one proven copy", byId(computePosture(i, NOW)).get("redundant-copies")?.status === "fail");
+  }
+  {
+    // redundant-copies: both pinned destinations are proven to hold the latest run.
+    const i = healthyInput();
+    const first = i.downpipes[0];
+    if (first) { first.destinationCount = 2; first.provenCopies = 2; }
+    ok("pass: redundant-copies passes when both destinations hold the latest run", byId(computePosture(i, NOW)).get("redundant-copies")?.status === "pass");
+  }
+  {
+    // redundant-copies: with no downpipes at all there is nothing to grade.
+    const i = healthyInput();
+    i.downpipes = [];
+    ok("pass: redundant-copies passes with no downpipes", byId(computePosture(i, NOW)).get("redundant-copies")?.status === "pass");
+  }
+  {
+    // redundant-copies: the catching-up detail names the destination and its "n of m runs" count when its
+    // most recent replication attempt succeeded (it is behind, not broken).
+    const i = healthyInput();
+    const first = i.downpipes[0];
+    if (first) {
+      first.destinationCount = 2;
+      first.provenCopies = 1;
+      first.redundancyGaps = [{ destinationId: "dest-catchup", lastOk: true, heldRuns: 3, totalRuns: 5 }];
+    }
+    const detail = byId(computePosture(i, NOW)).get("redundant-copies")?.detail ?? "";
+    ok("fail: redundant-copies names a catching-up destination with its run count", /replication is catching up: dest-catchup holds 3 of 5 runs/.test(detail));
+  }
+  {
+    // redundant-copies: the failing-copy detail names the destination without claiming a run count, when
+    // its most recent replication attempt failed (the reachability heartbeat is down, not merely behind).
+    const i = healthyInput();
+    const first = i.downpipes[0];
+    if (first) {
+      first.destinationCount = 2;
+      first.provenCopies = 1;
+      first.redundancyGaps = [{ destinationId: "dest-broken", lastOk: false, heldRuns: 1, totalRuns: 5 }];
+    }
+    const detail = byId(computePosture(i, NOW)).get("redundant-copies")?.detail ?? "";
+    ok("fail: redundant-copies names a failing-copy destination", /copies to dest-broken are failing/.test(detail));
   }
 }
 
@@ -522,9 +579,8 @@ function computeImmutabilityRetentionAxis(): void {
     ok("retention CONTROL: an armed enforcing bucket scores clean", withRule.score === 100 && noRule.score === 100 && unread.score === 100);
     ok("retention CONTROL: the armed remediation is unchanged", unread.check?.remediation === "No action required; store-enforced WORM is in force. Verify the retention window meets your policy.");
   }
-  // GOVERNANCE. The pass detail used to say "a compromised delete-credential cannot hard-delete
-  // or overwrite an archive within its retention window" for governance as well as compliance, and no case
-  // here armed governance, so nothing noticed. Under governance a principal holding
+  // GOVERNANCE. The strong claim "a compromised delete-credential cannot hard-delete or overwrite an
+  // archive within its retention window" holds for compliance mode only. Under governance a principal holding
   // s3:BypassGovernanceRetention can shorten or remove the window, and that is usually the backup
   // administrator. The check still passes (the store does enforce the lock), but the detail names the bypass
   // and the remediation points at compliance mode.
@@ -1092,11 +1148,58 @@ function computeKnownCheckIds(): void {
   // them lack an entry -- so that drift cannot recur silently even if a future edit forgets to bump the
   // number below.
   ok("known: off-account-audit-mirror is a known check id", isKnownCheckId("off-account-audit-mirror"));
-  ok("known: CHECK_SEVERITY has all twenty-nine", Object.keys(CHECK_SEVERITY).length === 29);
+  ok("known: CHECK_SEVERITY has all thirty", Object.keys(CHECK_SEVERITY).length === 30);
   ok("known: release-signer-pin is a known check id, at MEDIUM severity", isKnownCheckId("release-signer-pin") && CHECK_SEVERITY["release-signer-pin"] === "medium");
   ok("known: operational-retired-key-held is a known check id, at HIGH severity", isKnownCheckId("operational-retired-key-held") && CHECK_SEVERITY["operational-retired-key-held"] === "high");
   ok("known: attended-verification-cadence is a known check id", isKnownCheckId("attended-verification-cadence"));
   ok("known: recipient-set-expected is a known check id", isKnownCheckId("recipient-set-expected"));
+}
+
+// ---- console-on-workers-dev: the console's hostname, read from the configured CONSOLE_ORIGIN -----------
+// The whole path is driven: the env value goes through the router's slice, the scheduler DO's parser (as
+// the POST /posture route does), and computePosture. An origin that cannot be read as an https hostname
+// leaves the check out rather than grading a value nobody observed.
+type ConsoleOriginCheck = { status: string; severity: string; detail: string; remediation: string; how: string; title: string; control: string };
+function consoleOriginCheck(origin: string | undefined): ConsoleOriginCheck | undefined {
+  const env = (origin === undefined ? {} : { CONSOLE_ORIGIN: origin }) as unknown as Env;
+  const dobj = new SchedulerDO({ storage: new MockStorage() } as unknown as DurableObjectState) as unknown as { parsePostureStatusSlice(raw: unknown): ReturnType<typeof healthyInput>["status"] };
+  const parsed = dobj.parsePostureStatusSlice(JSON.parse(JSON.stringify(statusSliceForPosture(env, {}))));
+  const base = healthyInput();
+  const report = computePosture({ ...base, status: { ...base.status, ...parsed } }, NOW);
+  return report.checks.find((c) => c.id === "console-on-workers-dev") as ConsoleOriginCheck | undefined;
+}
+
+function computeConsoleOnWorkersDev(): void {
+  const wd = consoleOriginCheck("https://console.example-team.workers.dev");
+  ok("console-origin: a workers.dev origin FAILS", wd?.status === "fail");
+  ok("console-origin: a workers.dev origin is graded at the severity table's level (low)", wd?.severity === "low");
+  ok("console-origin: the title names the console on your own domain", wd?.title === "Console on your own domain");
+  ok("console-origin: the fail detail says the TLS floor and ciphers are Cloudflare's platform defaults", /TLS floor and cipher suites are Cloudflare's platform defaults/.test(wd?.detail ?? ""));
+  ok("console-origin: the fail detail says the console has no hostname of your own for Cloudflare Access", /no hostname of your own for Cloudflare Access/.test(wd?.detail ?? ""));
+  ok("console-origin: the remediation names the custom domain route settings and CONSOLE_ORIGIN", /custom_domain = true/.test(wd?.remediation ?? "") && /workers_dev = false/.test(wd?.remediation ?? "") && /CONSOLE_ORIGIN/.test(wd?.remediation ?? ""));
+  ok("console-origin: the remediation names Minimum TLS 1.2 and the Modern cipher preset with its Advanced Certificate Manager need", /Minimum TLS 1\.2/.test(wd?.remediation ?? "") && /Modern/.test(wd?.remediation ?? "") && /Advanced Certificate Manager/.test(wd?.remediation ?? ""));
+  ok("console-origin: the how names the hostname of the configured CONSOLE_ORIGIN", /hostname of the configured CONSOLE_ORIGIN/.test(wd?.how ?? ""));
+  ok("console-origin: the copy has no U+2014 and claims no workers.dev TLS version", wd !== undefined && !JSON.stringify(wd).includes("\u2014") && !/TLS 1\.3|TLSv1/i.test(wd.detail));
+  ok("console-origin: a mixed-case .Workers.Dev origin FAILS", consoleOriginCheck("https://Console.Team.Workers.Dev")?.status === "fail");
+  ok("console-origin: a workers.dev origin with a port and path FAILS", consoleOriginCheck("https://a.b.workers.dev:443/x")?.status === "fail");
+  const own = consoleOriginCheck("https://console.example.com");
+  ok("console-origin: a custom-domain https origin PASSES", own?.status === "pass");
+  ok("console-origin: the pass copy is not the fail copy", own !== undefined && own.detail !== wd?.detail && !/platform defaults/.test(own.detail));
+  ok("console-origin: notworkers.dev is a lookalike and PASSES", consoleOriginCheck("https://notworkers.dev")?.status === "pass");
+  ok("console-origin: workers.dev.example.com is a lookalike and PASSES", consoleOriginCheck("https://workers.dev.example.com")?.status === "pass");
+  ok("console-origin: an unset CONSOLE_ORIGIN omits the check", consoleOriginCheck(undefined) === undefined);
+  ok("console-origin: an empty CONSOLE_ORIGIN omits the check", consoleOriginCheck("") === undefined);
+  ok("console-origin: an unparseable CONSOLE_ORIGIN omits the check", consoleOriginCheck("not a url") === undefined);
+  ok("console-origin: a non-https origin omits the check", consoleOriginCheck("http://localhost:8787") === undefined);
+  // Score: a failing low check costs weight 1. Healthy total 49 with the check absent; failing adds 1 to the
+  // denominator and nothing to the numerator, 49/50 -> 98.
+  const i = healthyInput();
+  i.status.consoleOnWorkersDev = true;
+  ok("console-origin: a fail costs low weight (49 of 50 -> 98)", computePosture(i, NOW).score === 98);
+  const j = healthyInput();
+  j.status.consoleOnWorkersDev = false;
+  ok("console-origin: a pass leaves the score at 100", computePosture(j, NOW).score === 100);
+  ok("console-origin: an absent slice leaves the baseline check list unchanged", !byId(computePosture(healthyInput(), NOW)).has("console-on-workers-dev"));
 }
 
 // ---- structural drift gate: every check computePosture can PRODUCE has a CHECK_SEVERITY entry ------------

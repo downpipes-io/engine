@@ -80,6 +80,9 @@ export async function fetchReplication(scheduler: DurableObjectStub): Promise<Re
         ...(typeof s.lastAttemptAt === "number" ? { at: s.lastAttemptAt } : {}),
         ...(typeof s.holdsIndex === "number" ? { holdsIndex: s.holdsIndex } : {}),
         ...(typeof s.holdsRunId === "string" ? { holdsRunId: s.holdsRunId } : {}),
+        // A reachable destination that holds no run yet: ok:true alone reads as a healthy copy, so the row
+        // says there is no restorable copy here. A failed row's reason already says more than this would.
+        ...(s.lastOk === true && (typeof s.holdsIndex !== "number" || s.holdsIndex < 0) ? { copy: "none-yet" } : {}),
         ...(s.lastOk !== true && typeof s.reason === "string" ? { reason: s.reason } : {}),
         ...(s.lastOk !== true && typeof s.reasonSite === "string" && REPL_REASON_SITE_SET.has(s.reasonSite) ? { reasonSite: s.reasonSite } : {}),
         // nextStep: what to do about a replica reason, from the engine's own table (seal-faults.ts).

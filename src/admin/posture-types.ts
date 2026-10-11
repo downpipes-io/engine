@@ -6,6 +6,17 @@
 
 import type { RestoreProvenMethod } from "../sched/types.ts";
 
+// PostureRedundancyGap is one non-origin destination the redundant-copies check found genuinely short of
+// the run it is fairly graded on (destinations.ts assessRedundancy): lastOk is its most recent replication
+// attempt's outcome, heldRuns/totalRuns are how many of the downpipe's retained successful runs it holds,
+// of how many exist. Redaction-safe: an id, a boolean and two counts, never a key, endpoint or credential.
+export interface PostureRedundancyGap {
+  destinationId: string;
+  lastOk: boolean;
+  heldRuns: number;
+  totalRuns: number;
+}
+
 // PostureDownpipeInput is the per-downpipe slice computePosture reads: the id + name (redaction-safe),
 // the restore-test recency/outcome, the restore-test cadence (0/absent = off), and whether the downpipe
 // has completed a run yet. All optional fields are honestly absent when the downpipe has never had that
@@ -18,6 +29,19 @@ export interface PostureDownpipeInput {
   // to two places (the redundant-copies check). The platform can VERIFY this; media-type diversity it
   // cannot (cloud-only), so that is the separate operator-attested media-diversity check.
   destinationCount?: number;
+  // provenCopies is how many of this downpipe's destinations are PROVEN to hold its latest successful
+  // run (the engine's own replication state: the run's origin destination always counts, plus any other
+  // configured destination whose DestReplState.holdsIndex is at or past that run's index). Absent when
+  // the downpipe is pinned to fewer than two destinations (nothing to prove) or has never completed a
+  // successful run (there is no run yet for a copy to be proven against). The redundant-copies check
+  // reads this instead of destinationCount alone, so a destination still catching up after being added,
+  // or one whose copies keep failing, is never counted as a second copy before replication reports it.
+  provenCopies?: number;
+  // redundancyGaps lists the destinations assessRedundancy found genuinely short of the run they are
+  // graded on (never one still within the fallback bound with no visit yet): the catching-up or
+  // failing-copy detail the redundant-copies check names. Absent when there is nothing to name (fully
+  // proven, nothing yet to grade, or fewer than two destinations).
+  redundancyGaps?: PostureRedundancyGap[];
   restoreTestCadenceSeconds?: number; // 0 or absent = off
   lastRestoreTestAt?: number; // epoch ms of the last scheduled restore test
   lastRestoreTestOk?: boolean; // outcome of that test
@@ -195,6 +219,10 @@ export interface PostureInput {
     // not set: the operational-retired-key-held check is then omitted rather than graded.
     operationalRetired?: boolean;
     tokenFallbackDisabled: boolean;
+    // consoleOnWorkersDev (OPTIONAL) is the router's reading of the CONSOLE_ORIGIN hostname (see
+    // posture-checks-console.ts): true = a workers.dev host, false = any other https host. ABSENT = the
+    // origin is unset, unparseable or not https, and the console-on-workers-dev check is then left out.
+    consoleOnWorkersDev?: boolean;
     // Break-glass disposal slice (dispose-bootstrap-token check). adminTokenPresent is the env presence of
     // ADMIN_TOKEN (the break-glass bearer). bootstrapConsumed is the DO latch that the first Owner has been
     // claimed. breakGlassTokenRetired is the DO latch that the Owner has retired the token in-app. The check

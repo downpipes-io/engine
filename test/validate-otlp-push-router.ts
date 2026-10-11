@@ -275,7 +275,7 @@ async function main(): Promise<void> {
 
       // Self-approval is refused (maker != checker), at the DO (defence in depth).
       const selfApprove = await call(env, "POST", `/admin/owner-actions/${pendingId}/approve`, { jwt: await tokenFor(O1) });
-      ok("DUAL CONTROL: owner1 cannot approve their own proposal", selfApprove.status !== 200);
+      ok("DUAL CONTROL: owner1 cannot approve their own proposal (maker != checker)", selfApprove.status === 400 && selfApprove.json.error === "cannot approve your own action");
 
       ageRecord(s.storage, OWNER_ACTION_PREFIX + pendingId, "proposedAt", AGE_PAST_DWELL);
       const approve = await call(env, "POST", `/admin/owner-actions/${pendingId}/approve`, { jwt: await tokenFor(O2) });

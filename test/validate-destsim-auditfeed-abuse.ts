@@ -315,7 +315,7 @@ async function testConcurrentWriteStability(): Promise<void> {
   const M = 10;
   for (let i = 0; i < M; i++) await stub.appendAudit(DRAFT); // seqs 16..25
 
-  // The previously-returned window is byte-identical on re-pull: seqs are never renumbered.
+  // The window returned earlier is byte-identical on re-pull: seqs never change.
   const windowAfterFull = ((await (await pull(stub, bearer, "?afterSeq=0&limit=1000")).json()) as FeedEnvelope).events;
   const firstK = windowAfterFull.slice(0, K);
   ok("the previously-returned window [1..K] is UNCHANGED after new appends (same seqs+hashes, never renumbered)", JSON.stringify(firstK) === JSON.stringify(windowBefore));

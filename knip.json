@@ -33,6 +33,7 @@
     "go",
     "knip",
     "madge",
+    "semgrep",
     "stryker",
     "tsc",
     "vitest",

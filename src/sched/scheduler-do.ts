@@ -534,8 +534,8 @@ export class SchedulerDO extends SchedulerDOAssembled {
       // WHAT THIS WRITE MOVED, so the operator whose save collides with it is told what changed rather than
       // only that something did. Field NAMES only. On a create nothing moved, so it is honestly absent; on
       // a re-upsert that changes nothing the PRIOR record is carried forward rather than erased, because
-      // "the last change to this downpipe" is still true of it and dropping it would make the next refusal
-      // less informative than the one before.
+      // it remains the most recent change to this downpipe and dropping it would make the next refusal
+      // less informative.
       ...((): { lastConfigChange?: LastConfigChange } => {
         const fields = movedConfigFields(prior?.config, resolved);
         if (fields.length === 0) return prior?.lastConfigChange !== undefined ? { lastConfigChange: prior.lastConfigChange } : {};

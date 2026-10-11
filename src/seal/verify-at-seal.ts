@@ -1,6 +1,7 @@
 import type { HybridVerifier } from "../crypto/sign.ts";
 import type { Destination } from "../dest/types.ts";
 import type { Env } from "../env.d.ts";
+import { markIntegrityFaultLedger, rollbackIntegrityFaultLedger } from "../format/integrity-fault-ledger.ts";
 import { attestKeyless, type ObjectStore, openRun, openRunWithMaster } from "../format/reader.ts";
 import type { Signer } from "../format/writer.ts";
 import { loadIdentity, loadSigner, operationalReadbackPrivate, verifierFrom } from "../keys-env.ts";
@@ -294,6 +295,11 @@ export async function verifyAtSeal(env: Env, dest: Destination, runId: string, p
   let ran = 0; // actual attempts run (NOT maxAttempts) -- reported honestly even on an early break
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     ran = attempt;
+    // A retried attempt's integrity faults belong to a read that the next attempt repeats. The RUNLOG body and
+    // its .sig are two objects written one after the other, so a read between the two writes sees a new body
+    // beside the old signature and records a sig-invalid row that the next read does not reproduce. Only the
+    // attempt that decides the verdict keeps its faults: a persistent fault is recorded by the final attempt.
+    const mark = markIntegrityFaultLedger();
     last = await verifyAtSealOnce(env, dest, runId, plaintextBytes, master); // never throws (fail-open)
     if (last.status === "verified") {
       // Healthy first try: return unchanged (no attempts/recovered fields -> looks exactly like
@@ -308,6 +314,7 @@ export async function verifyAtSeal(env: Env, dest: Destination, runId: string, p
     }
     // SUSPECT: retry only when the reason is consistency-curable AND attempts remain.
     if (attempt < maxAttempts && isRetryableVerifyReason(last.reason)) {
+      rollbackIntegrityFaultLedger(mark);
       await sealVerifyBackoff(attempt);
       continue;
     }

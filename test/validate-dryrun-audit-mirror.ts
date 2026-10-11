@@ -85,6 +85,7 @@ async function main(): Promise<void> {
 
     // GATE OFF: an inline role change commits, and its row is mirrored.
     let status = 0;
+    let refusalText = "";
     const inline = await mirrored(async () => {
       status = (await call(OWNER, "POST", "/admin/roles", { email: TARGET2, role: "viewer" })).status;
     });
@@ -108,16 +109,20 @@ async function main(): Promise<void> {
 
     // A propose refused AFTER the dry run: the bare-token break-glass cannot propose under dual control.
     const refused = await mirrored(async () => {
-      status = (await tokenCall("POST", "/admin/roles", { email: "gina-mirror@acme.example", role: "viewer" })).status;
+      const res = await tokenCall("POST", "/admin/roles", { email: "gina-mirror@acme.example", role: "viewer" });
+      status = res.status;
+      refusalText = ((await res.json()) as { error?: string }).error ?? "";
     });
-    ok("gate on: the bare-token propose is refused (400)", status === 400);
+    ok("gate on: the bare-token propose is refused (400) for want of an attributable identity", status === 400 && /dual control requires an attributable identity/.test(refusalText));
     ok("gate on: the refused bare-token propose mirrors no line", refused.length === 0);
 
     // A propose the dry run itself refuses: an unknown role fails validation inside the mutation.
     const invalid = await mirrored(async () => {
-      status = (await call(OWNER, "POST", "/admin/roles", { email: "hal-mirror@acme.example", role: "not-a-role" })).status;
+      const res = await call(OWNER, "POST", "/admin/roles", { email: "hal-mirror@acme.example", role: "not-a-role" });
+      status = res.status;
+      refusalText = ((await res.json()) as { error?: string }).error ?? "";
     });
-    ok("gate on: a propose the dry run refuses is a 4xx", status >= 400 && status < 500);
+    ok("gate on: a propose the dry run refuses is a 400 on the role validation", status === 400 && refusalText.startsWith("role must be viewer/operator/approver/owner"));
     ok("gate on: the refused propose mirrors no role-change line", !invalid.some((e) => e.action === "role-change"));
 
     // The hold is released after a dry run, including one that threw: the next committed row is mirrored.

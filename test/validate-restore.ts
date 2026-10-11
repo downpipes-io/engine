@@ -1233,6 +1233,7 @@ async function proofCfConfigTiers(fx: Fixture): Promise<void> {
         { sourceType: "cf-config" as const, name: "load-balancers", value: utf8(JSON.stringify([])) }, // ordered tier
         { sourceType: "cf-config" as const, name: "dns", value: utf8(JSON.stringify([])) }, // writable idempotent, no token
         { sourceType: "cf-config" as const, name: READ_ONLY_IDEMPOTENT, value: utf8(JSON.stringify({})) }, // read-only idempotent
+        { sourceType: "cf-config" as const, name: "r2-bucket-config", value: utf8(JSON.stringify([])) }, // captured, not restorable
       ],
       windowStart: "2026-06-07T00:00:00.000Z", windowEnd: "2026-06-07T00:00:01.000Z", createdAt: "2026-06-07T00:00:01.000Z",
       runlogIndex: 1, prevRunId: null, randomNonce: () => rand(16), randomSalt: () => rand(16),
@@ -1243,6 +1244,7 @@ async function proofCfConfigTiers(fx: Fixture): Promise<void> {
     ok("an ordered cf-config surface steers to re-create in dependency order", tierPlan.skipped.some((s) => s.name === "load-balancers" && /dependency order/.test(s.reason)));
     ok("a writable idempotent surface with no token says supply an edit-scoped token", tierPlan.skipped.some((s) => s.name === "dns" && /supply an edit-scoped Cloudflare token/.test(s.reason)));
     ok(`a read-only idempotent surface (${READ_ONLY_IDEMPOTENT}) says replay via the Cloudflare API`, tierPlan.skipped.some((s) => s.name === READ_ONLY_IDEMPOTENT && /replay via the Cloudflare API/.test(s.reason)));
+    ok("the per-bucket R2 settings surface says captured, not restorable, and names what to re-apply", tierPlan.skipped.some((s) => s.name === "r2-bucket-config" && /captured, not restorable/.test(s.reason) && /CORS, lifecycle, bucket lock, custom domains, public r2\.dev access/.test(s.reason)));
   }
 }
 

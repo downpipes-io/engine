@@ -27,7 +27,6 @@
 // Assertions are on the EXACT row (actor, action, outcome, target.runId), never on existence or a count.
 //
 // Run: node test/runtime/denied-apply-audit-drive.mjs
-//
 
 import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -278,7 +277,7 @@ async function main() {
     // is never masked by a 429" (router-restore.ts, the confirm:true branch). Drive the operator over its
     // own per-caller window (RATE_LIMIT_MAX_PER_WINDOW = 120 mutating requests / 60s) with DRY RUNS, which
     // it is entitled to and which are rate-limited in their own branch, then attempt the apply again with
-    // a fresh synthetic runId. It must still be 403 with a fresh audit row, not a 429.
+    // a fresh synthetic runId. It must still be 403 with an audit row for that attempt, not a 429.
     await waitOutAuditFoldWindow();
     let burnt = 0;
     let sawDryRunLimit = false;

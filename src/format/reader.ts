@@ -393,7 +393,7 @@ async function openRunWith(store: ObjectStore, runID: string, verifier: HybridVe
 
   const rootBytes = await store.get(`run/${runID}/root.manifest.json`);
   const sigText = new TextDecoder().decode(await store.get(`run/${runID}/root.manifest.json.sig`));
-  const sig = b64urlDecode(sigText.trim());
+  const sig = decodeRootSignature(sigText);
   if (!(await hybridVerify(verifier, rootBytes, sig))) {
     throw integrityError(`root signature did not verify under the operator-pinned signer${signerMismatchHint(rootBytes, verifier)}`);
   }
@@ -547,6 +547,17 @@ export interface RunCapsule {
   signingKeyFingerprint: string;
 }
 
+// A root signature file whose text is not base64url (a truncated or damaged file) is a signature that does
+// not verify, so it is the same integrity failure. The decode error quotes a byte of the object, so it is not
+// carried into the refusal.
+function decodeRootSignature(sigText: string): Uint8Array {
+  try {
+    return b64urlDecode(sigText.trim());
+  } catch {
+    throw integrityError("root signature file is not valid base64url");
+  }
+}
+
 /**
  * readRunCapsule fetches and SIGNATURE-VERIFIES a run's root manifest, then returns only its master-capsule
  * wraps + key commitment (never the whole manifest). The signature check means a tampered/forged manifest
@@ -563,7 +574,7 @@ export async function readRunCapsule(store: ObjectStore, runID: string, verifier
   if (!isValidRunId(runID)) throw integrityError("runId is not a canonical ULID");
   const rootBytes = await store.get(`run/${runID}/root.manifest.json`);
   const sigText = new TextDecoder().decode(await store.get(`run/${runID}/root.manifest.json.sig`));
-  const sig = b64urlDecode(sigText.trim());
+  const sig = decodeRootSignature(sigText);
   if (!(await hybridVerify(verifier, rootBytes, sig))) {
     throw integrityError(`root signature did not verify under the operator-pinned signer${signerMismatchHint(rootBytes, verifier)}`);
   }

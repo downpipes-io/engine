@@ -232,7 +232,8 @@ function testIdpSetupEvidence(): void {
 
   // The pre-write validator refusals (which 400 before ANY storage write, so nothing else records them).
   const refusals: Array<[string, string]> = [
-    [`private_key_jwt client authentication is not yet implemented in this build`, "secret-mode-unsupported"],
+    [`private_key_jwt client authentication is not supported`, "secret-mode-unsupported"],
+    [`the secrets-store secret mode is not supported; use the do-plaintext secret mode`, "secret-mode-unsupported"],
     [`idpSigningCerts: a PEM certificate did not parse`, "cert-invalid"],
     [`issuer must be an https URL (got ${CUSTOMER_URL})`, "url-unsafe"],
     [`a connection with id "${SENTINEL}" already exists`, "duplicate-id"],

@@ -348,7 +348,7 @@ async function main(): Promise<void> {
     const e = await caught(() => dobj.removeDest("A", false, OWNER));
     ok(
       "a fully fanned-out population gets the wait sentence and the cost of force, nothing else",
-      e?.message === "destination is the only proven copy of 4 backed-up run(s) (Fanned). Replication copies them to another destination of their downpipes at each 15-minute tick, oldest first within each downpipe. This count falls as replication copies runs. It can stay the same for several ticks while replication copies shared data, and the wait can take hours. If replication cannot copy a run (for example, no destination holds it), its downpipe's newer runs stay in this count until that run leaves the downpipe's newest 50 runs. Or remove it with force: downpipes then cannot restore those 4 run(s).",
+      e?.message === "destination is the only proven copy of 4 backed-up run(s) (Fanned). Replication copies them to another destination of their downpipes at each 15-minute tick, oldest first within each downpipe. This count falls as replication copies runs. It can stay the same for several ticks while replication copies shared data, and the wait can take hours. If replication cannot copy a run (for example, no destination holds it), that run stays in this count until it leaves the downpipe's newest 50 runs. Or remove it with force: downpipes then cannot restore those 4 run(s).",
     );
   }
   {

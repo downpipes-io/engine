@@ -134,11 +134,15 @@ console.log("IdP cert rollover + secret-expiry tracking + lockout pre-flight\n")
   const dup = validateSamlCerts([a, a]);
   ok("validateSamlCerts: a duplicate certificate is REFUSED, not collapsed to one", dup.ok === false);
   ok("validateSamlCerts: the refusal says the same certificate appears twice", dup.ok === false && dup.reason.includes("same signing certificate appears twice"));
-  ok("validateSamlCerts: an empty array is refused", validateSamlCerts([]).ok === false);
-  ok("validateSamlCerts: a non-PEM string is refused (no BEGIN CERTIFICATE)", validateSamlCerts(["not a cert"]).ok === false);
-  ok("validateSamlCerts: a non-array is refused", validateSamlCerts("nope").ok === false);
+  // Each refusal pins the reason of the branch that refused it. The over-capacity, empty and not-PEM branches
+  // are separate statements, and a bare `ok === false` is also true when a neighbouring branch refuses.
+  const reasonOf = (r: ReturnType<typeof validateSamlCerts>): string => (r.ok ? "" : r.reason);
+  ok("validateSamlCerts: an empty array is refused as an empty set", reasonOf(validateSamlCerts([])) === "idpSigningCerts must be a non-empty array of PEM X.509 certificates");
+  ok("validateSamlCerts: a non-PEM string is refused (no BEGIN CERTIFICATE)", reasonOf(validateSamlCerts(["not a cert"])).startsWith("each idpSigningCert must be a PEM-encoded X.509 certificate"));
+  ok("validateSamlCerts: a non-array is refused as not an array of certificates", reasonOf(validateSamlCerts("nope")) === "idpSigningCerts must be a non-empty array of PEM X.509 certificates");
   const nine = Array.from({ length: 9 }, (_, i) => buildCert("300101000000Z", i + 10));
-  ok("validateSamlCerts: more than 8 certs is refused", validateSamlCerts(nine).ok === false);
+  ok("validateSamlCerts: more than 8 certs is refused on LENGTH, naming the Replace step", /^the pinned set holds at most 8 signing certificates and this would make 9\. Take the Replace step/.test(reasonOf(validateSamlCerts(nine))));
+  ok("validateSamlCerts: control - exactly 8 distinct certs are accepted, so the 9-cert refusal is the count", validateSamlCerts(nine.slice(0, 8)).ok === true);
 
   const base = { id: "x", label: "X", presetId: "entra", enabled: true };
   const goodOidc = validateOidc({ ...oidcProposal("x", "2027-01-01T00:00:00Z"), secretRef: { mode: "do-plaintext" } } as never, base);
@@ -187,13 +191,16 @@ console.log("IdP cert rollover + secret-expiry tracking + lockout pre-flight\n")
 
   // Refusals: a malformed cert, neither field, and a non-SAML connection.
   const bad = await handleAdmin(new Request(adminUrl("/admin/idp/connections/cert"), { method: "POST", headers: tokenHeaders(), body: JSON.stringify({ connId: "work-idp", addCerts: ["not a cert"] }) }), env);
-  ok("cert rollover: a non-PEM cert is refused (ok:false)", ((await bad.json()) as { ok?: boolean }).ok === false);
+  const badBody = (await bad.json()) as { ok?: boolean; reason?: string };
+  ok("cert rollover: a non-PEM cert is refused by the PEM check (ok:false, its reason)", badBody.ok === false && (badBody.reason ?? "").startsWith("each idpSigningCert must be a PEM-encoded X.509 certificate"));
   const neither = await handleAdmin(new Request(adminUrl("/admin/idp/connections/cert"), { method: "POST", headers: tokenHeaders(), body: JSON.stringify({ connId: "work-idp" }) }), env);
-  ok("cert rollover: providing neither addCerts nor certs is refused", ((await neither.json()) as { ok?: boolean }).ok === false);
+  const neitherBody = (await neither.json()) as { ok?: boolean; reason?: string };
+  ok("cert rollover: providing neither addCerts nor certs is refused (its reason)", neitherBody.ok === false && neitherBody.reason === "provide addCerts (append a rollover cert) or certs (replace the full set)");
 
   await handleAdmin(new Request(adminUrl("/admin/idp/connections"), { method: "POST", headers: tokenHeaders(), body: JSON.stringify({ proposal: oidcProposal("oidc1"), secret: "s" }) }), env);
   const nonSaml = await handleAdmin(new Request(adminUrl("/admin/idp/connections/cert"), { method: "POST", headers: tokenHeaders(), body: JSON.stringify({ connId: "oidc1", addCerts: [certA] }) }), env);
-  ok("cert rollover: a non-SAML connection is refused (cert rollover is SAML-only)", ((await nonSaml.json()) as { ok?: boolean; reason?: string }).ok === false);
+  const nonSamlBody = (await nonSaml.json()) as { ok?: boolean; reason?: string };
+  ok("cert rollover: a non-SAML connection is refused (cert rollover is SAML-only)", nonSamlBody.ok === false && nonSamlBody.reason === "cert rollover applies only to a SAML connection");
 
   // The route is behind authentication (the dual-control + keys.ceremony gates are unit-tested elsewhere).
   const unauth = await handleAdmin(new Request(adminUrl("/admin/idp/connections/cert"), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ connId: "work-idp", addCerts: [certA] }) }), env);

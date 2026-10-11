@@ -1,5 +1,5 @@
-# The engine deploys into the CUSTOMER's own Cloudflare account. It is reached on a
-# custom domain only; the workers.dev route is disabled by policy (no *.workers.dev).
+# The engine deploys into the CUSTOMER's own Cloudflare account. It has no public hostname by default
+# (workers_dev = false); the console reaches it through a service binding and runs on a custom domain or workers.dev.
 # The bindings below are placeholders the customer fills in at onboarding.
 name = "downpipe-engine"
 main = "src/index.ts"
@@ -80,7 +80,7 @@ EMAIL_FROM = "no-reply@downpipes.io"
 # configured:false and the console shows a "configure the channel" posture (no crash).
 UPDATE_CHANNEL_URL = "https://update.downpipes.io/stable.json"
 #
-# CEREMONY (vendor, ONE-TIME — full steps in design/LICENCE-UPDATES-ACTIVATION.md):
+# CEREMONY (vendor, ONE-TIME — steps below):
 #   1. Updates signer + first channel:
 #        node tools/publish-channel.mjs --version <ENGINE_VERSION> --out-key release-signer.key \
 #             --out channel.json --out-sig channel.json.sig
@@ -88,17 +88,10 @@ UPDATE_CHANNEL_URL = "https://update.downpipes.io/stable.json"
 #         to the update.downpipes.io R2 bucket (enable Public access + attach the custom domain once):
 #           wrangler r2 object put <bucket>/stable.json     --file channel.json     --content-type application/json
 #           wrangler r2 object put <bucket>/stable.json.sig --file channel.json.sig --content-type text/plain
-#   2. Licence signer (its private ALREADY lives in the control-plane Secrets Store as
-#      DOWNPIPES_LICENCE_SIGNER_PRIVATE): its public twin is baked into DEFAULT_LICENCE_SIGNER_PUBLIC in
+#   2. Licence signer: its public key is baked into DEFAULT_LICENCE_SIGNER_PUBLIC in
 #      src/licence-pins.ts, so a stock engine sets no LICENCE_SIGNER_PUBLIC. Re-pin only when the signer
-#      is rotated. Read the new public twin with the admin-gated GET /admin/signer-public.
-#      control.downpipes.io answers 404 to every /admin/* path, so send the read to a local
-#      `wrangler dev --remote` of the production control plane:
-#        curl -H "Authorization: Bearer $DOWNPIPES_ADMIN_MINT_TOKEN" http://localhost:8787/admin/signer-public
-#      -> copy the returned licenceSignerPublic into src/licence-pins.ts. A POST /admin/licence mint
-#         echoes the same value alongside a minted token. Both keys are constant across renewals and
-#         across customers.
-UPDATE_SIGNER_PUBLIC = "3or8OMMSi9P2wRktaAe1YTpCac90qCMplctvTGnm5Ozr5RLdB8Vh-kKpchoo8LgUmdfZN1E6_70EcMhF5rtOJSBPqZUoxw42gnk_m7NhCPib3aSnRCf4q_j1ZvhoTZpjDvMUS6CiaoYckqvWbMa-Y8BL89bzpqD16HbbuEOo-gubFfF0e2LybD4Yev_-mTT-rBbfg1hZ0rhMFOtP322ri7g4XUF-YGqb8zSSmRdGGRIEXVsdcFZbdRnypiYqIvVwy4C1_dbdiCKlfd9-MUHh41IF-H2qPHxfJy5Nsvi_Jl5Wn6JtPBm52O2kR4neB3aEXF3eacRXWxGsrdjMsm2PTo3trBGgyP34QOXSEzj7poYOHuq3nS6TEa8bB4Ix03ae4kY3adgazyxhfCR-tCOBKslJewKrk2mRWpDKYzU7QeWj3egT6IUH1kLvAm1X-4OcqKccBW_zV6j7fKE7qz2ynbilpxjN66RV42Zoj9h9rPiyjhgyAq6LYJLI3dvYS1on8hBvNmAQ7hDXQ10rdyk_iQ7_xLKqbt0gVyu_C-mFdsFUnC64LtYGXj1SfDo8IjSekMZxJ4wn3yPe1VDPLOZ4znkElle5n8L1JowF9CeilrwWakfasqFnCkfMVhbh_nAZYu42HvSOy-SJrzv6UjgW6D8AuafoIYw0JWOtO8_ApmEz_4tAo3iRX-IiNEXTwHpWvON3HQh_-nphpvJZlmChay1I_VIJSPH6yABLfHbMTJuzqBVd5TEhkHtpVGlIFkHaABSuuZPLiwP3qniI1mqacQcAyXcwr4xya1wqIacfFWwfoDdFIS-XcF50ZXnUakHKOu4WAn0NBl3xoZyabJ9m5vyEH_GzQTLtaTCH3hqggl2vMAimMY-diId8ANXli2iW_hFai3wPVh6523cLVcwMFviMJH651UUUQ6g5pKwBe_ldr8vhLnnm8ANxIwHVjJuDd2JVl4eo2ajffaAjuZdqsa_KM6_bUYTtuuv6nyUORa18dwIUzrRYLpEAS55HJIziU9qbiUo04w9QWncBKyP_mNS6kc_zcyBSMEKvil2viqmuT69Gs3dFFocVKbM_k1n3q-5IBWFB4nJo_BuHSSs8vE6APUlel-bwuSTK4ql6gnoPuyn16GPy_rS3SwUjU3wbyjQ7SzEU1eD3w-msoZOfK0iMEjDCAwbAhJirfm4MpapaJ-hnkQohQZmqSej6cA7cvEUiIGLONCEqFLmVnOmX1b1ukOo3Sv_QYMB25J59c1yQAwFoKJ64O_F0y2fWjR3Al-3ztHgqnYcwJ6aizVtLxHacGBGcUskCQWYaSLJbXKvHbH54AgBBjDsCjGMeBsM9u3aT9bt11svGDSxViOs2pfkcOQgMDajsxvyOhLc1zpeS2B2C3GEypkYdImrfCG4WtTEMdfDPKCSYx-E5GNOPfqaFswSsY33KnefNorY5Hn1QgoMU-9MnKWcdwWEtKAONrf6QNy-b78Vfi3NmVMPzXI2B_LCOmT_qwSnUATFqYB1TyHXtGNk-s6hDI84zz4cbMODaHqTgdfHwC3o50DsHT0iYPazMjQce1Jla4ZI6bFR1PVzUgz61SRGhMUV_1Ajck5rfSuSyL9NcUi7K-Iy_Gm8nntyM7PDqXgnggfoHMzwCi8MhzbJUWeDxbcI6b9CNe7tiZz-D2Kwac__3NeY9s68YpQUovICjNIKjFrp4TXEbGYBcLoMzjAXC3qTF9nB-1EvZ4_H8rjPEJv2Pvhbz49NTdY9k7NJjEOdA4uKrWoG3Oajn19CzTpcnKlrCE_-QlqepsxaPcPOQSzGx4jwKzBZ0HhwC71tFx5MS3hSE7-jHbX5HdH4LTYBr2GdaLukwIfZbdUQBCmmy30C5o7GKvoLO8l9DA9LWsa3hnOPWD5R23fyxXy9g63xR84o_NjW_eMJpU0Qu6mc5pT3_QDHtrp9E8r5DybaU4BbKjn4vBmfqlsQTLPHk-ufqQYVWVnuWBcwNle1IvsqkOakAP1mxlpSUYuwaxvdURWrTWSE0VKmpHDw2F7YuDQnWDsiqOcCjAlvm0HKMFfhJwlavII25AsQE8f-odc4OwztRPt9BlFDaPk0qDSV6Q8i6mlzAO0eI7jmV67IEOTH6cLHQUFhY6ZatN8QGdICYvMexacl9knJe5VV0NNau7SPTrRDigeGimMnr5A7zNbOsW0ky2SorJ8WQ-9l_n25gs9Ye3NpwFL4lSJ6NXqhptB_6LtCIIgAPUcKYXwxrgzlIYSZJ99CK-6MQlAuHp-tS-5QUGBFWALrc1zstJyjudBbfo-Z1zhv5bg5aVD0yxccTTUnZJE1QH1rlHcGcEduc6IUDiqEQCtJ3ew6XSGOkCYPL1IGYLjbfMjJEM2ZwQ8rXd1_gOYw6p-TIk2fXUWTTml9i4nUSskOp-ulf-UX1nNgPoPsRfTISxWybVEKorgUWe9HeTHvZJvDnaVXhbxbkW2yYO3ZS1FbxWs2_-OEjSJBmwai1Lo340W5KId1NIIYu5tjOAIavxx__mWIzZqs59W7ryyuSIhg7GgwgKEu6t8s3eLlirJ5uWGSLgIvI2Aa5Vpv-57v-ghc-jkXKqoV60Z9Qxp-Cq3B633GBOQ0p2n1ZjcoC7zsRtE6zF2IhEyQ6NLGtCEZEMm7diOY_DNQA-g8q1a7ZJsQ3vXEkBFwHf7JU1bt5q0Ib2G4IBPgBF3MK-Jq4w6WC1cvF8SRO4wDN1akZXRDmdZM9grtyQDtdC3oJDjEeZUzcBNmwmf3HkiaSxovWA_3JxKYQfLpjpCxnYhDUUV6ow8-jynd8LcwET53Si4yNBzo2MwEkbgbff8Eo55stBY1r9Qv4ldd6BNe9lDmmqbHpz0sKNmzkwAzZVLn5NquH1_DqZ3N0REzRu9Xuq4S6jxvVQiiCXdznlIXPL2SGeoZkXLsTeuabCrh4S75Y2UfDvbZDfmm--SmvkHiZBVKPYGvZSITyi8iyrEvYr8LUuy3Swk-aCDvIeC__vXaBhzE6r40fydpnnn5MkCCvy-R1I6lytgUGBfS953W_TjJDyVG0SdZj2dqDnuCcJZFqc6Oqpzu7mgwO0MeIM11EJ90uZ_rm34LHN50GLF0HuFfa6H6PcqtTSX2gxxOCRlrwJR7BQmGWgz9un9LV98wNvCsSQm5oZkIg2ztswQE4jtPRdBVWeEkBl7ufmvINQteAP8a4w6f1imxzm9KgEx5_hCYZaCpt20dUNyr26vh5WqJAzcURsrwtkRXhGC-DrXOsqhA5GhvRhimqsmG4O7dEvd7cy1nQAyQRiQ9XoaWNb6Jy5EZh1gTVyKjp18TBQzwyKhvxbcMy3woBwzBBwYjuOwFF7M790jgyHSd1RAMv3GxxgHCJIALoALGSvaTZnq0ZNBu-fUKF45d8fYIwJmd3km8PxqguyBJLSuw7yP7grgUQKzu-yWWjnGuwL_UQGarI8CTu8BWyVzNqQ37nfzG6XVB-MLvilKSAir_dx8-Zkd5e0mWv0Lk"   # base64url ed25519(32) || ML-DSA-87 public(2592) = 2624 bytes (owner ceremony key, pinned)
+#      is rotated. Both keys are constant across renewals and across customers.
+UPDATE_SIGNER_PUBLIC = "3or8OMMSi9P2wRktaAe1YTpCac90qCMplctvTGnm5Ozr5RLdB8Vh-kKpchoo8LgUmdfZN1E6_70EcMhF5rtOJSBPqZUoxw42gnk_m7NhCPib3aSnRCf4q_j1ZvhoTZpjDvMUS6CiaoYckqvWbMa-Y8BL89bzpqD16HbbuEOo-gubFfF0e2LybD4Yev_-mTT-rBbfg1hZ0rhMFOtP322ri7g4XUF-YGqb8zSSmRdGGRIEXVsdcFZbdRnypiYqIvVwy4C1_dbdiCKlfd9-MUHh41IF-H2qPHxfJy5Nsvi_Jl5Wn6JtPBm52O2kR4neB3aEXF3eacRXWxGsrdjMsm2PTo3trBGgyP34QOXSEzj7poYOHuq3nS6TEa8bB4Ix03ae4kY3adgazyxhfCR-tCOBKslJewKrk2mRWpDKYzU7QeWj3egT6IUH1kLvAm1X-4OcqKccBW_zV6j7fKE7qz2ynbilpxjN66RV42Zoj9h9rPiyjhgyAq6LYJLI3dvYS1on8hBvNmAQ7hDXQ10rdyk_iQ7_xLKqbt0gVyu_C-mFdsFUnC64LtYGXj1SfDo8IjSekMZxJ4wn3yPe1VDPLOZ4znkElle5n8L1JowF9CeilrwWakfasqFnCkfMVhbh_nAZYu42HvSOy-SJrzv6UjgW6D8AuafoIYw0JWOtO8_ApmEz_4tAo3iRX-IiNEXTwHpWvON3HQh_-nphpvJZlmChay1I_VIJSPH6yABLfHbMTJuzqBVd5TEhkHtpVGlIFkHaABSuuZPLiwP3qniI1mqacQcAyXcwr4xya1wqIacfFWwfoDdFIS-XcF50ZXnUakHKOu4WAn0NBl3xoZyabJ9m5vyEH_GzQTLtaTCH3hqggl2vMAimMY-diId8ANXli2iW_hFai3wPVh6523cLVcwMFviMJH651UUUQ6g5pKwBe_ldr8vhLnnm8ANxIwHVjJuDd2JVl4eo2ajffaAjuZdqsa_KM6_bUYTtuuv6nyUORa18dwIUzrRYLpEAS55HJIziU9qbiUo04w9QWncBKyP_mNS6kc_zcyBSMEKvil2viqmuT69Gs3dFFocVKbM_k1n3q-5IBWFB4nJo_BuHSSs8vE6APUlel-bwuSTK4ql6gnoPuyn16GPy_rS3SwUjU3wbyjQ7SzEU1eD3w-msoZOfK0iMEjDCAwbAhJirfm4MpapaJ-hnkQohQZmqSej6cA7cvEUiIGLONCEqFLmVnOmX1b1ukOo3Sv_QYMB25J59c1yQAwFoKJ64O_F0y2fWjR3Al-3ztHgqnYcwJ6aizVtLxHacGBGcUskCQWYaSLJbXKvHbH54AgBBjDsCjGMeBsM9u3aT9bt11svGDSxViOs2pfkcOQgMDajsxvyOhLc1zpeS2B2C3GEypkYdImrfCG4WtTEMdfDPKCSYx-E5GNOPfqaFswSsY33KnefNorY5Hn1QgoMU-9MnKWcdwWEtKAONrf6QNy-b78Vfi3NmVMPzXI2B_LCOmT_qwSnUATFqYB1TyHXtGNk-s6hDI84zz4cbMODaHqTgdfHwC3o50DsHT0iYPazMjQce1Jla4ZI6bFR1PVzUgz61SRGhMUV_1Ajck5rfSuSyL9NcUi7K-Iy_Gm8nntyM7PDqXgnggfoHMzwCi8MhzbJUWeDxbcI6b9CNe7tiZz-D2Kwac__3NeY9s68YpQUovICjNIKjFrp4TXEbGYBcLoMzjAXC3qTF9nB-1EvZ4_H8rjPEJv2Pvhbz49NTdY9k7NJjEOdA4uKrWoG3Oajn19CzTpcnKlrCE_-QlqepsxaPcPOQSzGx4jwKzBZ0HhwC71tFx5MS3hSE7-jHbX5HdH4LTYBr2GdaLukwIfZbdUQBCmmy30C5o7GKvoLO8l9DA9LWsa3hnOPWD5R23fyxXy9g63xR84o_NjW_eMJpU0Qu6mc5pT3_QDHtrp9E8r5DybaU4BbKjn4vBmfqlsQTLPHk-ufqQYVWVnuWBcwNle1IvsqkOakAP1mxlpSUYuwaxvdURWrTWSE0VKmpHDw2F7YuDQnWDsiqOcCjAlvm0HKMFfhJwlavII25AsQE8f-odc4OwztRPt9BlFDaPk0qDSV6Q8i6mlzAO0eI7jmV67IEOTH6cLHQUFhY6ZatN8QGdICYvMexacl9knJe5VV0NNau7SPTrRDigeGimMnr5A7zNbOsW0ky2SorJ8WQ-9l_n25gs9Ye3NpwFL4lSJ6NXqhptB_6LtCIIgAPUcKYXwxrgzlIYSZJ99CK-6MQlAuHp-tS-5QUGBFWALrc1zstJyjudBbfo-Z1zhv5bg5aVD0yxccTTUnZJE1QH1rlHcGcEduc6IUDiqEQCtJ3ew6XSGOkCYPL1IGYLjbfMjJEM2ZwQ8rXd1_gOYw6p-TIk2fXUWTTml9i4nUSskOp-ulf-UX1nNgPoPsRfTISxWybVEKorgUWe9HeTHvZJvDnaVXhbxbkW2yYO3ZS1FbxWs2_-OEjSJBmwai1Lo340W5KId1NIIYu5tjOAIavxx__mWIzZqs59W7ryyuSIhg7GgwgKEu6t8s3eLlirJ5uWGSLgIvI2Aa5Vpv-57v-ghc-jkXKqoV60Z9Qxp-Cq3B633GBOQ0p2n1ZjcoC7zsRtE6zF2IhEyQ6NLGtCEZEMm7diOY_DNQA-g8q1a7ZJsQ3vXEkBFwHf7JU1bt5q0Ib2G4IBPgBF3MK-Jq4w6WC1cvF8SRO4wDN1akZXRDmdZM9grtyQDtdC3oJDjEeZUzcBNmwmf3HkiaSxovWA_3JxKYQfLpjpCxnYhDUUV6ow8-jynd8LcwET53Si4yNBzo2MwEkbgbff8Eo55stBY1r9Qv4ldd6BNe9lDmmqbHpz0sKNmzkwAzZVLn5NquH1_DqZ3N0REzRu9Xuq4S6jxvVQiiCXdznlIXPL2SGeoZkXLsTeuabCrh4S75Y2UfDvbZDfmm--SmvkHiZBVKPYGvZSITyi8iyrEvYr8LUuy3Swk-aCDvIeC__vXaBhzE6r40fydpnnn5MkCCvy-R1I6lytgUGBfS953W_TjJDyVG0SdZj2dqDnuCcJZFqc6Oqpzu7mgwO0MeIM11EJ90uZ_rm34LHN50GLF0HuFfa6H6PcqtTSX2gxxOCRlrwJR7BQmGWgz9un9LV98wNvCsSQm5oZkIg2ztswQE4jtPRdBVWeEkBl7ufmvINQteAP8a4w6f1imxzm9KgEx5_hCYZaCpt20dUNyr26vh5WqJAzcURsrwtkRXhGC-DrXOsqhA5GhvRhimqsmG4O7dEvd7cy1nQAyQRiQ9XoaWNb6Jy5EZh1gTVyKjp18TBQzwyKhvxbcMy3woBwzBBwYjuOwFF7M790jgyHSd1RAMv3GxxgHCJIALoALGSvaTZnq0ZNBu-fUKF45d8fYIwJmd3km8PxqguyBJLSuw7yP7grgUQKzu-yWWjnGuwL_UQGarI8CTu8BWyVzNqQ37nfzG6XVB-MLvilKSAir_dx8-Zkd5e0mWv0Lk"   # base64url ed25519(32) || ML-DSA-87 public(2592) = 2624 bytes
 # LICENCE_SIGNER_PUBLIC = "..."  # same 2624-byte layout; set it only to override the baked pin in src/licence-pins.ts
 # LICENCE_TOKEN is intentionally NOT set here: customers activate from the console (DO-stored, and the
 # DO-stored token wins over this var). It stays readable only as an optional IaC fallback.
@@ -259,17 +252,11 @@ crons = ["*/15 * * * *"]
 # worker's bindings and deploy a SUPERSET (wrangler.deploy.toml = this file + EVERY live source),
 # carrying them all uniformly, and which STOPS rather than ship a binding-dropping config.
 #
-# A CLOUDFLARE API TOKEN IS OPTIONAL, AND THIS COMMENT USED TO SAY THE OPPOSITE. It read: "it needs
-# CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID to read the live bindings; without them it refuses instead
-# of resetting". That is not what happens. Measured on a real first deploy with no token set at all,
-# the reconcile printed its own answer: "[sync-bindings] no
-# CLOUDFLARE_API_TOKEN set; reading the live bindings via your wrangler session", and then
-# "[sync-bindings] worker does not exist yet: first deploy, nothing to preserve". The deploy went on to
-# succeed. So an authenticated `wrangler login` session is enough for `npm run deploy`, and the token is
+# A CLOUDFLARE API TOKEN IS OPTIONAL. With no token set, the reconcile prints
+# "[sync-bindings] no CLOUDFLARE_API_TOKEN set; reading the live bindings via your wrangler session",
+# and on a first deploy "[sync-bindings] worker does not exist yet: first deploy, nothing to preserve".
+# The deploy then goes on. So an authenticated `wrangler login` session is enough for `npm run deploy`, and the token is
 # the alternative for an environment that has no such session (CI, a machine you cannot log in on).
-# Corrected against the observed behaviour rather than against a better-written page: docs
-# /operations/deploy-safety-bindings already said the same thing, and this file and /deploy/'s
-# prerequisites bullet were the two places that disagreed with the product.
 #
 # The Sources screen and the preflight "Source bindings" check surface any
 # binding that has gone missing. (Recipient public keys and the signer key are read from the Secrets

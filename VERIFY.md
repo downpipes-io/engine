@@ -11,7 +11,7 @@ update channel, and (from your own account's records) applied byte-exactly where
   any point between the tagged source and what your account applied.
 - It does NOT prove the source is benign. A defect written into the source reproduces perfectly.
   Reading the source and the published assessments is the separate assurance that covers that;
-  reproducibility and source review are different guarantees and we keep them distinct.
+  reproducibility and source review are different assurances and we keep them distinct.
 - It does NOT prove real-time runtime execution. Cloudflare Workers, like every serverless
   platform, exposes no hardware attestation of the running isolate. Your engine verifies the
   bytes at apply time, records the verdict in your own hash-chained audit log, and continuously

@@ -16,7 +16,7 @@ import { loadSigner, verifierFrom } from "../keys-env.ts";
 import { log } from "../log.ts";
 import { envFlagEnabled, tokenEqual } from "./auth.ts";
 import { IDP_SECRET_AAD, loadConfigWrapKey, maybeWrapConfigSecret } from "./config-secret.ts";
-import { assertNoPlaintextSecretInExport, type ControlPlaneExport, isControlPlaneExport, serialiseControlPlaneExport, type StagedControlPlane, sameControlPlaneAccount, signControlPlaneExport, verifyControlPlaneSignatureDetailed } from "./control-plane.ts";
+import { assertNoPlaintextSecretInExport, type ControlPlaneExport, controlPlaneExportBytesOrNull, isControlPlaneExport, serialiseControlPlaneExport, type StagedControlPlane, sameControlPlaneAccount, signControlPlaneExport, verifyControlPlaneSignatureDetailed } from "./control-plane.ts";
 import { isSealedControlPlaneExport, type SealedControlPlaneExport, verifySealedControlPlaneSignatureDetailed } from "./control-plane-seal.ts";
 import { manualReconcileTail, nothingToConfirmMessage } from "./control-plane-latch-exit.ts";
 import { noteTestOutcome, recordRecoveryRefusal } from "./diag-counters.ts";
@@ -182,8 +182,8 @@ async function lockoutRefusalIfLastSignInPath(env: Env, scheduler: DurableObject
     // THE GUARD THAT PREVENTS AN ACCOUNT LOCKING ITSELF OUT IS RUNNING BLIND HERE. It fails OPEN by design
     // (a preflight hiccup must never block a legitimate removal), so the removal proceeds -- and if that
     // connection really was the last way in, the tenant is now locked out and the guard that exists to stop
-    // exactly that never got to run. "We deleted an IdP connection and now nobody can sign in" reads, in the
-    // pack, exactly like a tenant that had other ways in. This is the difference. Best-effort; still fail-open.
+    // exactly that never got to run. A removal that locks the tenant out reads, in the
+    // pack, exactly like a tenant that had other ways in; this signal tells them apart. Best-effort; still fail-open.
     fireInBackground(runtime, recordAuthSignalEdge(scheduler, "lockout-guard-failopen")); // 0-await to the return below
     return null; // fail-open: never block a legitimate removal on a preflight hiccup
   }
@@ -281,15 +281,15 @@ export async function handleIdentity(ctx: RouterCtx): Promise<Response | null> {
     }
     // The CROSS-ENVIRONMENT estate import (recovery keystone): a bootstrapped Owner on a FRESH engine rebuilds
     // the DEFINITION of a lost estate from a signed export they pulled out-of-band. Unlike /restore (same
-    // account, break-glass token, restores authority), this is gated on access.policy (the operator is a real
-    // Owner) and grants NO authority -- the DO's importControlPlaneDefinition applies only downpipes /
+    // account, break-glass token, restores authority), this is gated on access.policy AND keys.ceremony (as POST
+    // /admin/destinations does, so an access-admin cannot reach it) and grants NO authority -- the DO's importControlPlaneDefinition applies only downpipes /
     // destinations / discovery. The export is verified against the OPERATOR-SUPPLIED signer.pub from their
     // offline recovery kit: that is TAMPER EVIDENCE (the export is intact + internally consistent), NOT an
     // authority root -- a public key proves no authenticity, which is EXACTLY why no authority is imported.
     // crossAccount is computed from this engine's account vs the export's, so a different-account import lands
     // its downpipes disabled for rebind. This never touches a live estate: the DO refuses a non-fresh plane.
     case "POST /control-plane/import": {
-      const denied = gate(caller, "access.policy");
+      const denied = gate(caller, "access.policy") ?? gate(caller, "keys.ceremony");
       if (denied) return denied;
       const limited = await rateLimited(scheduler, caller);
       if (limited) return limited;
@@ -388,7 +388,7 @@ export async function handleIdentity(ctx: RouterCtx): Promise<Response | null> {
     // exactly this purpose. Only once BOTH hold does it fall through to the SAME DO import call the plaintext
     // route makes, with the SAME no-authority, cross-account semantics.
     case "POST /control-plane/import-sealed": {
-      const denied = gate(caller, "access.policy");
+      const denied = gate(caller, "access.policy") ?? gate(caller, "keys.ceremony");
       if (denied) return denied;
       const limited = await rateLimited(scheduler, caller);
       if (limited) return limited;
@@ -457,7 +457,7 @@ export async function handleIdentity(ctx: RouterCtx): Promise<Response | null> {
           "sealed-unhashed",
         );
       }
-      const candidateHash = `sha384:${hexEncode(await sha384(serialiseControlPlaneExport(exp as ControlPlaneExport)))}`;
+      const candidateHash = controlPlaneExportBytesOrNull(exp as ControlPlaneExport) === null ? null : `sha384:${hexEncode(await sha384(serialiseControlPlaneExport(exp as ControlPlaneExport)))}`;
       if (candidateHash !== bodyHash) {
         await recordRecoveryRefusal(scheduler, { surface: "estate-import-sealed", cls: "sealed-body-mismatch" });
         return jsonRefusal(
@@ -655,7 +655,7 @@ export async function handleIdentity(ctx: RouterCtx): Promise<Response | null> {
           "sealed-unhashed",
         );
       }
-      const candidateHash = `sha384:${hexEncode(await sha384(serialiseControlPlaneExport(exp as ControlPlaneExport)))}`;
+      const candidateHash = controlPlaneExportBytesOrNull(exp as ControlPlaneExport) === null ? null : `sha384:${hexEncode(await sha384(serialiseControlPlaneExport(exp as ControlPlaneExport)))}`;
       if (candidateHash !== bodyHash) {
         await recordRecoveryRefusal(scheduler, { surface: "reconcile-sealed", cls: "sealed-body-mismatch" });
         return jsonRefusal(

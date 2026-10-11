@@ -9,11 +9,11 @@ import { buildConfigVersion, CONFIG_GENESIS_PREV_HASH, CONFIG_HISTORY_CAP, CONFI
 import { COVERAGE_INVENTORY_KEY, type ResourceInventory } from "../admin/coverage.ts";
 import type { AuthMethod } from "../admin/identity.ts";
 import { POSTURE_ACCEPT_PREFIX, type RiskAccept } from "../admin/posture.ts";
-import { hexEncode } from "../crypto/bytes.ts";
+import { b64urlDecode, b64urlEncode, hexEncode } from "../crypto/bytes.ts";
 import { sha384 } from "../crypto/primitives.ts";
 import { log } from "../log.ts";
 import { classifySnapshotFailure, recordChainVerdict, recordRefusal, recordStorageAnomaly } from "./sched-fault-ledger.ts";
-import { CONFIG_HISTORY_HEAD_KEY, CONFIG_HISTORY_KEY_FP_KEY, CONFIG_SNAPSHOT_FAILURE_KEY, type ConfigHistoryHead, type ConfigSnapshotFailureState, type SchedulerDOCtor } from "./scheduler-do-base.ts";
+import { CONFIG_HISTORY_HEAD_KEY, CONFIG_HISTORY_KEY_FP_KEY, CONFIG_HISTORY_SIGNING_KEY_KEY, CONFIG_SNAPSHOT_FAILURE_KEY, PASSKEY_SESSION_KEY_KEY, type ConfigHistoryHead, type ConfigSnapshotFailureState, type SchedulerDOCtor } from "./scheduler-do-base.ts";
 import { bytesEqualLocal, nowMillisISO } from "./scheduler-helpers.ts";
 
 export function ConfigVersionMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
@@ -114,7 +114,7 @@ export function ConfigVersionMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
       // first version). It is redaction-safe (the diff reads only the snapshot's named metadata).
       const changes: ConfigChange[] = head !== null ? diffConfig(head.snapshot, snapshot) : [];
       const summary = summarise(changes, head === null);
-      const key = await this.sessionSigningKey();
+      const key = await this.configHistorySigningKey();
       const version = await buildConfigVersion(snapshot, id, nowMillisISO(), author, summary, parentHash, key);
       await this.state.storage.put(configHistoryKey(id), version);
       // Committing the HEAD ANCHOR in the same storage turn as the version (the DO is single-threaded, so
@@ -268,7 +268,7 @@ export function ConfigVersionMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
       verify: { intact: boolean; checkedThrough: number; earliestId: number; brokenAt?: number; signingKeyRotated?: boolean; unkeyedIntact?: boolean; unkeyedCause?: string; unkeyedBrokenAt?: number; verifyFaulted?: boolean; headTruncated?: boolean; headTruncatedAt?: number };
     }> {
       const all = await this.listConfigVersions();
-      const key = await this.sessionSigningKey();
+      const key = await this.configHistorySigningKey();
       const expectGenesis = all.length === 0 || all[0]!.id === 1;
       const bodies = scanConfigBodies(all);
       let verdict: ConfigChainVerdict;
@@ -371,7 +371,7 @@ export function ConfigVersionMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
       verify: { intact: boolean; checkedThrough: number; earliestId: number; brokenAt?: number; headTruncated?: boolean; headTruncatedAt?: number };
     }> {
       const all = await this.listConfigVersions();
-      const key = await this.sessionSigningKey();
+      const key = await this.configHistorySigningKey();
       // The chain never rolls over to a non-genesis baseline in practice (the cap is far above any realistic
       // config-change count), but be honest if it has: expect genesis only when the earliest retained
       // version is still id 1, so a documented rollover is not reported as a spurious break.
@@ -432,6 +432,41 @@ export function ConfigVersionMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
       const toV = (await this.state.storage.get<ConfigVersion>(configHistoryKey(toId))) ?? null;
       if (fromV === null || toV === null) return { found: false };
       return { found: true, from: fromId, to: toId, changes: diffConfig(fromV.snapshot, toV.snapshot) };
+    }
+
+    // configHistorySigningKey loads the HMAC key the config history digests are signed and verified under,
+    // materialising it on first use. It is a separate key from the session-signing key: terminateAllSessions
+    // DELETES the session key to end every session, and a history signed under that key would then fail its
+    // digest check at version 1 and read as tampered for ever. The two secrets have opposite lifetimes, so
+    // they live in two records.
+    //
+    // ADOPTION RE-SIGNS NOTHING. An account with no history key yet has versions whose digests were computed
+    // under the CURRENT session key bytes, so on first use this copies those exact bytes. Every stored digest
+    // keeps verifying and no version is rewritten. The session key is read from storage and never through
+    // sessionSigningKey(), which would generate and persist a fresh key that no stored digest was computed
+    // under. terminateAllSessions calls this BEFORE it deletes the session key, so an interruption between the
+    // two can only mean the sign-out did not happen. A cold account with no session key adopts a fresh one.
+    async configHistorySigningKey(): Promise<Uint8Array> {
+      const minBytes = 32; // the session signing key's length
+      const fromRecord = (rec: { key?: unknown } | undefined): Uint8Array | null => {
+        // An undecodable stored value is treated as absent: the shape is checked first so the decode cannot throw.
+        if (rec !== undefined && typeof rec.key === "string" && /^[A-Za-z0-9_-]+$/.test(rec.key) && rec.key.length % 4 !== 1) {
+          const bytes = b64urlDecode(rec.key);
+          if (bytes.length >= minBytes) return bytes;
+        }
+        return null;
+      };
+      const existing = fromRecord(await this.state.storage.get<{ key: string; createdAt: string }>(CONFIG_HISTORY_SIGNING_KEY_KEY));
+      if (existing !== null) return existing;
+      // The bytes to adopt are read BEFORE the gate: sessionSigningKey() takes the same gate, and a cold account
+      // (no session key at all) gets its fresh bytes from it, so no second source of randomness is needed here.
+      const source = fromRecord(await this.state.storage.get<{ key: string; createdAt?: string }>(PASSKEY_SESSION_KEY_KEY)) ?? (await this.sessionSigningKey());
+      return this.blockConcurrencyWhile(async () => {
+        const reread = fromRecord(await this.state.storage.get<{ key: string; createdAt: string }>(CONFIG_HISTORY_SIGNING_KEY_KEY));
+        if (reread !== null) return reread;
+        await this.state.storage.put(CONFIG_HISTORY_SIGNING_KEY_KEY, { key: b64urlEncode(source), createdAt: nowMillisISO() });
+        return source;
+      });
     }
   };
 }

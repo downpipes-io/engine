@@ -11,12 +11,10 @@ can read them, and how long they are kept. It is also the log inventory V16.2.3 
 engine and the console store or broadcast log records only to the files and services named
 here. Every optional sink is listed with the condition under which it is on.
 
-`test/validate-logging-inventory.ts` grades this document against the tree on every
-`validate:chain` run. It fails when the audit action table, the Layer 2 call-site figures, the
-set of direct `console.*` emitters, the Layer 4 sink kinds, or any `file:line` citation below
-disagrees with the tree. A citation is written as `identifier` (`path:line`); the gate opens
-the cited line and requires the identifier on it. Console, CLI and control-plane citations are
-graded when that checkout sits beside the engine, and the gate says so when it cannot look.
+The audit action table, the Layer 2 call-site figures, the set of direct `console.*` emitters
+and the Layer 4 sink kinds below match the source tree. A citation is written as `identifier`
+(`path:line`): the cited line holds the identifier. Console, CLI and control-plane citations
+refer to those components' own source.
 
 ---
 
@@ -60,10 +58,10 @@ a holder of raw Durable Object storage could rewrite the whole chain.
 
 ### Events recorded
 
-The closed action set is `AUDIT_ACTIONS` (`src/admin/audit-types.ts:38`), 105 members, ending
-at `] as const` (`src/admin/audit-types.ts:448`). `AuditAction` (`src/admin/audit-types.ts:450`)
-is derived from it, so no action outside this table can be written. The gate compares the table
-to the constant in both directions.
+The closed action set is `AUDIT_ACTIONS` (`src/admin/audit-types.ts:38`), 106 members, ending
+at `] as const` (`src/admin/audit-types.ts:450`). `AuditAction` (`src/admin/audit-types.ts:452`)
+is derived from it, so no action outside this table can be written. This table lists every member
+of the constant.
 
 | Action | What it records |
 |--------|-----------------|
@@ -93,6 +91,7 @@ to the constant in both directions.
 | `break-glass-rotated` | A new break-glass public key applied. |
 | `runlog-handover` | A signer re-key verified each destination RUNLOG under the old signer and signed it under the new one, stopped on a RUNLOG that did not verify, or discarded the held old public key. |
 | `runlog-resigned` | An Owner, after step-up, signed under the current signer the exact bytes of a destination RUNLOG that did not verify (or finished a pending re-key hand-over under the held old public key). |
+| `runlog-resumed` | An Owner, after step-up, called the attended re-sign on a destination RUNLOG whose `.sig` was absent. The engine's pending signature verified the bytes, so the engine published that signature again. Nothing is signed; the row names the destination, the digest prefix and the highest index. |
 | `runlog-floor-reset` | An Owner, after step-up, moved a destination's anti-rollback floor down to the highest index of the RUNLOG it holds now (0 when absent), after the writers refused it on the floor alone. |
 | `runlog-relinked` | An Owner, after step-up, relinked one downpipe's anomalous chain in a destination RUNLOG that verifies, once, and recorded the anomaly acknowledged. |
 | `operational-added` | The operational key pair installed. |
@@ -173,16 +172,16 @@ to the constant in both directions.
 | `test-fault-control-plane-cleared` | The harness-only release of the recovery-required latch a test fault set. |
 | `secret-rotation-confirmed` | An owner attested that a bearer or destination credential's rotation cadence baseline moved to now (`POST /admin/secrets/rotated`). |
 
-Every entry carries an `AuditOutcome` (`src/admin/audit-types.ts:455`): `success`, `denied`
+Every entry carries an `AuditOutcome` (`src/admin/audit-types.ts:457`): `success`, `denied`
 or `failed`. A refused attempt is recorded as a first-class entry with outcome `denied`.
 
 ### What is not recorded
 
-The target is the closed `AuditTarget` union (`src/admin/audit-types.ts:456`), 28 target kinds.
+The target is the closed `AuditTarget` union (`src/admin/audit-types.ts:468`), 28 target kinds.
 A target can hold labels the operator chose, such as a downpipe name. Apart from these labels,
 the only operator text on a target is the `reason` on a restore or retention-prune request, and
 the change number and reason on `change-recorded`. A caller can only append an
-`AuditDraft` (`src/admin/audit-types.ts:867`), which has no hash and no sequence. No target
+`AuditDraft` (`src/admin/audit-types.ts:870`), which has no hash and no sequence. No target
 field holds key material, a secret value, a record value, a destination credential, an
 endpoint, a destination bucket name, a private recipient fingerprint, the licence token or the
 update-channel signer. A source binding name on `source-bindings` is an allowed label. The
@@ -191,7 +190,7 @@ database or secret name in sanitised form.
 
 ### Entry format
 
-One JSON object per entry, the `AuditEvent` interface (`src/admin/audit-types.ts:815`):
+One JSON object per entry, the `AuditEvent` interface (`src/admin/audit-types.ts:835`):
 
 ```
 seq           monotonic integer
@@ -244,7 +243,7 @@ carry a count.
   connection and actor), with the count in `attempts`. It also writes a row once 25 attempts are
   pending, if the budget allows. The row identity holds no source address.
 - **Failed and throttled recovery-code sign-ins** (`recovery-code-used`, outcome `failed` or
-  `denied`): `appendRecoveryFailureAudit` (`src/sched/scheduler-do-recovery.ts:492`) writes one row
+  `denied`): `appendRecoveryFailureAudit` (`src/sched/scheduler-do-recovery.ts:493`) writes one row
   per minute per source and outcome. An IPv6 source counts by its /64
   (`recoveryFoldSource` (`src/sched/audit-fold.ts:423`)). The row carries the `authn-attempt` target
   with ceremony `recovery` and the count in `attempts`. A throttled attempt writes no row of its own.
@@ -302,15 +301,15 @@ and sign-in auth signals, and the admin refusal counters.
 
 | Route | Purpose | Gate |
 |-------|---------|------|
-| `GET /admin/audit` | Newest-first paged and filtered read with the chain head | `gate(caller, "audit.read")` (`src/admin/router-rbac.ts:298`) |
-| `GET /admin/audit/verify` | Recompute the chain; a break is a 200 result naming the first bad sequence | `gate(caller, "audit.read")` (`src/admin/router-rbac.ts:305`) |
-| `GET /admin/audit/export` | The whole or filtered log as a download, JSON or `format=csv`, with the head hash | `gate(caller, "audit.read")` (`src/admin/router-rbac.ts:313`) |
+| `GET /admin/audit` | Newest-first paged and filtered read with the chain head | `gate(caller, "audit.read")` (`src/admin/router-rbac.ts:310`) |
+| `GET /admin/audit/verify` | Recompute the chain; a break is a 200 result naming the first bad sequence | `gate(caller, "audit.read")` (`src/admin/router-rbac.ts:317`) |
+| `GET /admin/audit/export` | The whole or filtered log as a download, JSON or `format=csv`, with the head hash | `gate(caller, "audit.read")` (`src/admin/router-rbac.ts:325`) |
 
 Every built-in role from the viewer floor up holds `"audit.read"`
 (`src/admin/identity-rbac.ts:52`). The export format is chosen in the Durable Object
-(`"csv"` (`src/sched/scheduler-do-audit.ts:555`)); `toCSV` (`src/admin/audit.ts:524`) renders
+(`"csv"` (`src/sched/scheduler-do-audit.ts:555`)); `toCSV` (`src/admin/audit.ts:526`) renders
 the target as a short description, never as a raw object, and `csvCell`
-(`src/admin/audit.ts:515`) neutralises a leading formula trigger in every column. The head
+(`src/admin/audit.ts:517`) neutralises a leading formula trigger in every column. The head
 (`headOf` (`src/admin/audit.ts:310`)) rides with both formats so an external verifier detects
 truncation after export.
 
@@ -322,7 +321,7 @@ a collector can alert on a gap or a hash discontinuity.
 | Path | Mechanism | Who turns it on | Retention |
 |------|-----------|-----------------|-----------|
 | Logpush mirror line | `mirrorAuditEvent` (`src/admin/audit-mirror.ts:26`) writes one JSON line per committed event with `"downpipe-audit"` (`src/admin/audit-mirror.ts:30`) as `source` and `v: 1`; called from the append path and counted on failure by `recordAuditMirrorFailure` (`src/sched/scheduler-do-audit.ts:151`). The line lands in Layer 2's Workers Logs stream. | Always emitted. It leaves the account only if the operator creates a Logpush job on the `workers_trace_events` dataset. | Workers Logs retention, then the Logpush sink's own. |
-| Pull feed | `GET /support/audit-feed` is routed at `"/support/audit-feed"` (`src/index.ts:413`) to `handleSupportPull` (`src/admin/support-ingest.ts:297`), scope `"audit-feed"` (`src/admin/support-ingest.ts:299`); ascending, cursored by `afterSeq`. | An Owner mints a client/secret credential for the `audit-feed` scope (audited as `support-credential-grant`). The secret is stored as its SHA-384, verified constant-time, capped at 365 days, one active per scope, and the most recent 50 pulls are recorded on the grant. | The collector's own. |
+| Pull feed | `GET /support/audit-feed` is routed at `"/support/audit-feed"` (`src/index.ts:435`) to `handleSupportPull` (`src/admin/support-ingest.ts:297`), scope `"audit-feed"` (`src/admin/support-ingest.ts:299`); ascending, cursored by `afterSeq`. | An Owner mints a client/secret credential for the `audit-feed` scope (audited as `support-credential-grant`). The secret is stored as its SHA-384, verified constant-time, capped at 365 days, one active per scope, and the most recent 50 pulls are recorded on the grant. | The collector's own. |
 | Push destination | Layer 4 below. | An Owner configures it. | The sink's own. |
 
 ---
@@ -347,38 +346,36 @@ field. The level selects the sink so Workers Logs keeps it: `console.error` (`sr
 
 Direct `console.*` emitters: `src/log.ts:62-64`, `src/admin/audit-mirror.ts:30`. No other file
 under `src/` calls `console.log`, `console.error`, `console.warn`, `console.info` or
-`console.debug`. The gate measures that set, excluding comment lines, and fails on any addition
-this document does not name.
+`console.debug`.
 
 ### Call sites
 
-Measured: 275 `log(` call sites across 58 files (`src/admin/config-rewrap.ts`, `src/admin/drill.ts`, `src/admin/key-vintages.ts`, `src/admin/restore-apply.ts`, `src/admin/restore-plan-types.ts`, `src/admin/restore-plan.ts`, `src/admin/restore-receipt.ts`, `src/admin/restore-sinks.ts`, `src/admin/restore-verify.ts`, `src/admin/restore.ts`, `src/admin/router-audit.ts`, `src/admin/router-auth-flow.ts`, `src/admin/router-core.ts`, `src/admin/router-custody.ts`, `src/admin/router-identity.ts`, `src/admin/router-idp-web.ts`, `src/admin/router-keys.ts`, `src/admin/router-notify.ts`, `src/admin/router-posture.ts`, `src/admin/router-restore.ts`, `src/admin/router-runlog.ts`, `src/admin/router-session.ts`, `src/admin/router-sources.ts`, `src/admin/router-updates-shared.ts`, `src/admin/scim.ts`, `src/admin/updates.ts`, `src/attest/verify.ts`, `src/cron/alert-passes.ts`, `src/cron/beacon-emit.ts`, `src/cron/control-plane-pass.ts`, `src/cron/discovery-pass.ts`, `src/cron/drive.ts`, `src/cron/history-retention-pass.ts`, `src/cron/notify-passes.ts`, `src/cron/otlp-push-pass.ts`, `src/cron/posture-pass.ts`, `src/cron/reconcile-pass.ts`, `src/cron/restore-test-pass.ts`, `src/cron/retention-pass.ts`, `src/cron/seal-loop-pass.ts`, `src/cron/siem-push-pass.ts`, `src/email.ts`, `src/format/keyless.ts`, `src/index.ts`, `src/notify-routing.ts`, `src/sched/scheduler-do-config-version.ts`, `src/sched/scheduler-do-expiry.ts`, `src/sched/scheduler-do-idp.ts`, `src/sched/scheduler-do-passkey.ts`, `src/sched/scheduler-do-recovery.ts`, `src/sched/scheduler-do-scheduling.ts`, `src/sched/scheduler-do.ts`, `src/seal/replicate-runlog.ts`, `src/seal/replicate.ts`, `src/seal/runseal-do.ts`, `src/seal/runstate.ts`, `src/seal/verify-at-seal.ts`, `src/sources/cloudflare-config.ts`), reproducible with:
+Measured: 281 `log(` call sites across 60 files (`src/admin/config-rewrap.ts`, `src/admin/drill.ts`, `src/admin/key-vintages.ts`, `src/admin/restore-apply.ts`, `src/admin/restore-plan-types.ts`, `src/admin/restore-plan.ts`, `src/admin/restore-receipt.ts`, `src/admin/restore-sinks.ts`, `src/admin/restore-verify.ts`, `src/admin/restore.ts`, `src/admin/router-audit.ts`, `src/admin/router-auth-flow.ts`, `src/admin/router-core.ts`, `src/admin/router-custody.ts`, `src/admin/router-identity.ts`, `src/admin/router-idp-web.ts`, `src/admin/router-keys.ts`, `src/admin/router-notify.ts`, `src/admin/router-posture.ts`, `src/admin/router-restore.ts`, `src/admin/router-runlog.ts`, `src/admin/router-session.ts`, `src/admin/router-sources.ts`, `src/admin/router-updates-shared.ts`, `src/admin/scim.ts`, `src/admin/update-support.ts`, `src/admin/updates.ts`, `src/attest/verify.ts`, `src/cron/alert-passes.ts`, `src/cron/beacon-emit.ts`, `src/cron/control-plane-pass.ts`, `src/cron/discovery-pass.ts`, `src/cron/drive.ts`, `src/cron/history-retention-pass.ts`, `src/cron/notify-passes.ts`, `src/cron/otlp-push-pass.ts`, `src/cron/posture-pass.ts`, `src/cron/reconcile-pass.ts`, `src/cron/restore-test-pass.ts`, `src/cron/retention-pass.ts`, `src/cron/runlog-index-advance.ts`, `src/cron/seal-loop-pass.ts`, `src/cron/siem-push-pass.ts`, `src/email.ts`, `src/format/keyless.ts`, `src/index.ts`, `src/notify-routing.ts`, `src/sched/scheduler-do-config-version.ts`, `src/sched/scheduler-do-expiry.ts`, `src/sched/scheduler-do-idp.ts`, `src/sched/scheduler-do-passkey.ts`, `src/sched/scheduler-do-recovery.ts`, `src/sched/scheduler-do-scheduling.ts`, `src/sched/scheduler-do.ts`, `src/seal/replicate-runlog.ts`, `src/seal/replicate.ts`, `src/seal/runseal-do.ts`, `src/seal/runstate.ts`, `src/seal/verify-at-seal.ts`, `src/sources/cloudflare-config.ts`), reproducible with:
 `grep -rn 'log("error"\|log("warn"\|log("info"\|log("debug"' src --include='*.ts' | grep -v '\.test\.ts' | grep -v '^src/log.ts' | wc -l`.
-The figure is a snapshot that moves as logging is added; the gate reproduces the grep and fails
-when this paragraph, the file list or the summary table disagrees with the tree.
+The figure is a snapshot of the tree on the date shown.
 
 ### What the lines carry
 
 The logger adds no field of its own beyond those listed. The `event` string is chosen at the
 call site, and the redaction discipline lives there.
 
-- Authentication lines. `logAuthFailure` (`src/admin/router-core.ts:127`) writes
+- Authentication lines. `logAuthFailure` (`src/admin/router-core.ts:173`) writes
   `authn failure method=<method> reason=<fixed string>` at level `error`;
-  `logAuthSuccess` (`src/admin/router-core.ts:141`) writes
+  `logAuthSuccess` (`src/admin/router-core.ts:187`) writes
   `authn success method=<method> role=<role>` at level `info`; `logAuthCeremonySuccess`
-  (`src/admin/router-core.ts:150`) writes the passkey ceremony that minted a session;
-  `logSurfaceAuth` (`src/admin/router-core.ts:158`) writes the outcome for the SCIM, `/metrics`
+  (`src/admin/router-core.ts:196`) writes the passkey ceremony that minted a session;
+  `logSurfaceAuth` (`src/admin/router-core.ts:204`) writes the outcome for the SCIM, `/metrics`
   and `/support/*` bearer surfaces. The prefix is `AUTH_LOG_PREFIX`
-  (`src/admin/router-core.ts:108`). No email, no token and no assertion bytes appear on these
+  (`src/admin/router-core.ts:154`). No email, no token and no assertion bytes appear on these
   lines.
-- Authorization lines (V16.3.2). `logCapabilityDenied` (`src/admin/router-core.ts:186`) writes
+- Authorization lines (V16.3.2). `logCapabilityDenied` (`src/admin/router-core.ts:232`) writes
   `authz denied capability=<capability> have=<role>` at level `error`, called from inside `gate`
-  (`src/admin/router-core.ts:198`), the one per-route capability check every admin route shares.
+  (`src/admin/router-core.ts:244`), the one per-route capability check every admin route shares.
   It fires once per capability-gate 403 and never on a grant, and it logs the required capability
   and the caller's role only: no email, no subject and no source IP.
-- Last-resort handlers. The admin dispatcher's catch writes `admin-dispatch` (`src/index.ts:389`),
-  the non-admin surfaces write `fetch-dispatch` (`src/index.ts:422`), and SCIM writes
-  `scim-dispatch` (`src/index.ts:227`). Each line carries `[err:<FNV-1a id> <category>]` and the
+- Last-resort handlers. The admin dispatcher's catch writes `admin-dispatch` (`src/index.ts:411`),
+  the non-admin surfaces write `fetch-dispatch` (`src/index.ts:444`), and SCIM writes
+  `scim-dispatch` (`src/index.ts:228`). Each line carries `[err:<FNV-1a id> <category>]` and the
   correlation id, never the exception message and never a stack.
 - Restore and drill faults carry the run id, the record name where one record failed, an opaque
   error id and a coarse category. `test/validate-errlog.ts` drives the real restore and drill
@@ -397,8 +394,8 @@ field that could hold one.
 
 ### Storage
 
-Cloudflare Workers Logs. `[observability]` (`wrangler.toml:184`) with `enabled = true`
-(`wrangler.toml:185`) persists every invocation's log lines in the Cloudflare dashboard. Two
+Cloudflare Workers Logs. `[observability]` (`wrangler.toml:177`) with `enabled = true`
+(`wrangler.toml:178`) persists every invocation's log lines in the Cloudflare dashboard. Two
 further readers: `wrangler tail <worker>` for a live stream, and an operator-configured Logpush
 job on the `workers_trace_events` dataset to the operator's own store or SIEM.
 
@@ -510,7 +507,7 @@ reviewer should not read them as undocumented log sinks.
 | Path | What it carries | On when | Where it lands | Proof |
 |------|-----------------|---------|----------------|-------|
 | OTLP metrics push | The canonical backup-health snapshot, `OtlpDownpipeMetrics` (`src/sched/scheduler-do-limits.ts:549`): downpipe id and name, enabled flag, last success time, a 0/1 success flag, recent attempt, success and failure counts, duration, size, per-destination health. No audit event, no log line. | An Owner configures a collector (`gate(caller, "keys.ceremony")` (`src/admin/router-otlp-push.ts:101`)) and the record is `enabled` (`src/cron/otlp-push-pass.ts:184`). | The configured OTLP/HTTP collector, POSTed by `deliverOtlpPush` (`src/notify/otlp-push-sender.ts:122`) after `screenSinkHost` (`src/notify/otlp-push-sender.ts:126`); outcomes kept in the Durable Object up to `OTLP_PUSH_TRAIL_CAP` (`src/sched/scheduler-do-limits.ts:532`). Called from `runOtlpPushPass` (`src/cron/drive.ts:299`). | `test/validate-otlp-push.ts` |
-| Vendor beacon | The `"downpipe-beacon-v1"` (`src/cron/beacon-emit.ts:54`) aggregate: the account tag, which is the Cloudflare account id (`CF_ACCOUNT_ID`, `src/cron/beacon-emit.ts:43`), the engine version, the Cloudflare Worker version id, the downpipe count, a healthy/stalled split, one account-wide max RUNLOG index, and the emit time. Nothing per downpipe, no name, no value. | `beaconConfigured` (`src/cron/beacon-config.ts:33`): `BEACON_URL`, `BEACON_INGEST_KEY` and `CF_ACCOUNT_ID` all set. Absent any one, `runBeaconEmitPass` (`src/cron/beacon-emit.ts:26`) returns before building a payload. | `POST` to `new URL("/beacon", base)` (`src/cron/beacon-emit.ts:69`) under `BEACON_URL`, refused unless HTTPS and not `isInternalSinkHost` (`src/cron/beacon-emit.ts:70`), and refused when `screenResolvedIfHostname` (`src/cron/beacon-emit.ts:77`) finds an internal address in what the name resolves to, with `redirect: "manual"` (`src/cron/beacon-emit.ts:85`). The vendor control plane's `handleBeacon` stores the aggregate in KV (`BEACONS.put`) and rejects any per-downpipe field. Called from `runBeaconEmitPass` (`src/cron/drive.ts:256`). | `test/validate-beacon-emit.ts` |
+| Vendor beacon | The `"downpipe-beacon-v1"` (`src/cron/beacon-emit.ts:54`) aggregate: the account tag, which is the Cloudflare account id (`CF_ACCOUNT_ID`, `src/cron/beacon-emit.ts:43`), the engine version, the Cloudflare Worker version id, the downpipe count, a healthy/stalled split, one account-wide max RUNLOG index, and the emit time. Nothing per downpipe, no name, no value. | `beaconConfigured` (`src/cron/beacon-config.ts:33`): `BEACON_URL`, `BEACON_INGEST_KEY` and `CF_ACCOUNT_ID` all set. Absent any one, `runBeaconEmitPass` (`src/cron/beacon-emit.ts:26`) returns before building a payload. | `POST` to `new URL("/beacon", base)` (`src/cron/beacon-emit.ts:69`) under `BEACON_URL`, refused unless HTTPS and not `isInternalSinkHost` (`src/cron/beacon-emit.ts:70`), and refused when `screenResolvedIfHostname` (`src/cron/beacon-emit.ts:77`) finds an internal address in what the name resolves to, with `redirect: "manual"` (`src/cron/beacon-emit.ts:85`). The vendor control plane's beacon endpoint stores the aggregate in Workers KV and rejects any per-downpipe field. Called from `runBeaconEmitPass` (`src/cron/drive.ts:256`). | `test/validate-beacon-emit.ts` |
 | Notifications | Alert emissions built from the run-history ring: downpipe ids and names, statuses, freshness, enumerated error classes. | An operator configures a channel and a rule. | The operator's own endpoint through `deliverToChannel` (`src/notify-routing.ts:666`) and the adapters under `src/notify/channels/` (email, JSM, PagerDuty, ServiceNow, Slack, Teams, webhook). | `test/validate-notify.ts` |
 | Support bundle | The signed, redaction-safe diagnostics bundle: version and provenance, presence-only status, the preflight report, coarse run rows, delivery outcomes, the licence tier. | The operator downloads it (`"GET /support/bundle"` (`src/admin/router-status.ts:302`)) or generates it from the console (`"POST /support/bundle"` (`src/admin/router-status.ts:326`)), both gated on `posture.read`; or vendor support pulls it with an Owner-minted `diagnostics` credential. | The ticket the operator attaches it to, or the vendor's pull. The console's client diagnostics ring is folded in request-scoped by `projectClientDiagnostics` (`src/admin/client-diag-receive.ts:463`) and never written to the Durable Object. | `test/validate-client-diag.ts` |
 
@@ -582,7 +579,7 @@ vendor service. It is not a log producer in the sense of this inventory.
 | Layer | Format | Storage | Retention | Access control | Integrity | Leaves the account |
 |-------|--------|---------|-----------|----------------|-----------|--------------------|
 | Audit log (Layer 1) | JSON, hash-chained | Scheduler Durable Object, `audit:` prefix | 10,000 entries, oldest rolled over and counted; no TTL | `audit.read`, held by every built-in role; Durable Object-only writes | SHA-384 chain; head hash rides every export | Through the mirror line (with a Logpush job), the pull feed (with a credential) and the push destination (Layer 4) |
-| Operational stream (Layer 2) | Single-line JSON from `src/log.ts`, 275 call sites / 58 files | Cloudflare Workers Logs | Account Workers Logs retention; the Logpush sink's beyond that | Cloudflare account IAM | None after collection | Only with a Logpush job |
+| Operational stream (Layer 2) | Single-line JSON from `src/log.ts`, 281 call sites / 60 files | Cloudflare Workers Logs | Account Workers Logs retention; the Logpush sink's beyond that | Cloudflare account IAM | None after collection | Only with a Logpush job |
 | Platform request logs (Layer 3) | Cloudflare invocation log | Cloudflare Workers Logs | Account Workers Logs retention | Cloudflare account IAM | None | Only with a Logpush job |
 | Push destination (Layer 4) | The Layer 1 events in one of eight formats | The operator's `http`, `s3` or `syslog-tls` sink | The sink's | Owner-only to configure; the sink's to read | `seq` and `hash` on every event | Yes, when an Owner configures it |
 | Console Worker stream | Single-line JSON from `console/src/log.ts` | Cloudflare Workers Logs | Account Workers Logs retention | Cloudflare account IAM | None after collection | Only with a Logpush job |

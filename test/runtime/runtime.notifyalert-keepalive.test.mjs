@@ -3,22 +3,18 @@
 // Run: node test/runtime/runtime.notifyalert-keepalive.test.mjs [--n 3] [--calibrate] [--holds] [--probe]
 //                                                                  [--only <id>] [--json <path>]
 //
-// WHY THIS EXISTS. The four destination-change alerts were driven and found to LOSE every record, which led
-// to a repair of the shared helper: routeEmission fired BOTH its writes -- noteEmissionFailure's counter
-// and the /notify/record post that IS the notify-history row -- with a bare `void` and returned, so the
-// promise every call site held resolved BEFORE the only durable record existed. Its keep-alive covered the
-// channel resolve and the delivery and stopped exactly short of the record. Every OTHER routeXxxAlert
-// wrapper goes through the same helper, so the same loss was live for all of them, and none of them had yet
-// been measured.
+// WHY THIS EXISTS. routeEmission writes twice: noteEmissionFailure's counter and the /notify/record post
+// that IS the notify-history row. Both writes are kept alive until they settle, so the promise every call
+// site holds resolves only AFTER the durable record exists. Every routeXxxAlert wrapper goes through the
+// same helper, so each one is driven here.
 //
-// "THEY SHARE THE FIXED HELPER" IS THE REASONING THAT FAILED THIS MORNING. The four sites repaired on
-// resemblance to their neighbours read 0 of 3. Elsewhere in this engine one shared helper LOSES under one
-// caller and KEEPS under another on the identical line, because one caller returns immediately and the other
-// then does awaited work. So the helper being fixed settles nothing about a CALLER SHAPE, and the whole point
-// of this drive is to find a caller the fix does not reach.
+// A SHARED HELPER DOES NOT SETTLE A CALLER SHAPE. In this engine one shared helper can LOSE under one
+// caller and KEEP under another on the identical line, because one caller returns immediately and the other
+// then does awaited work. So the whole point of this drive is to find a caller the helper's keep-alive does
+// not reach.
 //
-// THE CALLER SHAPES, read off source rather than assumed (engine 7935cff6):
-//   waitUntil     fireInBackground(runtime, routeXxxAlert(...))  -- the repaired shape the four dest sites carry
+// THE CALLER SHAPES, read off source rather than assumed:
+//   waitUntil     fireInBackground(runtime, routeXxxAlert(...))  -- the shape the four dest sites carry
 //   awaited       await routeDualControlDisarmAlert(...)         -- inside the request's own turn
 //   BARE VOID     void routePostureRegressions(...).catch(...)   -- router-posture.ts:342, NO keep-alive at all
 // The third is the one that cannot be fixed by a helper that returns its writes, because the caller throws the
@@ -258,7 +254,7 @@ const CASES = [
   {
     id: "role-change",
     expect: "keep",
-    site: "router-rbac.ts:113 POST /roles (role grant/change)",
+    site: "router-rbac.ts:115 POST /roles (role grant/change)",
     shape: "waitUntil",
     path: "/roles",
     method: "POST",
@@ -271,7 +267,7 @@ const CASES = [
   {
     id: "offboard-console",
     expect: "keep",
-    site: "router-rbac.ts:144 POST /roles/delete (offboarding, console path)",
+    site: "router-rbac.ts:148 POST /roles/delete (offboarding, console path)",
     shape: "waitUntil",
     path: "/roles/delete",
     method: "POST",

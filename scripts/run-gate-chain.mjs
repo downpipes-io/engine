@@ -95,7 +95,6 @@
 //
 // Usage: node scripts/run-gate-chain.mjs <script-name> <min-members>
 //
-//
 
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";

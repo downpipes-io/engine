@@ -37,7 +37,7 @@
 // append on the same `existed` it now reports. The mechanism is the MIRROR of the refusal defect rather than
 // the same one -- there the router ignored a verdict the DO gave, here the DO gave no verdict for the router
 // to read -- so the repair is a FIELD on the DO's response (`deleted`), spelled exactly as the sibling that
-// solved it first (router-rbac.ts:144), and a second helper, doDeletedNothing, that reads it. What gets
+// solved it first (router-rbac.ts:148), and a second helper, doDeletedNothing, that reads it. What gets
 // AUDITED is unchanged: the skip was always right, it was the silence about the skip that was not.
 //
 // AND THE NO-OP TEST IS NO MORE A SUCCESS TEST THAN THE REFUSAL TEST IS. Only an explicit `deleted:false`
@@ -45,7 +45,7 @@
 // queued alert exactly as `ok === true` would have -- which is why idp-delete-queued is driven in every
 // scored run here and must read N/N before and after.
 //
-// THE HOUSE ALREADY STATES THE RULE, eleven lines from a sibling site. router-rbac.ts:144 reads the BODY:
+// THE HOUSE ALREADY STATES THE RULE, eleven lines from a sibling site. router-rbac.ts:148 reads the BODY:
 // "notify on an ACTUAL offboarding ... The DO returns { deleted:true } only when a member was really removed;
 // a no-op delete of an absent member returns { deleted:false } and is not a change worth alerting on." And
 // routeAuthChangeAlert's own contract (router-notify.ts:218) opens "The change itself is already committed +

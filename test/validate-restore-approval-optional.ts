@@ -1,12 +1,11 @@
 // validate-restore-approval-optional: proves the RESTORE-apply dual-control gate is owner-opt-in and that
 // BOTH directions of the switch are real.
 //
-// WHY THIS EXISTS. The gate used to be unconditional, and canApprove refuses a same-subject AND a same-email
-// approval, so a one-identity estate could plan a restore and never apply it: the product's core promise was
-// unreachable in a configuration the product itself calls valid (BASE_MIN_OWNERS is 1). The fix must not be
-// graded by "a solo apply now proceeds" alone, because a dead gate would also pass that. So the ARMED case is
-// asserted here too: with the policy on, an unapproved apply must still be refused. Only the two together
-// distinguish "made optional" from "broken".
+// WHY THIS EXISTS. The gate is unconditional only when the owner arms it. canApprove refuses a same-subject
+// AND a same-email approval, so a one-identity estate (BASE_MIN_OWNERS is 1) must be able to plan and apply a
+// restore with the policy off. The switch must not be graded by "a solo apply proceeds" alone, because a dead
+// gate would also pass that. So the ARMED case is asserted here too: with the policy on, an unapproved apply
+// must still be refused. Only the two together distinguish "optional" from "broken".
 //
 // Run: node test/validate-restore-approval-optional.ts
 import { buildContext } from "./validate-owner-action-dualcontrol-harness.ts";

@@ -97,8 +97,8 @@ export async function resolveDiscoveryTokenDetailed(scheduler: DurableObjectStub
     }
   } catch {
     // The DO could not be read, so the resolver silently falls back to the env var -- or to null, which
-    // every caller renders as "no discovery token is configured". A whole class of "we set the token and
-    // discovery still says there is none" tickets lives in this catch. Counted, not swallowed.
+    // every caller renders as "no discovery token is configured". A whole class of "the token is set and
+    // discovery still says there is none" reports lives in this catch. Counted, not swallowed.
     //
     // Issued as a DIRECT fetch rather than through admin/diag-counters.ts, because that module imports doURL
     // from THIS file and routing the bump through it would close an import cycle. The wire shape is identical

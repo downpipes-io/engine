@@ -575,10 +575,9 @@ export function writeRulesets(scope: CfScope): NonNullable<CfConfigSurface["writ
     const rulesBase = `${base(ids)}/rulesets`;
     // Read live rulesets (the index is a list -> paginate) and expand each so we can diff its rules.
     // RULESETS_PER_PAGE, not the registry default. Cloudflare refuses per_page above 50 on the ruleset
-    // index, so this threw on every account and the WRITE path of both ruleset surfaces could not run at
-    // all. expandRulesets (the READ) was fixed for the same reason; this half was missed because nothing
-    // exercised it: the auto-prove sweep only covers the generated writers, and these two are hand-written
-    // and predate it. They were carried as proven on a proof that never touched this line.
+    // index, so a larger page size would throw on every account and the WRITE path of both ruleset
+    // surfaces could not run. expandRulesets (the READ) uses the same page size. The auto-prove sweep only
+    // covers the generated writers; these two are hand-written, so it does not exercise this line.
     const liveIndex = (await paginate(api, rulesBase, meter, RULESETS_PER_PAGE)) as Array<Record<string, unknown>>;
     const { byId: liveById, byPhase: liveByPhase } = indexLiveRulesets(liveIndex);
     const snapshot = (Array.isArray(data) ? data : []).filter(isPlainObject) as Array<Record<string, unknown>>;

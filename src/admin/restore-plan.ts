@@ -141,7 +141,9 @@ export function buildRestorePlan(env: Env, body: RestoreRequest, run: Run, inRec
       // would be a false instruction, and the fix in the second case is to widen the request and get it
       // re-approved, not to hunt for a credential.
       const writableButNotAllowed = surface?.write !== undefined && body.cfConfig !== undefined && !allowedSurfaces.has(rec.name);
-      const how = tier === "reprovision"
+      const how = surface?.capturedNotRestorable !== undefined
+        ? surface.capturedNotRestorable
+        : tier === "reprovision"
         ? "write-only values (secrets / certificate keys), re-provision them; the snapshot holds the rest"
         : tier === "ordered"
           ? "re-create in dependency order (Access / load balancers) from the snapshot"

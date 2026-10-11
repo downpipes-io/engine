@@ -309,7 +309,7 @@ export function AccountConfigMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
     // router's own post-write bookkeeping (observeAttachSideEffects, the update-apply "promoted" arms),
     // never a request body an outside caller controls. NEVER OVERWRITTEN once set: the account a running
     // Worker script lives in cannot change under it, so a second call (every later attach/apply) is a
-    // cheap idempotent no-op, not a fresh audit row each time. A blank/malformed accountId is dropped
+    // cheap idempotent no-op, not a new audit row each time. A blank/malformed accountId is dropped
     // silently (accountId stays null in the return; nothing is stored) rather than refused with a throw,
     // because this runs as best-effort bookkeeping AFTER the attach/apply it verifies has already
     // succeeded and must never turn that success into a 500.

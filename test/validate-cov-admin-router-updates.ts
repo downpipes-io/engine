@@ -314,7 +314,7 @@ async function main(): Promise<void> {
     // uploaded artefact bytes as the version's main module, so the warn-mode gate records a VERIFIED
     // verdict in these flows (the gate's own refusal/unavailable arms are unit-proven in
     // validate-update-apply.ts; this suite proves the route wiring does not add surprise fetches).
-    if (method === "GET" && /\/workers\/scripts\/[^/]+\/versions\/[^/]+/.test(url)) {
+    if (method === "GET" && /\/workers\/workers\/[^/]+\/versions\/[^/]+/.test(url)) {
       return new Response(JSON.stringify({ success: true, result: { modules: [{ name: "index.js", content_base64: Buffer.from(ARTEFACT).toString("base64") }] } }), { status: 200 });
     }
     // CF: list deployments (record the rollback target) -> a single live version at 100%, or, when
@@ -387,7 +387,7 @@ async function main(): Promise<void> {
       };
       return handleAdmin(new Request(`https://engine.example${path}`, init), baseEnv());
     }
-    // callWithEnv is `call` with an explicit env instead of the shared baseEnv() (see GROUP D2 below):
+    // callWithEnv is `call` with an explicit env instead of the shared baseEnv() (see the cfAccountId group below):
     // it drives the same forged Access JWT against a DIFFERENT scheduler DO, so a test can prove what a
     // request does to a FRESH engine without disturbing (or being disturbed by) the shared `sched` state
     // every other group in this file reads and writes.
@@ -739,13 +739,21 @@ async function main(): Promise<void> {
 
       // STATE 2: the SIGNED CHANNEL is unreachable. A genuinely different owner (the vendor's CDN, or the
       // customer's egress), and it must not be able to wear the DO's label either.
+      const faultRows = async (): Promise<Array<Record<string, unknown>>> => {
+        const r = await (sched.stub as unknown as { fetch(req: Request): Promise<Response> }).fetch(new Request("https://do/update-faults"));
+        return ((await r.json()) as { faults?: Array<Record<string, unknown>> }).faults ?? [];
+      };
+      const faultsBefore = (await faultRows()).length;
       channelNetworkFault = true;
       const chFault = await call(OWNER, "POST", "/admin/update/apply", { dryRun: true });
       channelNetworkFault = false;
       const afterCh = await routeErrors();
       ok("a channel network fault still refuses the apply", chFault.status === 400);
-      ok("THE CHANNEL FAULT IS RECORDED AS channel-fetch", delta(afterCh, "update-apply|channel-fetch") === 1);
-      ok("DISCRIMINATION: the DO outage and the channel outage are TWO DIFFERENT ROWS, not one", delta(afterCh, "update-apply|do-read") === 1 && delta(afterCh, "update-apply|channel-fetch") === 1);
+      // The channel fetch answers its own failure (defaultFetch reports status 0 and returns null), so the
+      // fault lands as an update-fault row of component channel and step channel-fetch, not as a route error.
+      const newRows = (await faultRows()).slice(faultsBefore);
+      ok("THE CHANNEL FAULT IS RECORDED AS channel-fetch", newRows.length === 1 && newRows[0]?.component === "channel" && newRows[0]?.step === "channel-fetch");
+      ok("DISCRIMINATION: the DO outage is a do-read route error and the channel outage a channel-fetch fault row, never one key", delta(afterCh, "update-apply|do-read") === 1 && delta(afterCh, "update-apply|channel-fetch") === 0 && newRows.length === 1);
     }
 
     // ===================================================================================================
@@ -869,7 +877,7 @@ async function main(): Promise<void> {
     }
 
     // ===================================================================================================
-    // GROUP D2: GET /admin/status.cfAccountId stays absent forever on any engine that self-updates past
+    // cfAccountId group: GET /admin/status.cfAccountId stays absent forever on any engine that self-updates past
     // the point where recordVerifiedEngineAccountAfterSelfDeploy is wired only into the PROMOTE leg
     // (router-updates.ts:533, inside the very request that swaps the code): on the FIRST such self-update,
     // that request runs on the code that was already live BEFORE the swap, which does not contain the
@@ -1599,15 +1607,21 @@ async function main(): Promise<void> {
       const countOf = (c: Record<string, { count?: number }>, n: string): number => c[n]?.count ?? 0;
       const before = await counters();
       const rbRefusedBefore = countOf(before, "update-rollback-refused");
-      // The engine rollback with NO recorded target: the guard the console's own body can actually trip.
+      // The engine rollback with an empty deploy token. An engine target IS recorded at this point (the plan
+      // above resolved one), so the guard that refuses is the deploy-token check, not the no-target check. The
+      // refusal reason and the guard-class counter name the guard that ran; the no-target class must not move.
+      const tokenRefusedBefore = countOf(before, "update-refused-deploy-token");
+      const noTargetRefusedBefore = countOf(before, "update-refused-no-target");
       const rbNoTarget = await call(OWNER, "POST", "/admin/update/rollback", { components: ["engine"], token: "" });
-      ok("a rollback the guards refuse -> a refusal, not a revert", rbNoTarget.status >= 400);
+      const rbNoTargetBody = await jsonOf(rbNoTarget);
+      ok("a rollback with no deploy token is refused by the deploy-token guard (400, its own reason), not reverted", rbNoTarget.status === 400 && /paste the one-shot Cloudflare deploy token/.test(String(rbNoTargetBody.error)));
       const after = await counters();
+      ok("the refusal is counted under the deploy-token guard class, and the no-target class did not move", countOf(after, "update-refused-deploy-token") === tokenRefusedBefore + 1 && countOf(after, "update-refused-no-target") === noTargetRefusedBefore);
       ok("the rollback attempt is counted, so 'we tried to roll back and it refused' is not silence", countOf(after, "update-rollback-refused") === rbRefusedBefore + 1);
 
       // THE RELEASE that names a component this build cannot plan: nothing is refused (a later engine
       // learns it), the component simply never updates while the release says it ships one. That is the
-      // "we updated but X is still on the old version" ticket, and it recorded nothing at all.
+      // "updated, but X is still on the old version" support ticket, and nothing was recorded for it.
       const unplannableBefore = countOf(after, "update-degraded-components-unplannable");
       current = await signedChannel(ENGINE_VERSION, "routine", { console: { version: "0.7.7" }, extraComponent: { id: "scheduler", version: "1.2.3" } });
       const dry = await call(OWNER, "POST", "/admin/update/apply", { components: ["console"] });

@@ -20,7 +20,10 @@
 //
 // Run: node test/validate-canonnum.ts
 
+import fc from "fast-check";
+
 import { validateCanonicalCounts } from "../src/format/canonnum.ts";
+import { parseShard } from "../src/format/record-codec.ts";
 import { parseRunlog, type RunlogEntry } from "../src/format/writer.ts";
 import { canonicalJSON } from "../src/format/canonjson.ts";
 import { checkRunlogFreshness } from "../src/format/freshness.ts";
@@ -91,6 +94,18 @@ rejects("fractional number rejected", () => validateCanonicalCounts('{"n":1.5}',
 rejects("exponent form (1e400 -> Infinity) rejected", () => validateCanonicalCounts('{"n":1e400}', "n"));
 rejects("negative number rejected", () => validateCanonicalCounts('{"n":-3}', "n"));
 rejects("negative zero rejected", () => validateCanonicalCounts('{"n":-0}', "n"));
+// The count must be written as ASCII digits only (SPEC 11.3, one canonical representation). A value
+// that parses to an integer but is written with a point or an exponent is refused, as in the Go reader.
+rejectsWith("point form 1.0 rejected", () => validateCanonicalCounts('{"n":1.0}', "n"), "is not an integer");
+rejectsWith("exponent form 1e3 rejected", () => validateCanonicalCounts('{"n":1e3}', "n"), "is not an integer");
+rejectsWith("exponent form 1E3 rejected", () => validateCanonicalCounts('{"n":1E3}', "n"), "is not an integer");
+rejectsWith("signed exponent form 10e-1 rejected", () => validateCanonicalCounts('{"n":10e-1}', "n"), "is not an integer");
+rejectsWith("max-value point form rejected", () => validateCanonicalCounts('{"n":9007199254740991.0}', "n"), "is not an integer");
+rejectsWith("negative zero -0 rejected as non-negative violation", () => validateCanonicalCounts('{"n":-0}', "n"), "non-negative integer");
+rejects("leading zero 01 rejected (not valid JSON)", () => validateCanonicalCounts('{"n":01}', "n"));
+rejectsWith("large integer above 2^53-1 rejected by its digits", () => validateCanonicalCounts('{"n":9007199254740992}', "n"), "out of canonical range");
+rejectsWith("very large integer rejected", () => validateCanonicalCounts('{"n":123456789012345678901234567890}', "n"), "out of canonical range");
+accepts("nested canonical count accepted", () => validateCanonicalCounts('{"a":{"n":7}}', "a.n"));
 rejects("boolean rejected", () => validateCanonicalCounts('{"n":true}', "n"));
 
 // Each rejection carries the reason for the guard that fired (parity with Go's distinct
@@ -328,6 +343,65 @@ async function freshnessRollbackDetectedIsUnconditional(): Promise<void> {
   const pinRes = await checkRunlogFreshness(cleanStore, "R1", root, verifier, { allowStale: true, minRunlogIndex: 5 });
   ok("freshness: below the min-runlog-index pin reports ok:true under allowStale (masked, unchanged)", pinRes.ok === true);
   ok("freshness: below the min-runlog-index pin sets rollbackDetected:true regardless of allowStale", pinRes.rollbackDetected === true);
+}
+
+// ---------------------------------------------------------------------------------------
+// Go token parity (S2-16). Go decodes with UseNumber and judges the TOKEN: "1.0" and "1e2" are refused
+// although they parse to integers, a key that differs from the field only in case is refused, and a shard
+// record's packed offset/length and chunkRange bounds are count fields too (shard.go recordCountPaths).
+// Each verdict below was taken from the Go reference validateCounts on the same bytes.
+// ---------------------------------------------------------------------------------------
+const RECORD_PATHS = ["plaintextSize", "segments[].packed.offset", "segments[].packed.length", "segments[].chunkRange[]"];
+rejectsWith("Go parity: fraction token 1.0 refused", () => validateCanonicalCounts('{"shardCount":1.0}', "shardCount"), "is not an integer");
+rejectsWith("Go parity: exponent token 1e2 refused", () => validateCanonicalCounts('{"shardCount":1e2}', "shardCount"), "is not an integer");
+rejectsWith("Go parity: exponent token 1E0 refused", () => validateCanonicalCounts('{"shardCount":1E0}', "shardCount"), "is not an integer");
+rejectsWith("Go parity: case-variant duplicate key refused", () => validateCanonicalCounts('{"shardCount":1,"ShardCount":2}', "shardCount"), "differs only in case");
+rejectsWith("Go parity: case-variant key alone refused", () => validateCanonicalCounts('{"ShardCount":2}', "shardCount"), "differs only in case");
+rejectsWith("Go parity: RUNLOG index 1.0 refused", () => validateCanonicalCounts('{"index":1.0,"recordCount":1}', "index", "recordCount"), "is not an integer");
+rejectsWith("Go parity: shard chunkRange bound 1.0 refused", () => validateCanonicalCounts('{"kind":"record","plaintextSize":1,"segments":[{"chunkRange":[0,1.0]}]}', ...RECORD_PATHS), "segments[0].chunkRange[1]");
+rejectsWith("Go parity: shard packed offset -1 refused", () => validateCanonicalCounts('{"kind":"record","plaintextSize":1,"segments":[{"packed":{"offset":-1,"length":1},"chunkRange":[0,1]}]}', ...RECORD_PATHS), "non-negative integer");
+rejectsWith("Go parity: shard packed offset as a string refused", () => validateCanonicalCounts('{"kind":"record","plaintextSize":1,"segments":[{"packed":{"offset":"3","length":1},"chunkRange":[0,1]}]}', ...RECORD_PATHS), "string form is reserved");
+rejectsWith("Go parity: segments that is not an array refused", () => validateCanonicalCounts('{"kind":"record","plaintextSize":1,"segments":{"chunkRange":[0,1]}}', ...RECORD_PATHS), "must be an array");
+accepts("Go parity: a canonical shard record passes every record path", () => validateCanonicalCounts('{"kind":"record","plaintextSize":7,"segments":[{"packed":{"offset":0,"length":7},"chunkRange":[0,1]},{"chunkRange":[1,2]}]}', ...RECORD_PATHS));
+accepts("Go parity: a record with no segments passes", () => validateCanonicalCounts('{"kind":"record","plaintextSize":7}', ...RECORD_PATHS));
+rejects("Go parity: parseShard refuses a record whose chunkRange bound is 1.0", () =>
+  parseShard(utf8('{"kind":"preamble","formatVersion":"downpipe/0.1.0","runId":"R","shardId":"00000","recordCountInShard":1}\n{"kind":"record","plaintextSize":1,"segments":[{"object":"seg/x.seg","chunkRange":[0,1.0]}]}\n')),
+);
+
+// A seeded differential sweep over generated count tokens and key spellings. The oracle is Go's token rule
+// written out here from canonnum.go (no fraction or exponent, no sign, no leading zero, at most 2^53-1, a
+// JSON number and not a string, no case-variant key), sharing no code with the port.
+function goVerdict(key: string, token: string): boolean {
+  if (key !== "n" && key.toLowerCase() === "n") return false; // a case variant of the field
+  if (key !== "n") return true; // another field entirely: n is missing, which is permitted
+  if (token === "null") return true;
+  if (!/^-?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][+-]?[0-9]+)?$/.test(token)) return false; // a string, a bool, an object
+  if (/[.eE]/.test(token) || token.startsWith("-")) return false;
+  return BigInt(token) <= BigInt(2 ** 53 - 1);
+}
+{
+  const tokenArb = fc.oneof(
+    fc.bigInt({ min: 0n, max: 2n ** 60n }).map(String),
+    fc.integer({ min: -1000, max: 1000 }).map(String),
+    fc.tuple(fc.nat(99), fc.constantFrom(".0", ".5", "e0", "E0", "e+1", "e-1", ".0e0", "E10")).map(([n, s]) => `${n}${s}`),
+    fc.constantFrom("0", "-0", "9007199254740991", "9007199254740992", "9007199254740993", "1e400", '"5"', '""', "true", "false", "null", "[]", "{}", "[1]"),
+  );
+  let disagreements = 0;
+  let first = "";
+  for (const [key, token] of fc.sample(fc.tuple(fc.constantFrom("n", "N", "m"), tokenArb), { seed: 0x5eed36, numRuns: 2000 })) {
+    const text = `{"${key}":${token}}`;
+    let ts = true;
+    try {
+      validateCanonicalCounts(text, "n");
+    } catch {
+      ts = false;
+    }
+    if (ts !== goVerdict(key, token)) {
+      disagreements++;
+      if (first === "") first = `${text}: port ${ts ? "accepts" : "refuses"}, Go ${ts ? "refuses" : "accepts"}`;
+    }
+  }
+  ok(`Go parity sweep: 2000 generated count tokens, port and Go rule agree on every one${first ? ` (first disagreement ${first})` : ""}`, disagreements === 0);
 }
 
 async function main(): Promise<void> {

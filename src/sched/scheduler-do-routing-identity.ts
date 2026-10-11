@@ -146,7 +146,7 @@ export function RoutingIdentityMixin<TBase extends SchedulerDOCtor>(Base: TBase)
       }
     }
 
-    // Step-up re-auth (ASVS V7.5.1/V7.5.3): the fresh-assertion ceremony + the router-internal satisfied check.
+    // Step-up re-auth: the fresh-assertion ceremony + the router-internal satisfied check.
     // Returns the handler Response for a key this sub-dispatch owns, or null ("not my route") so route()
     // tries the next link. The arms are verbatim from the original single switch.
     async routeStepUp(req: Request, url: URL): Promise<Response | null> {

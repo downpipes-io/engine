@@ -33,7 +33,6 @@
 // row and a release verdict that disagree is the exact shape the console rendered.
 //
 //
-//
 //   node test/validate-update-version-skew.ts
 
 import { compareSemver, versionSkew, type VersionSkew } from "../src/admin/updates.ts";

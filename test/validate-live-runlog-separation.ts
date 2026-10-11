@@ -45,7 +45,6 @@
 // Run: node test/validate-live-runlog-separation.ts
 // In-memory doubles only; no network, no deploy, no estate driven, no cost.
 //
-//
 
 import { readFileSync } from "node:fs";
 import path from "node:path";

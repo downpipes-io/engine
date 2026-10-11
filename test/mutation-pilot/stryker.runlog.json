@@ -1,0 +1,14 @@
+{
+  "$schema": "../../node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "testRunner": "command",
+  "commandRunner": { "command": "node test/validate-runlog-chain.ts && node test/validate-runlog-lock.ts && node test/validate-runlog-lock-window.ts && node test/validate-runlog-attended-resign.ts && node test/validate-runlog-floor.ts && node test/validate-runlog-relink.ts && node test/validate-runlog-floor-reset.ts && node test/validate-rekey-runlog-handover.ts && node test/validate-runlog-sig-restore-route.ts && node test/validate-pipeline-runlog.ts && node test/validate-runlog-sig-pending.ts && node test/validate-runlog-write-verify.ts && node test/validate-runlog-resign-verify.ts && node test/validate-runlog-contention.ts && node test/validate-scheduler-runlog.ts && node test/validate-live-runlog-separation.ts" },
+  "mutate": ["src/seal/pipeline.ts:449-780"],
+  "ignorePatterns": [".worktrees", ".stryker-tmp", "coverage", "*.log", "test/mutation-pilot/reports"],
+  "reporters": ["clear-text", "json"],
+  "jsonReporter": { "fileName": "test/mutation-pilot/reports/runlog.json" },
+  "thresholds": { "high": 95, "low": 90, "break": null },
+  "timeoutMS": 60000,
+  "concurrency": 4,
+  "tempDirName": ".stryker-tmp-runlog",
+  "cleanTempDir": true
+}

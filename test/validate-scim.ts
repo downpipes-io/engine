@@ -37,6 +37,8 @@
 // Run:
 //   node test/validate-scim.ts
 
+import fc from "fast-check";
+
 import { handleScim } from "../src/admin/scim.ts";
 import { handleAdmin } from "../src/admin/router.ts";
 import { SchedulerDO } from "../src/index.ts";
@@ -223,6 +225,88 @@ async function testNonPatchOp(): Promise<void> {
   const env = stubEnv(rec);
   const r = await handleScim(scimReq("PATCH", "/scim/v2/Users/eve%40co", { body: { foo: "bar" } }), env);
   ok("non-PatchOp PATCH -> 400, with no mutating DO route touched", r.status === 400 && rec.deletes.length === 0 && mutations(rec).length === 0);
+
+  // S2-16: every JSON body that is not an object -- null above all, which used to THROW out of the facade on
+  // `body.schemas` and reach the connector as an internal 500 -- is the same shape reject, never a throw.
+  for (const body of [null, [], 0, "x", true]) {
+    const recN = recordingScheduler();
+    let status = -1;
+    try {
+      status = (await handleScim(scimReq("PATCH", "/scim/v2/Users/eve%40co", { body }), stubEnv(recN))).status;
+    } catch {
+      status = -1;
+    }
+    ok(`PATCH body ${JSON.stringify(body)} -> 400 (not a throw), no mutating DO route touched`, status === 400 && mutations(recN).length === 0);
+    ok(`PATCH body ${JSON.stringify(body)} records scim-patch-shape-rejected`, recN.signals.includes("scim-patch-shape-rejected"));
+  }
+
+  // A seeded fuzz of PatchOp bodies. The oracle is written here from RFC 7644 as the facade documents it: a
+  // replace/add (or a missing op) whose path is "active" (any case) with a boolean value, or whose value
+  // object carries a boolean "active", sets the state; the LAST such operation wins; only a final false
+  // offboards. The facade must never throw, must offboard exactly when the oracle says so, and must 400
+  // everything else.
+  const oracle = (ops: unknown): boolean | undefined => {
+    if (!Array.isArray(ops)) return undefined;
+    let last: boolean | undefined;
+    for (const o of ops) {
+      if (typeof o !== "object" || o === null) continue;
+      const op = typeof (o as { op?: unknown }).op === "string" ? ((o as { op: string }).op).toLowerCase() : "";
+      if (op !== "replace" && op !== "add" && op !== "") continue;
+      const path = typeof (o as { path?: unknown }).path === "string" ? ((o as { path: string }).path).toLowerCase() : "";
+      const value = (o as { value?: unknown }).value;
+      if (path === "active" && typeof value === "boolean") last = value;
+      else if (path === "" && typeof value === "object" && value !== null && typeof (value as { active?: unknown }).active === "boolean") last = (value as { active: boolean }).active;
+    }
+    return last;
+  };
+  const opArb = fc.oneof(
+    fc.record({ op: fc.constantFrom("replace", "Replace", "add", "remove", "", 1), path: fc.constantFrom("active", "ACTIVE", "Active", "name", "", "active "), value: fc.oneof(fc.boolean(), fc.constantFrom<unknown>("false", 0, null, { active: false }, { active: "false" })) }, { requiredKeys: [] }),
+    fc.record({ op: fc.constantFrom("replace", "add"), value: fc.oneof(fc.record({ active: fc.oneof(fc.boolean(), fc.constant<unknown>("false")) }), fc.constant<unknown>(null), fc.constant<unknown>([])) }, { requiredKeys: [] }),
+    fc.jsonValue({ maxDepth: 1 }),
+  );
+  let disagreements = 0;
+  let first = "";
+  let offboards = 0;
+  for (const ops of fc.sample(fc.oneof(fc.array(opArb, { maxLength: 4 }), fc.jsonValue({ maxDepth: 1 })), { seed: 0x5eed36, numRuns: 200 })) {
+    const recF = recordingScheduler();
+    const body = { schemas: [PATCH_OP], Operations: ops };
+    let status = -1;
+    try {
+      status = (await handleScim(scimReq("PATCH", "/scim/v2/Users/fuzz%40co", { body }), stubEnv(recF))).status;
+    } catch {
+      status = -1;
+    }
+    const want = oracle(ops);
+    const offboarded = recF.deletes.length > 0;
+    if (offboarded) offboards++;
+    const agrees = want === false ? status === 204 && offboarded : status === 400 && !offboarded;
+    if (!agrees) {
+      disagreements++;
+      if (first === "") first = `${JSON.stringify(ops)} -> ${status}, offboarded ${offboarded}`;
+    }
+  }
+  ok(`PatchOp fuzz: 200 seeded bodies, the facade offboards exactly when the RFC 7644 oracle says active:false${first ? ` (first disagreement ${first})` : ""}`, disagreements === 0);
+  ok("PatchOp fuzz teeth: the sweep holds both offboards and refusals", offboards > 0 && offboards < 200);
+}
+
+// (f2) a PATCH body that is JSON but not an object (null, array, string, number, boolean) -> 400 invalidSyntax,
+// with the shape-rejected signal, no mutating DO route touched and no thrown error.
+async function testNonObjectPatchBody(): Promise<void> {
+  for (const [label, body] of [["null", null], ["array", []], ["string", "x"], ["number", 7], ["boolean", true]] as const) {
+    const rec = recordingScheduler();
+    const env = stubEnv(rec);
+    let status = 0;
+    let scimType: string | undefined;
+    let threw = false;
+    try {
+      const r = await handleScim(scimReq("PATCH", "/scim/v2/Users/fay%40co", { body }), env);
+      status = r.status;
+      scimType = ((await r.json()) as { scimType?: string }).scimType;
+    } catch {
+      threw = true;
+    }
+    ok(`PATCH body ${label} -> 400 invalidSyntax with no thrown error and no mutating DO route touched`, !threw && status === 400 && scimType === "invalidSyntax" && mutations(rec).length === 0);
+  }
 }
 
 // (g) GET ServiceProviderConfig advertises deprovision-only.
@@ -370,6 +454,7 @@ async function partA(): Promise<void> {
   await testPatchInactive();
   await testPatchActiveTrue();
   await testNonPatchOp();
+  await testNonObjectPatchBody();
   await testServiceProviderConfig();
   await testIdempotentAbsentDelete();
   await testLastOwnerRefusal();

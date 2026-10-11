@@ -12,7 +12,6 @@
 // fixture, and the oracle sidecar this corpus test needs. NET-ZERO: fake data, a harness-minted key
 // (never a customer key), an ephemeral out dir; no estate, bucket, network, seed or spend.
 //
-//
 
 import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";

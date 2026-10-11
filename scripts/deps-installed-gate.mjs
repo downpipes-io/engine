@@ -20,7 +20,6 @@
 // It reports the FIRST few names rather than all of them. A gate that prints 400 lines is one nobody
 // reads, and the fix is the same regardless of how many are missing.
 //
-//
 
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";

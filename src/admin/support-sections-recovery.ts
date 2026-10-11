@@ -6,6 +6,8 @@
 import { CP_EXPORT_FAIL_CLASSES } from "../cron/cron-fault-ledger.ts";
 import { RUNLOG_NO_SEED_REASONS } from "../format/freshness.ts";
 import { doURL } from "../do-url.ts";
+import type { Env } from "../env.d.ts";
+import { destinationsUnreadable, pendingOwnerActions } from "./support-recovery-owner-actions.ts";
 import { AUTO_HEAL_REFUSAL_CODES, AUTO_HEAL_SUB_CAUSES, EXPORT_SKIP_REASONS } from "./control-plane.ts";
 import { RECOVERY_REFUSAL_CLASSES, RECOVERY_REFUSAL_SURFACES } from "./diag-records.ts";
 import { clampEpochMs, clampInt, clampTs, gateClosed, UNKNOWN_CODE } from "./support-shared.ts";
@@ -77,7 +79,7 @@ async function fetchRecoveryRefusals(scheduler: DurableObjectStub): Promise<Reco
   }
 }
 
-export async function fetchRecoveryStatus(scheduler: DurableObjectStub): Promise<Record<string, unknown>> {
+export async function fetchRecoveryStatus(scheduler: DurableObjectStub, env: Pick<Env, "CONFIG_WRAP_KEY">): Promise<Record<string, unknown>> {
   {
     // The MANUAL-path refusals ride in this same section (see fetchRecoveryRefusals). They are gathered
     // first, so an unreadable recovery-status still carries them: on the disaster-recovery path the manual
@@ -169,6 +171,10 @@ export async function fetchRecoveryStatus(scheduler: DurableObjectStub): Promise
     //
     // downpipesDisabled states the consequence outright, so the pack says "nothing is running" as a fact.
     // Booleans, counts, a clamped timestamp: no account id, no downpipe id, no export content.
+    // destinationsUnreadable: the imported destinations whose credential cannot be used with the configured wrap
+    // key (a different key wrapped it, or the export left it out). Count and ids only. It rides with the import
+    // outcome because it is a fact about what the import restored; absent when no import ran.
+    const unreadable = j.lastImport && typeof j.lastImport === "object" ? await destinationsUnreadable(scheduler, env.CONFIG_WRAP_KEY) : null;
     const imp = j.lastImport && typeof j.lastImport === "object"
       ? {
           ...(clampTs(j.lastImport.at) !== undefined ? { at: clampTs(j.lastImport.at) } : {}),
@@ -177,6 +183,7 @@ export async function fetchRecoveryStatus(scheduler: DurableObjectStub): Promise
           downpipesDisabled: j.lastImport.downpipesDisabled === true,
           downpipes: clampInt(j.lastImport.downpipes, 1_000_000) ?? 0,
           destinations: clampInt(j.lastImport.destinations, 1_000_000) ?? 0,
+          ...(unreadable !== null ? { destinationsUnreadable: unreadable } : {}),
         }
       : null;
     const exp = j.exportHealth && typeof j.exportHealth === "object"
@@ -205,6 +212,10 @@ export async function fetchRecoveryStatus(scheduler: DurableObjectStub): Promise
           ...(j.exportHealth.perDestTruncated === true ? { perDestTruncated: true } : {}),
         }
       : null;
+    // pendingOwnerActions: what the Owner still has to do, from the two facts above. A closed list, present
+    // only when something is pending. The RUNLOG action comes from the closed noSeed reason; the key action
+    // from the unreadable destination count.
+    const ownerActions = pendingOwnerActions(runlogSeed !== null && "noSeed" in runlogSeed ? runlogSeed.noSeed : undefined, unreadable?.count ?? 0);
     return {
       recoveryRequired: j.recoveryRequired === true,
       ...(typeof j.reason === "string" ? { reason: j.reason } : {}),
@@ -229,6 +240,7 @@ export async function fetchRecoveryStatus(scheduler: DurableObjectStub): Promise
       // content of the "ambiguous" refusal, which could not say that two artefacts claim the latest generation.
       ...(recoveryScan !== null ? { refusedScan: recoveryScan } : {}),
       ...(Object.keys(recoveryRefusals).length > 0 ? { recoveryRefusals } : {}),
+      ...(ownerActions.length > 0 ? { pendingOwnerActions: ownerActions } : {}),
       ...(imp !== null ? { lastImport: imp } : {}),
       ...(probe ? { amnesiaProbe: probe } : {}),
       ...(runlogSeed !== null ? { runlogSeed } : {}),

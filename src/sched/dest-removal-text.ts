@@ -24,6 +24,11 @@ export interface RemovalRisk {
   olderOutsideHistory: number;
 }
 
+// The two refusals' opening words, so the router can file the singular clear's refusal under its closed class by
+// the START of the sentence (never by a word inside it: the names of the downpipes ride later in the text).
+export const DEST_IN_USE_PREFIX = "destination is in use by ";
+export const DEST_ORPHAN_PREFIX = "destination is the only proven copy of ";
+
 const CRON_MINUTES = Math.round(CRON_CADENCE_MS / 60_000);
 
 function firstFive(names: readonly string[]): string {
@@ -53,7 +58,7 @@ function olderClause(r: RemovalRisk): string | undefined {
 // with one destination is not replicated, and taking this one off first is what sent the operator from
 // this refusal to the orphan guard and back.
 export function destInUseRefusal(pinned: readonly string[], r: RemovalRisk): string {
-  const parts: (string | undefined)[] = [`destination is in use by ${pinned.length} downpipe(s): ${firstFive(pinned)}.`];
+  const parts: (string | undefined)[] = [`${DEST_IN_USE_PREFIX}${pinned.length} downpipe(s): ${firstFive(pinned)}.`];
   if (r.count === 0) {
     parts.push("Reassign them first.");
   } else {
@@ -70,20 +75,21 @@ export function destInUseRefusal(pinned: readonly string[], r: RemovalRisk): str
   return parts.filter((x): x is string => x !== undefined).join(" ");
 }
 
-// stalledCountClause states the case where the count does not fall as replication copies runs. The
-// replicate pass records a destination's proven window only up to the first run it cannot copy (for
-// example a run that no destination of the downpipe holds: sourceOf finds no source, processTarget strands
-// it, and highestContiguousRun stops below it). The newer runs of that downpipe stay uncovered in the scan
-// until the stranded run leaves the history ring, which moves the window floor above it.
+// stalledCountClause states the case where a run stays in the count while replication copies the rest. The
+// replicate pass records a destination's proven window only up to the first run it cannot copy (for example
+// a run that no destination of the downpipe holds: sourceOf finds no source, processTarget strands it, and
+// highestContiguousRun stops below it). The pass also lists the newer runs it did copy in holdsAbove, and
+// replProof counts those as held. Only the stranded run stays in the count, until it leaves the history
+// ring, which moves the window floor above it.
 function stalledCountClause(): string {
-  return `If replication cannot copy a run (for example, no destination holds it), its downpipe's newer runs stay in this count until that run leaves the downpipe's newest ${RING_CAP} runs.`;
+  return `If replication cannot copy a run (for example, no destination holds it), that run stays in this count until it leaves the downpipe's newest ${RING_CAP} runs.`;
 }
 
 // destOrphanRefusal is the orphan-guard refusal: no downpipe names this destination, but it is the only
 // proven copy of ring runs. The count falls as replication copies them, so the wait it names is one the
 // operator can watch end, except for the case stalledCountClause states.
 export function destOrphanRefusal(r: RemovalRisk): string {
-  const parts: (string | undefined)[] = [`destination is the only proven copy of ${r.count} backed-up run(s) (${firstFive(r.names)}).`];
+  const parts: (string | undefined)[] = [`${DEST_ORPHAN_PREFIX}${r.count} backed-up run(s) (${firstFive(r.names)}).`];
   const w = waitClause(r, "another destination of their downpipes");
   // The count can stay flat while replication copies the segment data the runs share: no run is held on a
   // destination until all the segment data from its origin is there (seal/replicate.ts syncSegmentStore).

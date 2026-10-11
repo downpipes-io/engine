@@ -1,7 +1,7 @@
 {
   "_comment": "Drift-guard baseline for engine/src/sources/cf-config-surfaces.ts (test/validate-cf-config-drift.ts). Regenerate after an INTENTIONAL change: node test/validate-cf-config-drift.ts --write-baseline",
   "surfaceCount": 313,
-  "endpointCount": 450,
+  "endpointCount": 451,
   "surfaces": [
     {
       "id": "access-apps",
@@ -1724,6 +1724,7 @@
     "GET /accounts/{}/r2/buckets",
     "GET /accounts/{}/r2/buckets/{}/cors",
     "GET /accounts/{}/r2/buckets/{}/domains/custom",
+    "GET /accounts/{}/r2/buckets/{}/domains/managed",
     "GET /accounts/{}/r2/buckets/{}/lifecycle",
     "GET /accounts/{}/r2/buckets/{}/lock",
     "GET /accounts/{}/r2/buckets/{}/sippy",

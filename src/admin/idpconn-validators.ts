@@ -102,17 +102,17 @@ function validateSecretRef(raw: unknown, clientAuth: OidcClientAuth): { ok: true
   const rec = raw as Record<string, unknown>;
   const mode = rec.mode;
   if (clientAuth === "private_key_jwt") {
-    // private_key_jwt client authentication is not yet implemented (the engine-held signing key path is a
-    // fast-follow). Reject it at CONFIG TIME so a connection can never be saved in a state that only fails
-    // at first login. The runtime exchange carries a matching guard as defence in depth.
-    return { ok: false, reason: "private_key_jwt client authentication is not yet supported; use client_secret_post, client_secret_basic, or pkce_public" };
+    // private_key_jwt client authentication is not supported. Reject it at CONFIG TIME so a connection can
+    // never be saved in a state that only fails at first login. The runtime exchange carries a matching
+    // guard as defence in depth.
+    return { ok: false, reason: "private_key_jwt client authentication is not supported; use client_secret_post, client_secret_basic, or pkce_public" };
   }
   // client_secret_post / client_secret_basic: do-plaintext is the supported floor (no ref; the value lives
-  // in idpsecret:<id>). secrets-store resolution is not yet wired, so it is rejected here at config time
+  // in idpsecret:<id>). The secrets-store mode is not supported, so it is rejected here at config time
   // rather than failing closed at the token exchange.
   if (mode === "do-plaintext") return { ok: true, ref: { mode: "do-plaintext" } };
   if (mode === "secrets-store") {
-    return { ok: false, reason: "secrets-store secret resolution is not yet supported; use the do-plaintext secret mode" };
+    return { ok: false, reason: "the secrets-store secret mode is not supported; use the do-plaintext secret mode" };
   }
   return { ok: false, reason: "a confidential client secretRef.mode must be 'do-plaintext'" };
 }

@@ -1,9 +1,9 @@
 // validate-notify-markup-escape: a downpipe NAME cannot become active markup in a Slack or Teams alert.
 //
-// WHY THIS FILE EXISTS. ASVS V1.3.3 asks that data passed to a potentially dangerous context is sanitised
+// WHY THIS FILE EXISTS. Data passed to a potentially dangerous context must be sanitised
 // for that context. The Slack and Teams sinks render the emission detail, and the detail is built from the
 // downpipe name (`${name} backup succeeded`, and its siblings), which config-validate bounds by LENGTH only.
-// Measured against the real adapters before this fix: the name
+// Measured against the real adapters without escaping, the name
 //   <!channel> <https://evil.example|Open the restore console>
 // produced a Slack payload carrying it verbatim in both the text and the mrkdwn block (a channel-wide ping
 // and a labelled phishing link), and a Teams card whose markdown text carried `[click](https://evil.example)`

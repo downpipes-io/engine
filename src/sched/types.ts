@@ -674,6 +674,13 @@ export interface RunHistoryEntry {
   // FROM it. Absent on legacy rows and on failed rows (a failed run sealed nowhere); the resolver
   // then falls back to the configured primary, exactly as a single-destination deployment always did.
   destinationId?: string;
+  // failedDestinationId / failedDestinationBasis: on a FAILED row, WHICH destination the run was writing to
+  // when it failed, and how the engine knows (attempted: the destination the seal selected and wrote to;
+  // pinned: the downpipe's pinned id, the run failed before one resolved; default: the default being
+  // resolved). Kept apart from destinationId, which means "sealed to" and is read by the resolvers. Absent
+  // when the engine could not name one.
+  failedDestinationId?: string;
+  failedDestinationBasis?: "attempted" | "pinned" | "default";
   // Verify-at-seal verdict: the result of reading this run's archive BACK from the
   // destination and verifying it right after the seal. Present on a successful row when verify-at-seal
   // ran (VERIFY_AT_SEAL on); "verified" with the tier + sample count means the bytes that LANDED are

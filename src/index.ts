@@ -18,6 +18,7 @@ import type { Env } from "./env.d.ts";
 import { ENGINE_VERSION } from "./format/version.ts";
 import { configureLog, log } from "./log.ts";
 import { RateLimitDO } from "./sched/ratelimit-do.ts";
+import { primaryDestinationId } from "./sched/destinations.ts";
 import { type DownpipeState, SchedulerDO } from "./sched/scheduler-do.ts";
 import { buildAdapter } from "./seal/adapters.ts";
 import { budgetFromEnv } from "./seal/budget.ts";
@@ -180,12 +181,12 @@ function correlationId(req: Request): string {
   return ray !== null && ray.length > 0 ? ray : `dpr-${crypto.randomUUID()}`;
 }
 
-// withCorrelation rebuilds a response carrying the correlation header without disturbing the existing body,
-// status or any header a route already set. It mirrors the fresh-Headers + new-Response pattern the chrome
+// withCorrelation rebuilds a response carrying the correlation header and the ENGINE_RESPONSE_FLOOR headers it
+// lacks, without disturbing the existing body, status or any header a route already set. It mirrors the fresh-Headers + new-Response pattern the chrome
 // already uses so a response forwarded from the DO (immutable headers) can still receive the header.
 function withCorrelation(resp: Response, cid: string): Response {
   const headers = new Headers(resp.headers);
-  headers.set(RESPONSE_ID_HEADER, cid);
+  headers.set(RESPONSE_ID_HEADER, cid); for (const [k, v] of Object.entries(ENGINE_RESPONSE_FLOOR)) if (!headers.has(k)) headers.set(k, v);
   return new Response(resp.body, { status: resp.status, statusText: resp.statusText, headers });
 }
 
@@ -250,11 +251,26 @@ async function handleScimRoute(req: Request, env: Env, cid: string, ctx: Executi
 //
 // NO-CUSTODY: the only thing recorded is {kind: count}. The rejection text, the destination, the bucket and the
 // downpipe id are never carried by the record -- this notes THAT a completion was lost, never what was in it.
-export async function postFailedCompletion(scheduler: DurableObjectStub, body: { id: string; index: number; error: string }): Promise<void> {
+//
+// The completion also names the destination the run was going to write to (destinationId, with the closed
+// destinationIdBasis pinned | default), so the run row says WHICH destination a pre-seal failure concerns. The
+// two fields are omitted when the engine has no id to name; the row then reads basis "unknown" in the pack.
+export async function postFailedCompletion(
+  scheduler: DurableObjectStub,
+  body: { id: string; index: number; error: string; destinationId?: string; destinationIdBasis?: "pinned" | "default" | "unknown" },
+): Promise<void> {
   try {
     const resp = await scheduler.fetch(doURL("/complete"), {
       method: "POST",
-      body: JSON.stringify({ id: body.id, runId: "", index: body.index, status: "failed", error: body.error }),
+      body: JSON.stringify({
+        id: body.id,
+        runId: "",
+        index: body.index,
+        status: "failed",
+        error: body.error,
+        ...(body.destinationId !== undefined && body.destinationId !== "" && body.destinationIdBasis !== undefined ? { attemptedDestinationId: body.destinationId } : {}),
+        ...(body.destinationIdBasis !== undefined ? { attemptedDestinationBasis: body.destinationIdBasis } : {}),
+      }),
     });
     if (resp.ok) {
       // The completion landed. Piggy-back the flush of any EARLIER loss this isolate is still holding, so a
@@ -307,7 +323,13 @@ function buildAdminRuntime(env: Env, ctx: ExecutionContext): AdminRuntime {
             if (typeof pinned === "string" && pinned !== "") {
               await recordDestProbeFaults(schedulerStub(env), [{ id: pinned, reason: classifyDestProbeError(e) }]);
             }
-            await postFailedCompletion(schedulerStub(env), { id: state.config.id, index: t.index, error: "destination configuration unreadable" });
+            const attributed = primaryDestinationId(state.config);
+            await postFailedCompletion(schedulerStub(env), {
+              id: state.config.id,
+              index: t.index,
+              error: "destination configuration unreadable",
+              ...(attributed !== undefined && attributed !== "" ? { destinationId: attributed, destinationIdBasis: "pinned" as const } : {}),
+            });
             return;
           }
           if ("allDown" in sel) {
@@ -444,6 +466,17 @@ export default {
   },
 };
 
+// The three unauthenticated routes answer GET and HEAD only. OPTIONS keeps its existing answer (the /admin
+// preflight, or the plain route response); any other method is a 405 with the Allow header. The health route
+// keeps its wildcard CORS headers so the console's probe can read the refusal.
+const READ_ONLY_PUBLIC_PATHS: ReadonlySet<string> = new Set(["/admin/health", "/ready", "/"]);
+
+function methodNotAllowedResponse(pathname: string): Response {
+  const headers = new Headers({ allow: "GET, HEAD" });
+  if (isHealthPath(pathname)) for (const [k, v] of Object.entries(HEALTH_CORS)) headers.set(k, v);
+  return withBaseSecurity(new Response("method not allowed", { status: 405, headers }));
+}
+
 async function routeRequest(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   configureLog(env);
   const url = new URL(req.url);
@@ -460,6 +493,9 @@ async function routeRequest(req: Request, env: Env, ctx: ExecutionContext): Prom
   const plain = plaintextVerdict(req, url);
   if (plain === "refuse") return withCorrelation(plaintextRefusedResponse(), cid);
   if (plain === "redirect") return withCorrelation(plaintextRedirectResponse(url), cid);
+  if (READ_ONLY_PUBLIC_PATHS.has(url.pathname) && req.method !== "GET" && req.method !== "HEAD" && req.method !== "OPTIONS") {
+    return withCorrelation(methodNotAllowedResponse(url.pathname), cid);
+  }
   if (url.pathname === "/ready") return withCorrelation(handleReady(), cid);
   if (url.pathname.startsWith("/scim/v2")) return withCorrelation(await handleScimRoute(req, env, cid, ctx), cid);
   if (url.pathname.startsWith("/admin")) return withCorrelation(await handleAdminRoute(req, env, ctx, cid), cid);
@@ -485,3 +521,16 @@ export { destinationReachable, selectSealDestination } from "./cron/seal-dispatc
 // binding is drafted but its live cross-isolate go-live is deferred (accountPacer falls back to the
 // per-isolate CfPacer until the binding is present).
 export { buildAdapter, RateLimitDO, RunSealDO, SchedulerDO };
+
+// ENGINE_RESPONSE_FLOOR is the set every response carries, whichever path produced it, because every response
+// passes through withCorrelation: the public "/", "/ready" and "/scim" answers and the early refusals (the
+// hop-by-hop guard, the TLS floor, the plaintext refusal and redirect) as well as /admin and /support. The
+// engine serves no HTML, so a browser that reaches one of these responses is told to render nothing from it,
+// to put it in no frame, to sniff no type and to cache nothing. A header a route already set wins.
+const ENGINE_RESPONSE_FLOOR: Record<string, string> = {
+  "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
+  "x-content-type-options": "nosniff",
+  "x-frame-options": "DENY",
+  "strict-transport-security": "max-age=63072000; includeSubDomains",
+  "cache-control": "no-store",
+};

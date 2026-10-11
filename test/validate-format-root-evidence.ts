@@ -51,6 +51,7 @@ import {
   drainIntegrityFaultLedger,
   resetIntegrityFaultLedger,
   KEYLESS_COVERAGE_MODES,
+  noteRunlogAnomaly,
   RUNLOG_ANOMALY_KINDS,
   WRITER_REFUSAL_KINDS,
   type IntegrityFaultSnapshot,
@@ -210,6 +211,20 @@ async function main(): Promise<void> {
   // -------------------------------------------------------------------------------------------------------
   await check("vocabulary: RUNLOG_ANOMALY_KINDS is pinned to the DO's re-declared set", () => {
     assert.deepEqual([...RUNLOG_ANOMALY_KINDS], [...RUNLOG_ANOMALY_KIND_NAMES]);
+  });
+  await check("vocabulary: counter-advanced-after-recovery is a member of both lists", () => {
+    assert.ok((RUNLOG_ANOMALY_KINDS as readonly string[]).includes("counter-advanced-after-recovery"));
+    assert.ok((RUNLOG_ANOMALY_KIND_NAMES as readonly string[]).includes("counter-advanced-after-recovery"));
+  });
+  await check("counter-advanced-after-recovery carries from, to and the archive; a hostile archive id is dropped", () => {
+    resetIntegrityFaultLedger();
+    noteRunlogAnomaly({ kind: "counter-advanced-after-recovery", indexA: 1, indexB: 9, archiveId: "archive-b" });
+    noteRunlogAnomaly({ kind: "counter-advanced-after-recovery", indexA: 9, indexB: 12, archiveId: "https://bucket.example/path?key=secret value" });
+    const rows = drainIntegrityFaultLedger().runlogAnomalies;
+    assert.equal(rows.length, 2);
+    assert.deepEqual(rows[0], { kind: "counter-advanced-after-recovery", indexA: 1, indexB: 9, archiveId: "archive-b" });
+    assert.equal(rows[1]!.archiveId, undefined, "an id outside the shape never rides");
+    assert.equal(rows[1]!.indexB, 12);
   });
   await check("vocabulary: WRITER_REFUSAL_KINDS is pinned to the DO's re-declared set", () => {
     assert.deepEqual([...WRITER_REFUSAL_KINDS], [...WRITER_REFUSAL_KIND_NAMES]);

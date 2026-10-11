@@ -21,6 +21,7 @@ import { sealAttemptClass } from "./run-pressure.ts";
 import { type RunBase, runSealStub, type StartFanout, type StartSliceRun } from "./runseal-do.ts";
 import {
   cfConfigToken,
+  attemptedDestinationFlag,
   downDestinationFlag,
   fanoutMinRecords,
   fanoutRangeCount,
@@ -326,7 +327,7 @@ export async function sealRunSliced(env: Env, state: DownpipeState, trig: { runI
         // name the sole destination as down so the DO records a lastOk:false heartbeat and the map indicator
         // lights up. Only on a destination-access classification (never a source/config fault, which would
         // wrongly blame the bucket) and only when the run had a resolved destination id to attribute it to.
-        body: JSON.stringify({ id: state.config.id, runId: "", index: trig.index, status: "failed", error: coarse, causeDigest: cause, ...downDestinationFlag(coarse, destinationId), ...multipartAbortFlag(deps?.dest) }),
+        body: JSON.stringify({ id: state.config.id, runId: "", index: trig.index, status: "failed", error: coarse, causeDigest: cause, ...downDestinationFlag(coarse, destinationId), ...attemptedDestinationFlag(destinationId), ...multipartAbortFlag(deps?.dest) }),
       });
     } catch (ce) {
       log("error", `run ${state.config.id} (${trig.runId}) failure completion did not land: ${await redactedRunError((ce as Error).message)}`);
@@ -345,7 +346,7 @@ export async function sealRunSliced(env: Env, state: DownpipeState, trig: { runI
     // count), and the failure arms, which is where the run-fatal transport class and crawl stage live. Never
     // throws, posts nothing for a clean run, and the drain is unconditional so a warm isolate cannot carry
     // this run's faults into the next.
-    await reportRunFaults(scheduler, state.config.id, deps?.dest);
+    await reportRunFaults(scheduler, state.config.id, deps?.dest, destinationId);
   }
 }
 
@@ -463,7 +464,7 @@ async function sealRunBuffered(env: Env, state: DownpipeState, trig: { runId: st
       await scheduler.fetch(doURL("/complete"), {
         method: "POST",
         // Name the sole destination down on a destination-access fault (see the sliced path above).
-        body: JSON.stringify({ id: state.config.id, runId: "", index: trig.index, status: "failed", error: coarse, causeDigest: cause, ...downDestinationFlag(coarse, destinationId), ...multipartAbortFlag(dest) }),
+        body: JSON.stringify({ id: state.config.id, runId: "", index: trig.index, status: "failed", error: coarse, causeDigest: cause, ...downDestinationFlag(coarse, destinationId), ...attemptedDestinationFlag(destinationId), ...multipartAbortFlag(dest) }),
       });
     } catch (ce) {
       log("error", `run ${state.config.id} (${trig.runId}) failure completion did not land: ${await redactedRunError((ce as Error).message)}`);
@@ -480,7 +481,7 @@ async function sealRunBuffered(env: Env, state: DownpipeState, trig: { runId: st
     signer.mldsaSecret.fill(0);
     // The buffered path's drain (see the sliced path above): the crawl ran in THIS isolate, so this is the
     // only place its source-fault ledger and the destination's fault snapshot can be read.
-    await reportRunFaults(scheduler, state.config.id, dest);
+    await reportRunFaults(scheduler, state.config.id, dest, destinationId);
   }
   // The archive is SEALED. Completing it is a SEPARATE phase whose failure is a completion fault, never a
   // backup fault: a verify hiccup or a scheduler blip here must not re-brand a good archive as a failed run. A
@@ -497,6 +498,6 @@ async function sealRunBuffered(env: Env, state: DownpipeState, trig: { runId: st
     // reaches the pack, since the verify runs after the try's own drain rather than inside it. The
     // reporter never throws, posts nothing when clean, and the ledgers it drains are already empty on a healthy
     // run, so this costs a warm isolate nothing.
-    await reportRunFaults(scheduler, state.config.id, dest);
+    await reportRunFaults(scheduler, state.config.id, dest, destinationId);
   }
 }

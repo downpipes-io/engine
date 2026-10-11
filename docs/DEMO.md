@@ -85,9 +85,3 @@ e2e: PASS - the pin refuses one above the real index <n> (exit 5) and passes at 
 The process exits `0` on success and non-zero on any divergence (a verify failure, an empty restore,
 or a tampered archive that was NOT rejected). It exits `2` before any work when it cannot find the
 reader checkout.
-
-## Where this runs in CI
-
-The `e2e-writer-reader` job in `.github/workflows/ci.yml` checks out both this repository and the
-`downpipes-io/downpipe` reader, then runs `scripts/e2e-writer-reader.sh` against the sibling checkout.
-It is part of the `ci-success` gate, so a writer/reader divergence blocks merge.

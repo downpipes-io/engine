@@ -325,6 +325,16 @@ export const DRAFTS: Record<AuditAction, AuditDraft> = {
     outcome: "success",
     target: { kind: "runlog-signature", op: "resign", destinationIds: ["dest_primary"], state: "sig-absent", digest: "0f1e2d3c4b5a69788796a5b4", maxIndex: 41, lastGoodIndex: 41 },
   },
+  // src/admin/router-runlog.ts (the attended resume of an absent .sig)
+  "runlog-resumed": {
+    actorSubject: OWNER_SUBJECT,
+    actorEmail: OWNER_EMAIL,
+    actorMethod: "access",
+    sourceIp: IP_A,
+    action: "runlog-resumed",
+    outcome: "success",
+    target: { kind: "runlog-signature", op: "resume", destinationIds: ["dest_primary"], digest: "0f1e2d3c4b5a69788796a5b4", maxIndex: 41 },
+  },
   // src/admin/router-runlog.ts (the attended floor reset)
   "runlog-floor-reset": {
     actorSubject: OWNER_SUBJECT,

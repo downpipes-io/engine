@@ -33,7 +33,6 @@
 //
 // Run with `node test/validate-master-zeroisation.ts`.
 //
-//
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";

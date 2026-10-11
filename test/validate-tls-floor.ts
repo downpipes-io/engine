@@ -1,5 +1,5 @@
 // validate-tls-floor: a request that arrived over TLS 1.1 or older is refused before any route sees it
-// (ASVS V12.1.1), and everything the floor cannot positively read as below it passes through.
+// and everything the floor cannot positively read as below it passes through.
 //
 // The engine deploys into the customer's zone, which starts on Cloudflare's 1.0 floor, and the product holds
 // no zone-write credential, so the in-band refusal with the remedy named is the control the product can own.

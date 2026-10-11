@@ -22,7 +22,6 @@
 //
 // Run with `node test/validate-contextual-authz-docs-parity.ts`.
 //
-//
 
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";

@@ -54,7 +54,11 @@ import { openCapsule } from "../src/crypto/capsule.ts";
 import { openStream } from "../src/crypto/stream.ts";
 import { hexDecode } from "../src/crypto/bytes.ts";
 import { parseKeyFile } from "../src/crypto/keys.ts";
-import { hybridVerify } from "../src/crypto/sign.ts";
+import { hybridVerify, hybridVerifyDetailed } from "../src/crypto/sign.ts";
+import { sealToRecipients } from "../src/crypto/capsule.ts";
+import { decapsulateHybrid, encapsulateHybrid } from "../src/crypto/kem.ts";
+import { mlkemKeygen } from "../src/crypto/pq.ts";
+import { x25519 } from "@noble/curves/ed25519.js";
 import { classifyReplication, DELIVERY_FAIL_CODES, isAllowedWebhookUrl } from "../src/notify/types.ts";
 import { validateRecipients } from "../src/email.ts";
 import { verdictReached } from "./lib/verdict-guard.ts";
@@ -234,6 +238,108 @@ async function main(): Promise<void> {
     assert.equal(snapShort.cryptoFaults[0]?.cls, "verify-structural-fault");
     assert.equal(snapShort.cryptoFaults[0]?.role, "verifier");
     assertRedacted("cryptoFaults (signature)", snapShort);
+  });
+
+
+  await check("every verify verdict names its fault: structural, mismatch and a corrupt verifier key each file their own class", async () => {
+    const verifier = { ed: new Uint8Array(32), mldsa: new Uint8Array(2592) };
+    const msg = new Uint8Array(8);
+    // A signature object of the wrong length: sig-decode, structural, with the length class.
+    const short = await drainAfter(async () => {
+      assert.equal(await hybridVerifyDetailed(verifier, msg, new Uint8Array(10)), "sig-decode");
+    });
+    assert.deepEqual(short.cryptoFaults, [{ cls: "verify-structural-fault", role: "verifier", lengthClass: 10 }]);
+    // A full-length signature that does not verify: a mismatch, never structural.
+    const edKey = await crypto.subtle.generateKey("Ed25519", true, ["sign", "verify"]);
+    const realEd = new Uint8Array(await crypto.subtle.exportKey("raw", (edKey as CryptoKeyPair).publicKey));
+    const full = await drainAfter(async () => {
+      const verdict = await hybridVerifyDetailed({ ed: realEd, mldsa: new Uint8Array(2592) }, msg, new Uint8Array(64 + 4627));
+      assert.ok(verdict === "ed25519-mismatch" || verdict === "mldsa-mismatch" || verdict === "ed25519-only-mismatch", verdict);
+    });
+    assert.deepEqual(full.cryptoFaults, [{ cls: "verify-mismatch", role: "verifier" }]);
+    // A corrupt VERIFIER key (a 31-byte Ed25519 key cannot import): verifier-invalid, structural, no length class.
+    const bad = await drainAfter(async () => {
+      assert.equal(await hybridVerifyDetailed({ ed: new Uint8Array(31), mldsa: new Uint8Array(2592) }, msg, new Uint8Array(64 + 4627)), "verifier-invalid");
+    });
+    assert.deepEqual(bad.cryptoFaults, [{ cls: "verify-structural-fault", role: "verifier" }]);
+    assertRedacted("cryptoFaults (verdicts)", bad);
+  });
+
+  await check("a capsule that opens to a master of the wrong size is refused with a master-length-mismatch row and the capsule-unwrap stage", async () => {
+    const x = x25519.keygen();
+    const seed = new Uint8Array(64).fill(5);
+    const pub = { x25519: x.publicKey, mlkemEk: mlkemKeygen(seed).encapKey };
+    const priv = { x25519Scalar: x.secretKey, mlkemSeed: seed };
+    const aad = new Uint8Array(48).fill(1);
+    const wraps = await sealToRecipients(new Uint8Array(31).fill(2), [pub], aad, () => new Uint8Array(16).fill(4));
+    resetIntegrityFaultLedger();
+    let msg = "no throw";
+    try {
+      await openCapsule(wraps, priv as never, aad);
+    } catch (e) {
+      msg = (e as Error).message;
+    }
+    const snap = drainIntegrityFaultLedger();
+    assert.equal(msg, "recovered master is 31 bytes, want 32");
+    assert.deepEqual(snap.streamFaults, [{ leg: "decrypt-open", cls: "master-length-mismatch", receivedBytes: 31, expectedBytes: 32 }]);
+    assert.equal(snap.failStages["capsule-unwrap"], 1);
+    assert.deepEqual(snap.cryptoFaults, []);
+    // CONTROL: a 32-byte master opens, and files nothing.
+    const goodWraps = await sealToRecipients(new Uint8Array(32).fill(2), [pub], aad, () => new Uint8Array(16).fill(4));
+    const ctl = await drainAfter(async () => {
+      assert.equal((await openCapsule(goodWraps, priv as never, aad)).length, 32);
+    });
+    assert.deepEqual(ctl.streamFaults, []);
+    assert.deepEqual(ctl.failStages, {});
+  });
+
+  await check("a capsule with no matching wrap names both fingerprints in the fault, the stage and the error text", async () => {
+    const x = x25519.keygen();
+    const seed = new Uint8Array(64).fill(6);
+    const other = x25519.keygen();
+    const otherSeed = new Uint8Array(64).fill(8);
+    const otherPub = { x25519: other.publicKey, mlkemEk: mlkemKeygen(otherSeed).encapKey };
+    const aad = new Uint8Array(48);
+    const wraps = await sealToRecipients(new Uint8Array(32), [otherPub], aad, () => new Uint8Array(16));
+    resetIntegrityFaultLedger();
+    let msg = "no throw";
+    try {
+      await openCapsule(wraps, { x25519Scalar: x.secretKey, mlkemSeed: seed } as never, aad);
+    } catch (e) {
+      msg = (e as Error).message;
+    }
+    const snap = drainIntegrityFaultLedger();
+    const f = snap.cryptoFaults[0];
+    assert.ok(f !== undefined);
+    assert.equal(snap.cryptoFaults.length, 1);
+    assert.equal(f.cls, "recipient-no-capsule-match");
+    assert.equal(f.role, "recipient");
+    assert.equal(f.wantFingerprint, wraps[0]?.fingerprint);
+    assert.match(f.heldFingerprint ?? "", /^dpr1:[0-9a-f]{96}$/);
+    assert.notEqual(f.heldFingerprint, f.wantFingerprint);
+    assert.equal(msg, `no capsule wrap matches the held recipient ${f.heldFingerprint}`);
+    assert.equal(snap.failStages["capsule-unwrap"], 1);
+  });
+
+  await check("the hybrid KEM refuses a wrong-length key or ciphertext with its own message", async () => {
+    const x = x25519.keygen();
+    const ek = mlkemKeygen(new Uint8Array(64).fill(3)).encapKey;
+    const seed = new Uint8Array(64).fill(3);
+    const msgOf = async (fn: () => Promise<unknown>): Promise<string> => {
+      try {
+        await fn();
+        return "no throw";
+      } catch (e) {
+        return (e as Error).message;
+      }
+    };
+    assert.equal(await msgOf(() => encapsulateHybrid({ x25519: x.publicKey, mlkemEk: ek.subarray(0, 1567) })), "ML-KEM encapsulation key is 1567 bytes, want 1568");
+    assert.equal(await msgOf(() => encapsulateHybrid({ x25519: x.publicKey.subarray(0, 31), mlkemEk: ek })), "X25519 public key is 31 bytes, want 32");
+    const enc = await encapsulateHybrid({ x25519: x.publicKey, mlkemEk: ek });
+    assert.equal(enc.cipherText.length, 1600);
+    assert.equal(await msgOf(() => decapsulateHybrid({ x25519Scalar: x.secretKey, mlkemSeed: seed }, enc.cipherText.subarray(0, 1599))), "hybrid ciphertext is 1599 bytes, want 1600");
+    // CONTROL: the whole pair round-trips.
+    assert.deepEqual([...(await decapsulateHybrid({ x25519Scalar: x.secretKey, mlkemSeed: seed }, enc.cipherText))], [...enc.sharedSecret]);
   });
 
   // -------------------------------------------------------------------------------------------------------

@@ -1,8 +1,9 @@
-import { b64urlDecode } from "../crypto/bytes.ts";
+import { b64urlDecodeOrUndefined } from "../crypto/bytes.ts";
 import { type HybridVerifier, hybridVerify } from "../crypto/sign.ts";
 import type { Env } from "../env.d.ts";
 import { ENGINE_VERSION } from "../format/version.ts";
 import { UPDATE_CHANNEL_HOST } from "../lib/outbound.ts";
+import { type SupportStatus, supportFor } from "./update-support.ts";
 import { log } from "../log.ts";
 import type { UpdateCauseClass } from "./diag-records.ts";
 import { parsePinnedUpdateSigner } from "./update-signer-pin.ts";
@@ -161,102 +162,9 @@ export interface Channel {
   // backward-compatible. The signer is vendor-side; the engine only reads and enforces.
   sequence?: number;
   issuedAt?: string;
-}
-
-// FreshnessClaim is the (sanitised) replay-protection metadata read off a signature-verified channel: the
-// monotonic sequence and/or the RFC-3339 issuedAt. Both optional (absent = no claim).
-export interface FreshnessClaim {
-  sequence?: number;
-  issuedAt?: string;
-  // The claim the resolver erased. loadVerifiedChannel sanitises a signed claim to well-typed-or-absent,
-  // so a present-but-malformed field arrives here as `undefined` and this check cannot tell "the publisher
-  // shipped a broken sequence" from "this is an ordinary freshness-less descriptor". The resolver sets
-  // these flags on what it erased and records the malformed row itself (at the erasure, so it fires even
-  // on an engine with no watermark yet); the check reads them only so it never files an erased claim under
-  // the honestly-absent name. Booleans, never a value.
-  sequenceMalformed?: boolean;
-  issuedAtMalformed?: boolean;
-}
-
-// FreshnessState is the engine's persisted last-seen freshness watermark (advanced when a descriptor is
-// promoted/ramped, setUpdatePending): the highest sequence and the latest issuedAt the engine has accepted.
-// maxAgeMs is the OPT-IN staleness backstop (absent/<=0 = OFF, the default): when set, an issuedAt older than
-// `now - maxAgeMs` is refused. It is opt-in precisely so it can NEVER false-positive on a legitimate but
-// dormant channel (a vendor that has not shipped a new release in a while); the monotonic checks below carry
-// the replay protection on their own and are false-positive-proof for a forward update.
-export interface FreshnessState {
-  lastSeq?: number;
-  lastIssuedAt?: string;
-  maxAgeMs?: number;
-}
-
-// FreshnessVerdict: ok (optionally with a warning the caller logs) or a typed rejection with a redaction-safe
-// reason. A rejection is a hard refusal (the replay/superseded descriptor is never applied).
-// degradations: the closed names of the replay-protection weakenings this verdict silently tolerated.
-// The verdict itself is unchanged -- backward tolerance is deliberate -- but "was replay protection active
-// when that update applied?" has an answer other than a shrug.
-export type FreshnessVerdict = { ok: true; warn?: string; degradations?: string[] } | { ok: false; reason: string };
-
-// checkChannelFreshness enforces replay protection on a signature-verified channel descriptor. It refuses
-// a descriptor whose sequence REGRESSES below the last-seen sequence, whose issuedAt is OLDER than the
-// last-applied issuedAt, or (opt-in maxAgeMs) whose issuedAt is older than the configured maximum age. The
-// two monotonic checks are false-positive-proof for a forward update: a genuine newer descriptor carries a
-// sequence >= and an issuedAt >= the last accepted, and an EQUAL value is allowed (a same-descriptor retry).
-// Backward-tolerant: an ABSENT field is "no freshness claim" -> ok + a warning (NEVER a hard failure, so the
-// current freshness-less channel still applies); a PRESENT, parseable field that regresses IS a hard refusal.
-// Pure + total; `now` is injected so the validator drives the max-age branch deterministically.
-export function checkChannelFreshness(claim: FreshnessClaim, state: FreshnessState, now: number): FreshnessVerdict {
-  const warns: string[] = [];
-  // The closed names of every replay-protection weakening this check silently tolerated. The verdict is
-  // unchanged (a weakened claim is still applied: backward tolerance is deliberate); what changes is that the
-  // weakening is now sayable.
-  const degradations: string[] = [];
-  // ---- sequence: monotonic, never regress (equal is allowed: a same-descriptor retry) ----
-  const seq = claim.sequence;
-  if (typeof seq === "number" && Number.isFinite(seq)) {
-    if (typeof state.lastSeq === "number" && Number.isFinite(state.lastSeq) && seq < state.lastSeq) {
-      return { ok: false, reason: `the signed channel's sequence ${seq} is older than the last-seen sequence ${state.lastSeq}; refusing a replayed or superseded update descriptor (nothing was changed)` };
-    }
-  } else if (typeof state.lastSeq === "number" && claim.sequenceMalformed !== true) {
-    // A sequence was seen before but this descriptor declares none: replay protection on it is weaker (the
-    // issuedAt/anti-rollback floor still apply). Warn, do not hard-fail (backward tolerance).
-    // This branch fires only for a genuinely absent sequence. A claim the resolver erased (malformed) also
-    // arrives here as undefined, and the resolver has already counted it, so it is excluded here: an erased
-    // claim is never also reported as one the publisher never made.
-    degradations.push("update-degraded-freshness-sequence-absent");
-    warns.push("the signed channel declares no sequence though one was seen before; sequence-replay protection is weaker for this descriptor");
-  }
-  // ---- issuedAt: monotonic (never older than the last applied) + opt-in max-age ----
-  const issuedAt = claim.issuedAt;
-  if (typeof issuedAt === "string" && issuedAt.trim() !== "") {
-    const t = Date.parse(issuedAt);
-    if (Number.isNaN(t)) {
-      // An unparseable issuedAt is silently ignored, so the anti-replay floor it exists to enforce simply
-      // does not run for this descriptor, and the apply proceeds looking exactly like a clean one.
-      degradations.push("update-degraded-freshness-issuedat-unparseable");
-      warns.push("the signed channel declared an unparseable issuedAt; ignoring it for freshness (no usable claim)");
-    } else {
-      if (typeof state.lastIssuedAt === "string" && state.lastIssuedAt.trim() !== "") {
-        const last = Date.parse(state.lastIssuedAt);
-        if (!Number.isNaN(last) && t < last) {
-          return { ok: false, reason: `the signed channel's issuedAt ${issuedAt} is older than the last-applied ${state.lastIssuedAt}; refusing a replayed or superseded update descriptor (nothing was changed)` };
-        }
-      }
-      if (typeof state.maxAgeMs === "number" && state.maxAgeMs > 0 && now - t > state.maxAgeMs) {
-        return { ok: false, reason: `the signed channel's issuedAt ${issuedAt} is older than the configured maximum age; refusing a stale update descriptor (nothing was changed)` };
-      }
-    }
-  } else if (typeof state.lastIssuedAt === "string" && claim.issuedAtMalformed !== true) {
-    // Same split as the sequence arm above. The descriptor made no timestamp claim at all, which is
-    // the ordinary legacy state and not the publisher shipping a broken one.
-    degradations.push("update-degraded-freshness-issuedat-absent");
-    warns.push("the signed channel declares no issuedAt though one was seen before; timestamp-replay protection is weaker for this descriptor");
-  }
-  return {
-    ok: true,
-    ...(warns.length > 0 ? { warn: warns.join("; ") } : {}),
-    ...(degradations.length > 0 ? { degradations } : {}),
-  };
+  // releases (optional, additive, signed): when each release shipped, as version -> RFC-3339 time. The
+  // publisher carries earlier entries forward. update-support.ts reads it; an old engine ignores it.
+  releases?: Record<string, string>;
 }
 
 // UpdateStatus is the status-view projection. It surfaces the recommended artefact's rich metadata
@@ -287,6 +195,10 @@ export interface UpdateStatus {
   // sentence can never silently degrade a recorded row to "unstated". The prose stays for the operator; the
   // enum is what travels.
   channelFault?: UpdateChannelFault;
+  // fetchStatus / fetchTarget (a `fetch-failed` consult only): the HTTP status of the fetch that failed (0 = a
+  // transport failure) and whether it was the channel or its signature.
+  fetchStatus?: number;
+  fetchTarget?: ChannelFetchTarget;
   // ---- Rich metadata for the recommended version (present only when verified and the field is set) ----
   changelog?: ChangelogEntry[];
   impact?: string[];
@@ -308,6 +220,11 @@ export interface UpdateStatus {
   // trailing slash kept) so the console can resolve the provenance block's channel-relative attestation
   // paths into openable links. A public https url the operator already pinned; never a secret.
   channelBase?: string;
+  // supportedUntil and supportStatus (additive) are the end of support of the RUNNING engine version, from the
+  // signed channel's release dates (update-support.ts): 90 days after the next release shipped. Both are absent
+  // when the channel carries no readable dates; supportedUntil is absent for the latest release.
+  supportedUntil?: string;
+  supportStatus?: SupportStatus;
   // components (v2, ADDITIVE) is the per-component release view: one row per component the verified
   // channel declares, carrying NON-SECRET metadata only (richMetadataView's discipline: never a url or a
   // hash -- those stay on the apply path). updateAvailable is set for the ENGINE row only: the engine
@@ -625,7 +542,10 @@ export async function verifyChannelDetailed(
   } catch {
     return { ok: false, cause: "json-parse" };
   }
-  return isChannelShape(parsed) ? { ok: true, channel: parsed } : { ok: false, cause: "shape-invalid" };
+  if (!isChannelShape(parsed)) return { ok: false, cause: "shape-invalid" };
+  // An artefacts entry that is not an object cannot name a version: dropped, as a malformed component is.
+  if (Array.isArray(parsed.artefacts)) parsed.artefacts = parsed.artefacts.filter((a) => typeof a === "object" && a !== null);
+  return { ok: true, channel: parsed };
 }
 
 // CHANNEL_CAUSE_REASONS are the operator-facing sentences for each closed channel cause. A single sentence
@@ -665,15 +585,23 @@ const UPDATE_CHANNEL_FAULT_SET: ReadonlySet<string> = new Set(UPDATE_CHANNEL_FAU
 // to a healthy one, and an operator frozen on an old release for as long as it takes someone to ask. `intended`
 // is the operator's intent (either channel env var is set), which is the only honest way to separate "I did
 // not configure updates" from "I configured updates and got it wrong".
+//
+// fetchStatus / fetchTarget ride ONLY on a `fetch-failed` refusal: the HTTP status of the fetch that failed (0 =
+// no HTTP exchange, a transport failure) and which of the two fetches it was. They are closed facts, never a URL.
+export type ChannelFetchTarget = "channel" | "signature";
 type ChannelResult =
   | { ok: true; channel: Channel }
-  | { ok: false; configured: boolean; intended: boolean; reason: string; fault?: UpdateChannelFault; cause?: UpdateCauseClass };
+  | { ok: false; configured: boolean; intended: boolean; reason: string; fault?: UpdateChannelFault; cause?: UpdateCauseClass; fetchStatus?: number; fetchTarget?: ChannelFetchTarget };
+
+// ChannelFetch is the injectable fetcher. The optional second argument reports the HTTP status the fetch saw
+// (0 for a transport failure); an injected one-argument stub is still a ChannelFetch and simply reports none.
+type ChannelFetch = (u: string, onStatus?: (status: number) => void) => Promise<Uint8Array | null>;
 
 // fetchAndVerifyChannel is the single fetch+verify path shared by checkUpdates (the status view) and
 // loadVerifiedChannel (the safe-apply artefact resolver), so the trust chain, pinned signer -> channel
 // signature -> channel bytes, is identical in both. https-only, redirect:manual (a redirected signed
 // fetch cannot be steered elsewhere), pinned-key-only verification.
-async function fetchAndVerifyChannel(env: Env, fetchUrl: (u: string) => Promise<Uint8Array | null>): Promise<ChannelResult> {
+async function fetchAndVerifyChannel(env: Env, fetchUrl: ChannelFetch): Promise<ChannelResult> {
   // Intent, not verdict. An operator who set either channel env var meant to have updates, so a channel
   // that is half-configured or badly configured is a fault, not a preference. Only an engine with neither var
   // set is legitimately quiet, and that is the one state that must never produce a row (a fault that fires on a
@@ -705,14 +633,26 @@ async function fetchAndVerifyChannel(env: Env, fetchUrl: (u: string) => Promise<
   } catch {
     return { ok: false, configured: false, intended, reason: "invalid pinned update-signer key", fault: "key-config" };
   }
-  const channelBytes = await fetchUrl(env.UPDATE_CHANNEL_URL);
-  const sigText = await fetchUrl(`${env.UPDATE_CHANNEL_URL}.sig`);
+  let channelStatus: number | undefined;
+  let sigStatus: number | undefined;
+  const channelBytes = await fetchUrl(env.UPDATE_CHANNEL_URL, (s) => {
+    channelStatus = s;
+  });
+  const sigText = await fetchUrl(`${env.UPDATE_CHANNEL_URL}.sig`, (s) => {
+    sigStatus = s;
+  });
   if (!channelBytes || !sigText) {
-    return { ok: false, configured: true, intended, reason: "could not fetch the update channel", fault: "fetch-failed" };
+    // Name WHICH fetch failed (the channel is checked first: a missing channel makes the signature moot) and the
+    // status it saw, so a wrong path (404) is told from a vendor outage (5xx) and a transport fault (0).
+    const fetchTarget: ChannelFetchTarget = !channelBytes ? "channel" : "signature";
+    const fetchStatus = fetchTarget === "channel" ? channelStatus : sigStatus;
+    return { ok: false, configured: true, intended, reason: "could not fetch the update channel", fault: "fetch-failed", fetchTarget, ...(fetchStatus !== undefined ? { fetchStatus } : {}) };
   }
   // Carry the closed cause (and the sentence that matches it), so the pack -- and the operator -- are never
   // told "signature did not verify" about a truncated CDN object.
-  const verified = await verifyChannelDetailed(channelBytes, b64urlDecode(new TextDecoder().decode(sigText).trim()), signer);
+  // A signature file that is not base64url is a signature that does not verify: sig-invalid, not a throw.
+  const sig = b64urlDecodeOrUndefined(new TextDecoder().decode(sigText).trim());
+  const verified = sig === undefined ? ({ ok: false, cause: "sig-invalid" } as const) : await verifyChannelDetailed(channelBytes, sig, signer);
   if (!verified.ok) {
     // The three verify causes ARE channel faults, member for member (the membership test is a SET check, not a
     // cast, so a future UpdateCauseClass member added to verifyChannelDetailed cannot leak into this narrower
@@ -791,7 +731,7 @@ function componentStatusView(components: Record<string, ComponentArtefact> | und
 // minEngineVersion is newer than the running engine, so the console can disable the apply honestly).
 // The engine artefact is resolved via resolveEngineArtefact (prefer components.engine, fall back to
 // artefacts[]) and the per-component status rows ride along additively (componentStatusView above).
-export async function checkUpdates(env: Env, fetchUrl: (u: string) => Promise<Uint8Array | null> = defaultFetch): Promise<UpdateStatus> {
+export async function checkUpdates(env: Env, fetchUrl: ChannelFetch = defaultFetch, nowMs: () => number = Date.now): Promise<UpdateStatus> {
   const r = await fetchAndVerifyChannel(env, fetchUrl);
   if (!r.ok) {
     // The intent flag and the closed fault ride with the refusal, so neither is lost on a failed consult.
@@ -802,6 +742,8 @@ export async function checkUpdates(env: Env, fetchUrl: (u: string) => Promise<Ui
       reason: r.reason,
       channelIntended: r.intended,
       ...(r.fault !== undefined ? { channelFault: r.fault } : {}),
+      ...(r.fetchStatus !== undefined ? { fetchStatus: r.fetchStatus } : {}),
+      ...(r.fetchTarget !== undefined ? { fetchTarget: r.fetchTarget } : {}),
     };
   }
   const recommended = r.channel.recommendedVersion;
@@ -810,6 +752,7 @@ export async function checkUpdates(env: Env, fetchUrl: (u: string) => Promise<Ui
   const meta = richMetadataView(artefact);
   const components = componentStatusView(sanitiseChannelComponents(r.channel));
   const channelBase = channelBaseOf(env.UPDATE_CHANNEL_URL);
+  const support = supportFor(r.channel.releases, ENGINE_VERSION, nowMs());
   return {
     configured: true,
     verified: true,
@@ -831,6 +774,7 @@ export async function checkUpdates(env: Env, fetchUrl: (u: string) => Promise<Ui
     // fetchAndVerifyChannel just used it). Derived via URL so a query string is dropped and a path-less
     // url degrades to origin + "/" rather than the bare scheme; an unparseable url yields no base.
     ...(channelBase !== undefined ? { channelBase } : {}),
+    ...(support !== undefined ? { supportStatus: support.supportStatus, ...(support.supportedUntil !== undefined ? { supportedUntil: support.supportedUntil } : {}) } : {}),
   };
 }
 
@@ -879,16 +823,17 @@ export interface RecommendedArtefact {
 export interface ChannelLoadError {
   error: string;
   causeClass: UpdateCauseClass;
+  // The HTTP status of a failed channel fetch (0 = transport failure), absent for every other cause.
+  fetchStatus?: number;
 }
 
 // channelFaultCause maps a failed channel consult onto the update-fault ring's closed cause. The three VERIFY
 // causes already arrive as UpdateCauseClass members (fetchAndVerifyChannel sets them); the config and fetch
 // arms carry only the narrower UpdateChannelFault, so they are lifted here.
 //
-// `fetch-failed` becomes `other`, deliberately and not `network`: defaultFetch collapses a 404, a 5xx and a
-// DNS failure into one null, so this engine genuinely DOES NOT KNOW which of them happened, and a confident
-// `network` row would send an operator to check their egress for a CDN 404. A residual class that admits the
-// coarseness is the honest answer; the ring's httpStatus field stays absent, which says the same thing again.
+// `fetch-failed` becomes `other`, deliberately and not `network`: a 404, a 5xx and a DNS failure all end here,
+// and a confident `network` row would send an operator to check their egress for a CDN 404. The residual class
+// stays coarse; the HTTP status the fetch saw rides beside it (the ring's httpStatus), which tells them apart.
 function channelFaultCause(r: { cause?: UpdateCauseClass; fault?: UpdateChannelFault }): UpdateCauseClass {
   if (r.cause !== undefined) return r.cause;
   if (r.fault === "url-config" || r.fault === "key-config") return r.fault;
@@ -900,13 +845,13 @@ function channelFaultCause(r: { cause?: UpdateCauseClass; fault?: UpdateChannelF
 // requiresMigration + mainModule), or an { error } when updates are not configured, the channel does not
 // verify, the recommended artefact is absent, or it lacks the url/sha384 needed to download and verify a
 // deployable bundle (an unverifiable artefact is never offered for apply). fetchUrl is injectable.
-export async function loadVerifiedChannel(env: Env, fetchUrl: (u: string) => Promise<Uint8Array | null> = defaultFetch, degraded?: Set<string>): Promise<RecommendedArtefact | ChannelLoadError> {
+export async function loadVerifiedChannel(env: Env, fetchUrl: ChannelFetch = defaultFetch, degraded?: Set<string>): Promise<RecommendedArtefact | ChannelLoadError> {
   const r = await fetchAndVerifyChannel(env, fetchUrl);
   // The closed cause rides with the error so the router can record why without ever reading the
   // sentence (a channel that 404s, a truncated document and a wrong signer are three different remediations).
   // The return type carries causeClass on every failure path, and channelFaultCause below fills the arms
   // that only had a `fault`.
-  if (!r.ok) return { error: r.reason, causeClass: channelFaultCause(r) };
+  if (!r.ok) return { error: r.reason, causeClass: channelFaultCause(r), ...(r.fetchStatus !== undefined ? { fetchStatus: r.fetchStatus } : {}) };
   const recommended = r.channel.recommendedVersion;
   // v2 engine resolution: prefer components.engine, fall back to the legacy artefacts[] selection.
   // The sanitiser records every entry it drops and every fallback it takes into `degraded`, which the
@@ -971,11 +916,19 @@ export async function loadVerifiedChannel(env: Env, fetchUrl: (u: string) => Pro
   };
 }
 
-async function defaultFetch(u: string): Promise<Uint8Array | null> {
+async function defaultFetch(u: string, onStatus?: (status: number) => void): Promise<Uint8Array | null> {
   // redirect:"manual" means the runtime returns a status 3xx opaque-redirect response
   // rather than silently following to another host. Treat any non-2xx (including 3xx)
   // as a failure so a redirected signed-update fetch cannot be steered elsewhere.
-  const r = await fetch(u, { redirect: "manual" });
+  let r: Response;
+  try {
+    r = await fetch(u, { redirect: "manual" });
+  } catch {
+    // site-fault-waiver: src/admin/updates.ts:defaultFetch:catch:1 -- onStatus(0) hands the no-exchange status to the caller, which records it as the channel fault
+    onStatus?.(0); // no HTTP exchange happened
+    return null;
+  }
+  onStatus?.(r.status);
   if (!r.ok) return null;
   return new Uint8Array(await r.arrayBuffer());
 }

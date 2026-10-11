@@ -65,10 +65,17 @@
 //       --out channel.json --out-sig channel.json.sig --out-bundle engine-0.2.0.mjs --out-key release-signer.key
 //
 //   # sign with a seed that is SEALED on disk (age, hardware-key-gated) -- decrypt straight into the
-//   # tool's stdin so the plaintext seed never touches a file:
+//   # tool's stdin so the plaintext seed never touches a file. A local build signs a non-stable channel:
 //   age -d -i yubikey-identity.txt release-signer.key.age | node tools/publish-channel.mjs \
-//       --signer-seed-stdin --version 0.2.0 --build --url https://update.downpipes.io/engine-0.2.0.mjs \
+//       --signer-seed-stdin --channel internal --version 0.2.0 --build --url https://update.downpipes.io/engine-0.2.0.mjs \
 //       --out channel.json --out-sig channel.json.sig --out-bundle engine-0.2.0.mjs --sequence <n>
+//
+//   # stable with the sealed seed signs only the attested release trees, and writes their sidecars:
+//   age -d -i yubikey-identity.txt release-signer.key.age | node tools/publish-channel.mjs \
+//       --signer-seed-stdin --channel stable --version 0.2.0 \
+//       --from-release-dir rel/engine --url https://update.downpipes.io/engine-0.2.0.mjs \
+//       --console-release-dir rel/console --console-url https://update.downpipes.io/console-0.1.0.json \
+//       --provenance-out-dir out --out channel.json --out-sig channel.json.sig --sequence <n>
 //
 //   # channel-only (no bundle): notify of a version WITHOUT enabling in-console apply (manual deploy):
 //   node tools/publish-channel.mjs --key "$KEY" --version 0.2.0 --notes "perf + fixes"
@@ -91,11 +98,13 @@
 // (reads the seed off STDIN, the SAME base64url bytes a --key-file would hold, so a caller can pipe a
 // decrypted secret straight in without ever writing it to disk):
 //   age -d -i yubikey-identity.txt release-signer.key.age | node tools/publish-channel.mjs \
-//       --signer-seed-stdin --version 0.3.0 --channel stable --sequence <n> ...
+//       --signer-seed-stdin --version 0.3.0 --channel stable --from-release-dir ... --sequence <n> ...
 // The three are mutually exclusive (an error names which flags collided); passing
 // --signer-seed-stdin with nothing piped in (a closed or empty stdin) is refused loudly rather than
 // silently falling through to fresh-key generation, which would sign with the WRONG key with no
 // warning. Omitting all three still generates a fresh signer, unchanged (first-time bootstrap).
+// With --signer-seed-stdin, the stable channel (the default) needs --from-release-dir,
+// --console-release-dir and --provenance-out-dir; a local --build or --bundle is refused for it.
 //
 // Flags: --build (bundle via wrangler dry-run) | --bundle <path> | --engine-dir <path> (default ../engine)
 //   | --main-module <name> (default index.js) | --url <https> | --out-bundle <path> | --requires-migration
@@ -103,9 +112,9 @@
 //   normalises to migration-gated in the engine): --risk-class <routine|migration|breaking>
 //   | --changelog "type:text" (repeatable) | --impact "line" (repeatable)
 //   | --required-step "text" / --required-step-blocking "text" (repeatable; blocking forces a console ack)
-//   | --min-engine-version <semver> | --compat "<note>" | --released-at <RFC-3339> | --released-now
+//   | --min-engine-version <semver> | --compat "<note>" | --released-now (the artefact releasedAt is the time of this run)
 //   | --meta-file <path.json> (a JSON object of the same fields; CLI flags override it per field)
-//   CONSOLE component (multi-component updates, design/updates/MULTI-COMPONENT-UPDATES-DESIGN.md):
+//   CONSOLE component (multi-component updates):
 //   --console-build (package the console via its npm build + wrangler dry-run) | --console-bundle <path>
 //   | --console-dir <path> (default ../console) | --console-url <https> (required with a console artefact)
 //   | --console-version <v> (default: console package.json) | --out-console-bundle <path>
@@ -114,6 +123,15 @@
 //   | --console-impact "line" (repeatable) | --console-min-engine-version <semver> | --console-notes "text"
 //   The console artefact goes into the v2 `components` map, NEVER into artefacts[] (a 0.1.x engine
 //   would select a same-version artefacts[] entry and deploy console bytes onto the engine script).
+//
+// RELEASE DATES (docs/SUPPORTED-VERSIONS.md): the signed body carries `releases`, an append-only map of
+// version -> releasedAt. --previous-channel <path> (its signature at <path>.sig) names the channel the new
+// one follows: it must verify under this signer, and its dates are carried forward unchanged. This release
+// is added with the time of the run (the same value as the artefact releasedAt under --released-now). A
+// publish that writes the map needs --previous-channel, or --first-release for the very first channel and for
+// tests. The tool has no input for a release date or a support date (no --released-at, no meta-file
+// releasedAt): every date is the time of a publish run. A support date is never an input:
+// a release is supported until 90 days after the next one ships, and the engine works that out from the map.
 //
 // FRESHNESS / ANTI-REPLAY (DP-0): every publish carries `sequence` (a monotonically increasing
 // integer) and `issuedAt` (ISO time) INSIDE the signed body. Fielded engines already enforce
@@ -165,6 +183,7 @@ import { parseVerifier } from "../src/crypto/keys.ts";
 import { b64urlEncode, b64urlDecode, concat, utf8, hexEncode } from "../src/crypto/bytes.ts";
 import { sha384 } from "../src/crypto/primitives.ts";
 import { verifyChannel } from "../src/admin/updates.ts";
+import { isReleasedAt, sanitiseReleases } from "../src/admin/update-support.ts";
 
 // The tools/ directory, used to resolve the engine package when --build shells wrangler's dry-run.
 const TOOLS_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -269,6 +288,74 @@ function readMetaFile(args) {
   return parsed;
 }
 
+// RUN_AT is the time of this publish run. It is the only release date the tool writes: the artefact
+// releasedAt (--released-now) and the `releases` map entry both take it.
+const RUN_AT = new Date().toISOString();
+
+// refuseSupportDates stops any hand-typed support or release date. A release is supported until 90 days after its
+// successor ships (docs/SUPPORTED-VERSIONS.md), and that date comes from the signed `releases` map, so the
+// tool has no input for it: not a flag, and not a meta-file field.
+/** @param {Record<string, any>} args */
+function refuseSupportDates(args) {
+  const flags = Object.keys(args).filter((k) => /^supported/.test(k) || k === "releases");
+  const cfg = readMetaFile(args);
+  const fields = Object.keys(cfg).filter((k) => /^supported/.test(k) || k === "releases");
+  const dates = [...(("released-at" in args) ? ["--released-at"] : []), ...(("releasedAt" in cfg) ? ["releasedAt in the meta file"] : [])];
+  if (dates.length > 0) {
+    throw new Error(`${dates.join(", ")}: the tool takes no release date. The release date is the time of this publish run (--released-now puts the same value on the artefact). Nothing was signed.`);
+  }
+  if (flags.length > 0 || fields.length > 0) {
+    const names = [...flags.map((f) => `--${f}`), ...fields.map((f) => `${f} in the meta file`)].join(", ");
+    throw new Error(`${names}: the tool takes no support date. A release is supported until 90 days after the next release ships, and every date comes from the signed channel's release dates. Nothing was signed.`);
+  }
+  if ("first-release" in args && "previous-channel" in args) {
+    throw new Error("--first-release and --previous-channel are exclusive: a first release has no previous channel. Nothing was signed.");
+  }
+  if (!("first-release" in args) && typeof args["previous-channel"] !== "string") {
+    throw new Error("a publish writes the `releases` map, which carries the earlier release dates forward: pass --previous-channel <path> (the previous signed channel, its signature at <path>.sig), or --first-release for the very first channel. Nothing was signed.");
+  }
+}
+
+// buildReleases assembles the channel's append-only `releases` map (version -> releasedAt). It starts from
+// the previous signed channel (--previous-channel <path>, with its signature at <path>.sig), which must
+// verify under this tool's signer. It carries every earlier date forward unchanged, then adds this release
+// with the time of this run. A version the map
+// already holds keeps its first date. Returns the new map; the caller signs it inside the channel body.
+/**
+ * @param {Record<string, any>} args
+ * @param {string} version
+ * @param {string} signerPublic
+ * @returns {Promise<Record<string, string>>}
+ */
+async function buildReleases(args, version, signerPublic) {
+  if (!/^\d+\.\d+\.\d+$/.test(version)) throw new Error(`--version ${version} is not a plain X.Y.Z release version; the release dates need one. Nothing was signed.`);
+  const own = RUN_AT;
+  /** @type {Record<string, string>} */
+  const out = {};
+  if (typeof args["previous-channel"] === "string") {
+    const file = args["previous-channel"];
+    let prior = null;
+    try {
+      const bytes = new Uint8Array(readFileSync(file));
+      const sig = b64urlDecode(readFileSync(`${file}.sig`, "utf8").trim());
+      prior = await verifyChannel(bytes, sig, parseVerifier(b64urlDecode(signerPublic)));
+    } catch (e) {
+      const why = e instanceof Error ? e.message : String(e);
+      throw new Error(`--previous-channel ${file} could not be read with its .sig (${why}). Nothing was signed.`);
+    }
+    if (prior === null) throw new Error(`--previous-channel ${file} does not verify under this signer; its dates are not carried. Nothing was signed.`);
+    const carried = sanitiseReleases(prior.releases)?.releases ?? {};
+    for (const [v, at] of Object.entries(carried)) out[v] = at;
+    // A release the previous channel dated only on its artefact is carried too.
+    const priorArtefacts = [...(prior.artefacts ?? []), ...(prior.components?.engine ? [prior.components.engine] : [])];
+    for (const a of priorArtefacts) {
+      if (a?.version && /^\d+\.\d+\.\d+$/.test(a.version) && isReleasedAt(a.releasedAt) && !(a.version in out)) out[a.version] = a.releasedAt;
+    }
+  }
+  if (!(version in out)) out[version] = own;
+  return out;
+}
+
 // buildRichMetadata assembles the OPTIONAL, ADDITIVE rich release metadata the engine surfaces as
 // "what's in this update" (engine/src/admin/updates.ts Artefact, fields riskClass / changelog / impact /
 // requiredSteps / minEngineVersion / compat / releasedAt). It reads from a --meta-file JSON config (if
@@ -343,17 +430,11 @@ function buildRichMetadata(args, argv) {
   const compat = typeof args.compat === "string" ? args.compat : cfg.compat;
   if (typeof compat === "string" && compat.trim() !== "") out.compat = compat;
 
-  // releasedAt: RFC-3339 timestamp (for "released N days ago" + the update-available alert). --released-at <value>, or
-  // --released-at with no value / --released-now defaults to NOW (this machine's clock, ISO-8601 UTC). Else
-  // the config's releasedAt. We do NOT default it silently when unspecified (absence is honest: unknown).
+  // releasedAt: RFC-3339 timestamp (for "released N days ago" + the update-available alert). --released-now sets it to the time of this
+  // run (ISO-8601 UTC), the same value the `releases` map carries. No date is typed by hand. When unspecified
+  // the artefact carries none (absence is honest: unknown).
   let releasedAt;
-  if (args["released-at"] === true || args["released-now"]) {
-    releasedAt = new Date().toISOString();
-  } else if (typeof args["released-at"] === "string" && args["released-at"].trim() !== "") {
-    releasedAt = args["released-at"].trim();
-  } else if (typeof cfg.releasedAt === "string" && cfg.releasedAt.trim() !== "") {
-    releasedAt = cfg.releasedAt.trim();
-  }
+  if (args["released-now"]) releasedAt = RUN_AT;
   if (releasedAt !== undefined) out.releasedAt = releasedAt;
 
   return out;
@@ -385,7 +466,7 @@ function buildBundleViaWrangler(engineDir, mainModule) {
   }
 }
 
-// ---- CONSOLE bundle packaging (multi-component updates, design/updates/MULTI-COMPONENT-UPDATES-DESIGN.md §4) ----
+// ---- CONSOLE bundle packaging (multi-component updates) ----
 // The console component is a "static-assets" deploy (shell worker + Workers Static Assets), so its
 // artefact is a single self-describing JSON file — format "downpipe-console-bundle/1" — whose EXACT
 // bytes are hashed into the signed channel. Bindings are deliberately NOT captured here: the engine
@@ -667,6 +748,7 @@ async function main() {
   const recommendedVersion = typeof args.version === "string" ? args.version : undefined;
   if (!recommendedVersion) throw new Error("--version is required (the recommended engine version, e.g. 0.2.0)");
   const channelName = typeof args.channel === "string" ? args.channel : "stable";
+  refuseSupportDates(args);
 
   // Resolve the release-signer private (base64url edSeed(32) || ML-DSA-87 seed(32) = 64 bytes, the form
   // loadSigner expects): reuse a pinned one so deployed engines keep verifying, else generate a fresh one.
@@ -695,6 +777,14 @@ async function main() {
       releaseSignerPrivate = b64urlEncode(concat(edSeed, mldsaSeed));
       generated = true;
     }
+  }
+
+  // The stable channel reaches every customer. With the production seed on stdin it is signed only from
+  // the attested release trees, so every stable channel carries provenance blocks and its
+  // provenance/<version>/ paths exist. Other channels, and test keys, keep the local build paths.
+  const flags = /** @type {Record<string, unknown>} */ (args);
+  if (channelName === "stable" && "signer-seed-stdin" in flags && (typeof flags["from-release-dir"] !== "string" || typeof flags["console-release-dir"] !== "string")) {
+    throw new Error("--channel stable with --signer-seed-stdin signs only from attested release trees: pass --from-release-dir, --console-release-dir and --provenance-out-dir. A stable channel from a local --build or --bundle carries no provenance block. Nothing was signed.");
   }
 
   // loadSigner is the SAME derivation the engine uses: it yields the Ed25519 CryptoKey to sign
@@ -907,7 +997,8 @@ async function main() {
     sequenceStatePath = statePath;
   }
 
-  const channelDoc = { channel: channelName, recommendedVersion, artefacts: [artefact], components, ...(sequence !== undefined ? { sequence } : {}), ...(issuedAt !== undefined ? { issuedAt } : {}) };
+  const releases = await buildReleases(args, recommendedVersion, updateSignerPublic);
+  const channelDoc = { channel: channelName, recommendedVersion, artefacts: [artefact], components, releases, ...(sequence !== undefined ? { sequence } : {}), ...(issuedAt !== undefined ? { issuedAt } : {}) };
 
   // Emit a STABLE serialisation and sign EXACTLY those bytes. The engine verifies the
   // signature over the bytes it fetches and then JSON.parse()s the same bytes (it does not

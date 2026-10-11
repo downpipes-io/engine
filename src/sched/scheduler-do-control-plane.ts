@@ -22,6 +22,7 @@
 // whose `this` is SchedulerDOSurface, so it reaches listDownpipes / loadDestinations / appendAudit /
 // writeOrgPolicy / addDownpipe through `this` exactly like every sibling mixin.
 
+import { gateLockFacts } from "../dest/lock-facts.ts";
 import { CONFIG_GENESIS_PREV_HASH } from "../admin/config-history.ts";
 import { isWrappedSecret } from "../admin/config-secret.ts";
 import type {
@@ -170,6 +171,8 @@ export function ControlPlaneMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
       if (d.worm !== undefined) out.worm = d.worm;
       if (d.objectLock !== undefined) out.objectLock = d.objectLock;
       if (d.defaultRetention !== undefined) out.defaultRetention = d.defaultRetention;
+      if (d.lockMode !== undefined) out.lockMode = d.lockMode;
+      if (d.lockRetentionDays !== undefined) out.lockRetentionDays = d.lockRetentionDays;
       if (d.assumeRole !== undefined) {
         out.assumeRole = {
           roleArn: d.assumeRole.roleArn,
@@ -866,6 +869,7 @@ export function ControlPlaneMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
         ...(worm !== null ? { worm } : {}),
         ...(d.objectLock !== undefined ? { objectLock: d.objectLock } : {}),
         ...(defaultRetention !== undefined ? { defaultRetention } : {}),
+        ...gateLockFacts(d.objectLock, d.lockMode, d.lockRetentionDays),
         ...(d.assumeRole !== undefined ? { assumeRole: { roleArn: d.assumeRole.roleArn, ...(d.assumeRole.durationSeconds !== undefined ? { durationSeconds: d.assumeRole.durationSeconds } : {}) } } : {}),
         ...(addressing !== undefined ? { addressing } : {}),
         ...(storageClass !== undefined ? { storageClass } : {}),

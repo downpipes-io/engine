@@ -55,8 +55,8 @@ campaign" binds the whole account, and is checked one request or one campaign at
 | Retention keepDays | 1 to 36500 | per downpipe | `RETENTION_MAX_KEEP_DAYS` at `src/sched/config-validate.ts:112` |
 | Groups carried from one token | 200 | per subject | `GROUPS_MAX` at `src/admin/groups-bounds.ts:9` |
 | Group name length | 256 | per subject | `GROUP_NAME_MAX` at `src/admin/groups-bounds.ts:14` |
-| Restore reason length | 1000 | per request | `REASON_MAX_LEN` at `src/sched/scheduler-do-records.ts:375` |
-| Drill-evidence note length | 1000 | per request | `NOTE_MAX_LEN` at `src/sched/scheduler-do-records.ts:376` |
+| Restore reason length | 1000 | per request | `REASON_MAX_LEN` at `src/sched/scheduler-do-records.ts:379` |
+| Drill-evidence note length | 1000 | per request | `NOTE_MAX_LEN` at `src/sched/scheduler-do-records.ts:380` |
 | Restore approval lifetime | 24 h | per request | `APPROVAL_TTL_MS` at `src/admin/approvals.ts:150` |
 | Prune approval lifetime | 24 h | per request | `PRUNE_APPROVAL_TTL_MS` at `src/admin/prune-approvals.ts:84` |
 | Dry-run preview rows | 50 | per request | `SAMPLE_CAP` at `src/admin/restore-sinks.ts:142` |
@@ -70,14 +70,14 @@ campaign" binds the whole account, and is checked one request or one campaign at
 | Recovery-code and failed sign-in entries per hour, together | 20, plus one recovery overflow entry per outcome | account-global | `SIGN_IN_FOLD_ROWS_PER_HOUR` at `src/sched/audit-fold.ts:72` |
 | Router denied entries per hour | 9, plus one `denied-overflow` entry | account-global | `DENIED_FOLD_ROWS_PER_HOUR` at `src/sched/audit-fold.ts:73` |
 | Audit page size | 500 | per request | `AUDIT_PAGE_MAX` at `src/admin/audit.ts:271` |
-| Drill-evidence rows retained | 500 | account-global | `DRILL_EVIDENCE_CAP` at `src/sched/scheduler-do-records.ts:327` |
+| Drill-evidence rows retained | 500 | account-global | `DRILL_EVIDENCE_CAP` at `src/sched/scheduler-do-records.ts:331` |
 | Config-history versions retained | 2000 | account-global | `CONFIG_HISTORY_CAP` at `src/admin/config-history.ts:70` |
 | Downpipes per fleet drill | 5000 | account-global, per campaign | `FLEET_DRILL_MAX` at `src/sched/scheduler-do-limits.ts:760` |
 | Change number length | 64 | per request | `CHANGE_NUMBER_MAX` at `src/admin/change-ref.ts:37` |
 | Change reason length | 500 | per request | `CHANGE_REASON_MAX` at `src/admin/change-ref.ts:38` |
 | STS session duration | 900 to 43200 s | per destination | `STS_DURATION_MAX` at `src/dest/factory-validators.ts:134` |
 | In-flight run lease | 30 min | per downpipe | `INFLIGHT_LEASE_MS` at `src/sched/scheduler-do-records.ts:169` |
-| RUNLOG lock lease | 30 s | per destination | `RUNLOG_LEASE_MS` at `src/sched/scheduler-do-records.ts:546` |
+| RUNLOG lock lease | 30 s | per destination | `RUNLOG_LEASE_MS` at `src/sched/scheduler-do-records.ts:550` |
 | Webhook POST timeout | 5 s | per delivery | `WEBHOOK_TIMEOUT_MS` at `src/notify/types.ts:889` |
 | Same-state re-alert interval | 1 h | per downpipe | `ALERT_COOLDOWN_MS` at `src/notify.ts:40` |
 
@@ -281,10 +281,10 @@ a name such as `constructor` is not present either.
 Before any planning, `restoreTargetFault` at `src/admin/approvals.ts:331` refuses a `target` that
 is not an object, or whose `binding`, `namespaceId` or `bucketName` is present but is not a
 non-empty string. `POST /admin/restore`, `/restore/request` and `/restore/verify` return 400 for it
-through `restoreRequestFault` at `src/admin/router-restore.ts:196`,
-`restoreRequestFault` at `src/admin/router-restore.ts:699` and `restoreRequestFault` at
-`src/admin/router-restore.ts:898`. `/restore/attest` returns 400 through `restoreTargetFault` at
-`src/admin/router-restore.ts:970`. The approval Durable Object refuses a request whose redirect
+through `restoreRequestFault` at `src/admin/router-restore.ts:198`,
+`restoreRequestFault` at `src/admin/router-restore.ts:704` and `restoreRequestFault` at
+`src/admin/router-restore.ts:906`. `/restore/attest` returns 400 through `restoreTargetFault` at
+`src/admin/router-restore.ts:972`. The approval Durable Object refuses a request whose redirect
 binding is not a string or does not match the plan's target (`restoreTargetFault` at
 `src/sched/scheduler-do-restore-approval.ts:243`), and refuses to approve a stored record whose
 plan target is malformed (`restoreTargetFault` at `src/sched/scheduler-do-restore-approval.ts:385`).
@@ -352,28 +352,28 @@ capability map, because the two narrow roles are a subset of owner, not a prefix
 
 ### 2.1 Role writes
 
-`setRole` at `src/sched/scheduler-do-rbac-mutations.ts:41` (`POST /admin/roles`):
+`setRole` at `src/sched/scheduler-do-rbac-mutations.ts:42` (`POST /admin/roles`):
 
 - `email` must pass `normaliseEmail` (section 3), else
-  `email must be a valid lowercased address` at `src/sched/scheduler-do-rbac-mutations.ts:47`.
+  `email must be a valid lowercased address` at `src/sched/scheduler-do-rbac-mutations.ts:48`.
 - The write names either a built-in `role` or a `customRole`, never both. A `customRole` must name
-  a stored custom role, else `unknown custom role` at `src/sched/scheduler-do-rbac-mutations.ts:54`.
+  a stored custom role, else `unknown custom role` at `src/sched/scheduler-do-rbac-mutations.ts:55`.
   Otherwise `role` must satisfy `isRole`, else
   `role must be viewer/operator/approver/owner (or customRole must name an existing custom role)`
-  at `src/sched/scheduler-do-rbac-mutations.ts:56`.
+  at `src/sched/scheduler-do-rbac-mutations.ts:57`.
 - `expiresAt`, when present, must be a string that `Date.parse` accepts, else
-  `expiresAt must be an RFC-3339 timestamp` at `src/sched/scheduler-do-rbac-mutations.ts:60`.
+  `expiresAt must be an RFC-3339 timestamp` at `src/sched/scheduler-do-rbac-mutations.ts:61`.
   The check does not require a future time. A grant whose expiry has passed reads as `viewer`
   through lazy expiry (`effectiveRole` at `src/sched/scheduler-do-rbac.ts:335`).
 
 `setGroupRole` (`POST /admin/group-roles`) applies the same role rule
-(`role must be viewer/operator/approver/owner` at `src/sched/scheduler-do-rbac-mutations.ts:429`).
+(`role must be viewer/operator/approver/owner` at `src/sched/scheduler-do-rbac-mutations.ts:436`).
 
 ### 2.2 Group-to-role cap
 
 A group may confer any role except `owner`. Mapping a group to `owner` is refused at write time
 with a 403 and the generic body `forbidden` (`AuthError` at
-`src/sched/scheduler-do-rbac-mutations.ts:435`). The reason
+`src/sched/scheduler-do-rbac-mutations.ts:442`). The reason
 `a group cannot be mapped to owner; owner must be an explicit per-email grant` goes only to the
 engine's internal log.
 
@@ -384,8 +384,8 @@ a stored `owner` mapping to `approver` and records the clamp as a tamper signal
 ### 2.3 Last-Owner guard
 
 A role write or role delete that would leave the estate without an Owner is refused.
-`checkOwnerRemoval` at `src/sched/scheduler-do-rbac-mutations.ts:89` guards the demotion path and
-`checkOwnerRemoval` at `src/sched/scheduler-do-rbac-mutations.ts:299` guards the delete path. The
+`checkOwnerRemoval` at `src/sched/scheduler-do-rbac-mutations.ts:90` guards the demotion path and
+`checkOwnerRemoval` at `src/sched/scheduler-do-rbac-mutations.ts:304` guards the delete path. The
 refusal sentence is `LAST_OWNER_REFUSAL` = `"would remove the last Owner"` at
 `src/admin/owner-floor.ts:47`. With dual control on, the floor is two Owners and the sentence is
 `DUAL_CONTROL_FLOOR_REFUSAL` at `src/admin/owner-floor.ts:48`. Owners are counted over explicit
@@ -518,8 +518,8 @@ truncated, and the truncation is counted as `rbac-group-list-truncated` at
 
 The bounds are declared once for the IdP paths (`GROUPS_MAX` = `200` at
 `src/admin/groups-bounds.ts:9`, `GROUP_NAME_MAX` = `256` at `src/admin/groups-bounds.ts:14`) and
-duplicated by value in the DO (`GROUP_NAME_MAX` = `256` at `src/sched/scheduler-do-records.ts:366`,
-`GROUPS_MAX` = `200` at `src/sched/scheduler-do-records.ts:367`), so the DO bounds its own inputs
+duplicated by value in the DO (`GROUP_NAME_MAX` = `256` at `src/sched/scheduler-do-records.ts:370`,
+`GROUPS_MAX` = `200` at `src/sched/scheduler-do-records.ts:371`), so the DO bounds its own inputs
 with no cross-module dependency.
 
 ---
@@ -538,7 +538,7 @@ field against a per-field maximum:
 
 ### 6.1 `REASON_MAX_LEN` (restore-request reason)
 
-`REASON_MAX_LEN` = `1000` at `src/sched/scheduler-do-records.ts:375`. The `reason` of
+`REASON_MAX_LEN` = `1000` at `src/sched/scheduler-do-records.ts:379`. The `reason` of
 `POST /admin/restore/request`:
 
 - Must be a non-empty string after trimming, else `reason required` at
@@ -548,11 +548,11 @@ field against a per-field maximum:
 
 The same bound applies to a prune-approval reason (`REASON_MAX_LEN` at
 `src/sched/scheduler-do-prune-approval.ts:73`) and a posture override reason (`REASON_MAX_LEN` at
-`src/sched/scheduler-do-observability.ts:1145`).
+`src/sched/scheduler-do-observability.ts:1188`).
 
 ### 6.2 `NOTE_MAX_LEN` (drill-evidence note)
 
-`NOTE_MAX_LEN` = `1000` at `src/sched/scheduler-do-records.ts:376`. The `note` of
+`NOTE_MAX_LEN` = `1000` at `src/sched/scheduler-do-records.ts:380`. The `note` of
 `POST /admin/drill-evidence` is optional. When present it must be a string
 (`note must be a string` at `src/sched/scheduler-do-restore-approval.ts:688`) and pass
 `validateFreeText` with `NOTE_MAX_LEN` (`NOTE_MAX_LEN` at
@@ -608,7 +608,7 @@ prune approval the same two windows (`PRUNE_APPROVAL_TTL_MS` at
 
 `RING_CAP` = `50` at `src/sched/scheduler-do-limits.ts:749`. The per-downpipe run-history ring holds
 the 50 most recent runs. When a run is appended, the ring is shifted from the front until it is
-within the cap (`hist.length > RING_CAP` at `src/sched/scheduler-do-scheduling.ts:345`). The durable
+within the cap (`hist.length > RING_CAP` at `src/sched/scheduler-do-scheduling.ts:349`). The durable
 record is the signed RUNLOG in the archive.
 
 ### 9.2 `AUDIT_CAP`
@@ -762,10 +762,10 @@ nor approve one:
 
 ### 11.3 `expiresAt` on a role grant
 
-`expiresAt must be an RFC-3339 timestamp` at `src/sched/scheduler-do-rbac-mutations.ts:60`
+`expiresAt must be an RFC-3339 timestamp` at `src/sched/scheduler-do-rbac-mutations.ts:61`
 (section 2.1). A time-boxed Owner grant is refused while dual control is on and the break-glass
 token is retired, because the grant could lapse with no identity left to act
-(`grant-expiring-owner` at `src/sched/scheduler-do-rbac-mutations.ts:113`).
+(`grant-expiring-owner` at `src/sched/scheduler-do-rbac-mutations.ts:114`).
 
 ### 11.4 Maker and checker must differ
 
@@ -795,7 +795,7 @@ inside the DO's storage read-modify-write, so the decision is atomic with the wr
   pack.
 
 The evidence log holds at most `DRILL_EVIDENCE_CAP` = `500` at
-`src/sched/scheduler-do-records.ts:327` rows. Past the cap the oldest rows are deleted in the same
+`src/sched/scheduler-do-records.ts:331` rows. Past the cap the oldest rows are deleted in the same
 storage turn as the append (`window.size > DRILL_EVIDENCE_CAP` at
 `src/sched/scheduler-do-restore-approval.ts:722`).
 
@@ -806,17 +806,17 @@ storage turn as the append (`window.size > DRILL_EVIDENCE_CAP` at
 `INFLIGHT_LEASE_MS` = `30 * 60 * 1000` at `src/sched/scheduler-do-records.ts:169`.
 
 A triggered run must post `/complete` within 30 minutes. `leased` at
-`src/sched/scheduler-do-scheduling.ts:280-282` treats a downpipe as in flight only while
+`src/sched/scheduler-do-scheduling.ts:281-283` treats a downpipe as in flight only while
 `now - inFlightSince <= INFLIGHT_LEASE_MS`. A run past the lease is treated as crashed: the next
 `trigger` resolves its history row to `abandoned` with the error `abandoned (run lease expired)`
-at `src/sched/scheduler-do-scheduling.ts:336` and allocates a fresh run. This bounds the wedge
+at `src/sched/scheduler-do-scheduling.ts:340` and allocates a fresh run. This bounds the wedge
 time after an evicted or redeployed Worker isolate.
 
 ---
 
 ## 14. RUNLOG Lock Lease
 
-`RUNLOG_LEASE_MS` = `30_000` at `src/sched/scheduler-do-records.ts:546`.
+`RUNLOG_LEASE_MS` = `30_000` at `src/sched/scheduler-do-records.ts:550`.
 
 Each destination's RUNLOG has its own write lock, and a lock is held for at most 30 seconds.
 `acquireRunlogLock` at
@@ -859,7 +859,7 @@ The admin API implements anti-automation rate limiting aligned with OWASP ASVS V
 holds six fixed-window limits. Each is a counter in the scheduler Durable Object under its own
 key namespace, so the buckets never collide. `rateCheck` at `src/sched/scheduler-do.ts:813` is the
 counter for four of them. The recovery-code limiter has its own `recoveryRateCheck` at
-`src/sched/scheduler-do-recovery.ts:551` in the same shape, for its per-IP and per-email limits.
+`src/sched/scheduler-do-recovery.ts:552` in the same shape, for its per-IP and per-email limits.
 The consolidated contextual model (each
 attribute with its threshold and its action) is `docs/security/identity-sessions-and-files.md`
 section 2.6; this section is the limiter reference, and its fail posture per surface (section 17.7)
@@ -883,44 +883,49 @@ does not increment the counter. A request without an explicit `max` uses
 
 `RATE_LIMIT_MAX_PER_WINDOW` = `120` at `src/sched/scheduler-do-limits.ts:659`.
 
-The mutating admin routes call `rateLimited` at `src/admin/router-core.ts:303` after the caller
+The mutating admin routes call `rateLimited` at `src/admin/router-core.ts:349` after the caller
 is resolved and before the handler runs. GET routes are exempt, except three reads that fan out
 to many DO round trips: `GET /preflight` (`rateLimited` at `src/admin/router-status.ts:251`),
 `GET /support` (`rateLimited` at `src/admin/router-status.ts:265`) and `GET /support/bundle`
 (`rateLimited` at `src/admin/router-status.ts:313`). `test/validate-ratelimit.ts` in
-`validate:chain` proves a burst past the cap answers 429 and a limiter fault admits. The bucket key is `rateLimitKey` at `src/admin/router-core.ts:218-219`: `sub:<subject>`
+`validate:chain` proves a burst past the cap answers 429 and a limiter fault admits. The bucket key is `rateLimitKey` at `src/admin/router-core.ts:264-265`: `sub:<subject>`
 for every attributable caller (Access, passkey, OIDC, SAML and recovery sessions all carry a
 subject), and the single shared `token` bucket for the bare-token break-glass, which has no
 subject. This bucket's key excludes the source IP entirely, so a shared NAT or corporate egress
 cannot exhaust one budget for every operator behind it.
 
 Fail-open: a thrown `/rate-check` round trip, or a verdict with no boolean `allowed`, admits the
-request (`typeof verdict.allowed !== "boolean"` at `src/admin/router-core.ts:321`; `catch (e)` at
-`src/admin/router-core.ts:333`). Each admit-on-fault is recorded as
-`limiter-verdict-malformed` at `src/admin/router-core.ts:322`. An unavailable limiter never
+request (`typeof verdict.allowed !== "boolean"` at `src/admin/router-core.ts:367`; `catch (e)` at
+`src/admin/router-core.ts:379`). Each admit-on-fault is recorded as
+`limiter-verdict-malformed` at `src/admin/router-core.ts:368`. An unavailable limiter never
 blocks a verified operator's recovery action.
 
 ### 17.3 Per-IP limits on the unauthenticated surfaces
 
-Two limiters key on `CF-Connecting-IP`, because there is no verified identity yet:
+Two limiters key on `CF-Connecting-IP`, because there is no verified identity yet. Each keys the
+source group, not the raw address (`ipSourceGroup` at `src/admin/sign-in-context.ts:92`): an IPv4
+address is its own group, and an IPv6 address groups by its /64, because one host commonly holds a
+whole /64. The address is normalised first (case, brackets, zone id, dotted IPv4 tail), and an
+IPv4-mapped address (`::ffff:a.b.c.d`) groups as the IPv4 address it carries. The recovery-code IP
+bucket (section 17.4) and the recovery audit fold use the same groups.
 
 - `AUTH_RATE_LIMIT_MAX_PER_WINDOW` = `30` at `src/sched/scheduler-do-limits.ts:673` bounds the
   `/admin/auth/*` ceremony routes (register and login, begin and finish). `authRateLimited` at
-  `src/admin/router-core.ts:629` keys the bucket `ip:<address>` (`ip:${ip}` at
-  `src/admin/router-core.ts:641`) and is called from every auth-flow route
+  `src/admin/router-core.ts:675` keys the bucket `ip:<source group>` (`ip:${ipSourceGroup(ip)}` at
+  `src/admin/router-core.ts:687`) and is called from every auth-flow route
   (`authRateLimited` at `src/admin/router-auth-flow.ts:50`).
 - `ADMIN_TOKEN_RATE_LIMIT_MAX_PER_WINDOW` = `10` at `src/sched/scheduler-do-limits.ts:682` bounds
-  the bare `ADMIN_TOKEN` compare. `adminTokenRateLimitedViaDO` at `src/admin/router-session.ts:337`
-  keys the bucket `admin-token-ip:<address>` (`admin-token-ip:${ip}` at
-  `src/admin/router-session.ts:343`).
+  the bare `ADMIN_TOKEN` compare. `adminTokenRateLimitedViaDO` at `src/admin/router-session.ts:338`
+  keys the bucket `admin-token-ip:<source group>` (`admin-token-ip:${ipSourceGroup(ip)}` at
+  `src/admin/router-session.ts:344`).
 
 Both fail closed: a refusal, a malformed verdict, or a thrown round trip returns 429
-(`verdict.allowed === true` at `src/admin/router-core.ts:649` is the only admit; `catch (e)` at
-`src/admin/router-core.ts:667` answers `RATE_LIMIT_UNAVAILABLE_ERROR` with
-`AUTH_RATE_LIMIT_FALLBACK_RETRY_AFTER_S` = `60` at `src/admin/router-core.ts:627`). A request with
+(`verdict.allowed === true` at `src/admin/router-core.ts:695` is the only admit; `catch (e)` at
+`src/admin/router-core.ts:713` answers `RATE_LIMIT_UNAVAILABLE_ERROR` with
+`AUTH_RATE_LIMIT_FALLBACK_RETRY_AFTER_S` = `60` at `src/admin/router-core.ts:673`). A request with
 no `CF-Connecting-IP` header is admitted: the Cloudflare edge always injects the header on the
 custom-domain-only deployment, so its absence means a local context, not a stripped header
-(`ip === null` at `src/admin/router-core.ts:637`). This is a deliberate, edge-guaranteed accept
+(`ip === null` at `src/admin/router-core.ts:683`). This is a deliberate, edge-guaranteed accept
 rather than a gap: the V2.4.1 / V8.1.4 accept decision for this case.
 
 Together the two authenticated and three credential-guessing limiters gate: every
@@ -945,13 +950,13 @@ password brute force) covers this section and the recovery-code and audit-feed l
 `RECOVERY_RATE_MAX_PER_EMAIL` = `5` at `src/sched/scheduler-do-limits.ts:743`.
 
 A recovery-code sign-in must pass both buckets (`recoveryRateAllow` at
-`src/sched/scheduler-do-recovery.ts:518`): the email bucket `email:<canonical email>` (a malformed
-email spends the shared `email:_invalid` bucket) and the IP bucket `ip:<address>`
-(`recoveryRateAllow` at `src/sched/scheduler-do-recovery.ts:366`). A request with no source IP skips
+`src/sched/scheduler-do-recovery.ts:519`): the email bucket `email:<canonical email>` (a malformed
+email spends the shared `email:_invalid` bucket) and the IP bucket `ip:<source group>` (section 17.3)
+(`recoveryRateAllow` at `src/sched/scheduler-do-recovery.ts:367`). A request with no source IP skips
 the IP bucket and still spends the email bucket. The buckets live in the
 `recovery-rate:` namespace (`RECOVERY_RATE_PREFIX` at `src/sched/scheduler-do-limits.ts:740`). The
 limiter fails closed: a storage fault denies the attempt (`recovery-limiter-unavailable` at
-`src/sched/scheduler-do-recovery.ts:541`). A bucket that refuses an attempt does not increment its own counter, so a
+`src/sched/scheduler-do-recovery.ts:542`). A bucket that refuses an attempt does not increment its own counter, so a
 caller cannot extend their own lockout past one window.
 
 ### 17.5 Per-client limit on the audit-feed pull
@@ -964,18 +969,18 @@ fault cannot become a collector outage.
 
 ### 17.6 The 429 response
 
-`rateLimitedResponse` at `src/admin/router-core.ts:274` is the single producer of a 429. The body
+`rateLimitedResponse` at `src/admin/router-core.ts:320` is the single producer of a 429. The body
 is RFC 9457 problem+json with `error` set to `RATE_LIMITED_ERROR` = `"rate limited"` at
-`src/admin/router-core.ts:257` (or `RATE_LIMIT_UNAVAILABLE_ERROR` = `"rate limit unavailable"` at
-`src/admin/router-core.ts:258` on a fail-closed outage). The headers carry `retry-after` in whole
+`src/admin/router-core.ts:303` (or `RATE_LIMIT_UNAVAILABLE_ERROR` = `"rate limit unavailable"` at
+`src/admin/router-core.ts:304` on a fail-closed outage). The headers carry `retry-after` in whole
 seconds, rounded up and floored at 1 (`Math.ceil(retryAfterMs / 1000)` at
-`src/admin/router-core.ts:329`), plus the advisory IETF `ratelimit` and `ratelimit-policy` headers
-(`rateLimitHeaders` at `src/admin/router-core.ts:245`). `ratelimit-policy` advertises the ceiling
+`src/admin/router-core.ts:375`), plus the advisory IETF `ratelimit` and `ratelimit-policy` headers
+(`rateLimitHeaders` at `src/admin/router-core.ts:291`). `ratelimit-policy` advertises the ceiling
 of the bucket that refused and the window in seconds (`RATE_LIMIT_WINDOW_SECONDS` at
-`src/admin/router-core.ts:237`), so a caller can read the limit off the wire.
+`src/admin/router-core.ts:283`), so a caller can read the limit off the wire.
 
 Two surfaces answer differently rather than through this builder. The break-glass 429
-(`adminTokenThrottledResponse` at `src/admin/router-core.ts:298`) advertises the full window rather
+(`adminTokenThrottledResponse` at `src/admin/router-core.ts:344`) advertises the full window rather
 than the time remaining. The recovery-code sign-in answers a generic 401 `unauthorised` with no
 `Retry-After` at all (`unauthorised` at `src/admin/router-auth-flow.ts:82`), because a back-off
 signal on the per-email bucket would tell an unauthenticated caller that recovery is being
@@ -988,10 +993,10 @@ the counter, so only admitted requests count toward the window cap (`retryAfterM
 
 | Surface | Limiter | When the DO is unavailable or answers without a boolean verdict | Where |
 |---------|---------|------------------------------------------------------------------|-------|
-| Authenticated mutating routes | `rateLimited` | fail open: the request is admitted and `limiter-verdict-malformed` is recorded | `limiter-verdict-malformed` at `src/admin/router-core.ts:322`, `limiter-verdict-malformed` at `src/admin/router-core.ts:341` |
-| Unauthenticated sign-in ceremonies | `authRateLimited` | fail closed: 429, recording `auth-limiter-verdict-malformed` on an answered-but-broken limiter and `auth-limiter-unavailable` on a thrown round trip | `auth-limiter-verdict-malformed` at `src/admin/router-core.ts:662`, `auth-limiter-unavailable` at `src/admin/router-core.ts:677` |
-| Bare-token compare | `adminTokenRateLimitedViaDO` | fail closed: blocked, recording `admin-token-ratelimited-malformed` on an answered-but-broken limiter and `admin-token-ratelimited-unavailable` on a thrown round trip | `admin-token-ratelimited-malformed` at `src/admin/router-session.ts:365`, `admin-token-ratelimited-unavailable` at `src/admin/router-session.ts:375` |
-| Recovery-code sign-in | `recoveryRateAllow` | fail closed: denied, recording `recovery-limiter-unavailable` | `recovery-limiter-unavailable` at `src/sched/scheduler-do-recovery.ts:541` |
+| Authenticated mutating routes | `rateLimited` | fail open: the request is admitted and `limiter-verdict-malformed` is recorded | `limiter-verdict-malformed` at `src/admin/router-core.ts:368`, `limiter-verdict-malformed` at `src/admin/router-core.ts:387` |
+| Unauthenticated sign-in ceremonies | `authRateLimited` | fail closed: 429, recording `auth-limiter-verdict-malformed` on an answered-but-broken limiter and `auth-limiter-unavailable` on a thrown round trip | `auth-limiter-verdict-malformed` at `src/admin/router-core.ts:708`, `auth-limiter-unavailable` at `src/admin/router-core.ts:723` |
+| Bare-token compare | `adminTokenRateLimitedViaDO` | fail closed: blocked, recording `admin-token-ratelimited-malformed` on an answered-but-broken limiter and `admin-token-ratelimited-unavailable` on a thrown round trip | `admin-token-ratelimited-malformed` at `src/admin/router-session.ts:366`, `admin-token-ratelimited-unavailable` at `src/admin/router-session.ts:376` |
+| Recovery-code sign-in | `recoveryRateAllow` | fail closed: denied, recording `recovery-limiter-unavailable` | `recovery-limiter-unavailable` at `src/sched/scheduler-do-recovery.ts:542` |
 | Audit-feed pull | `ingestPullRateLimited` | fail open, matching the per-subject limiter | `ingestPullRateLimited` at `src/admin/support-ingest.ts:246` |
 
 The per-caller and audit-feed limiters fail open because each guards a verified operator's own
@@ -1091,187 +1096,97 @@ or SAML connection at the write boundary.
 
 ## 23. Regex Construction from Non-Literal Data
 
-Policy: any `new RegExp` interpolating a value that is not fixed at compile time must escape
+Policy: any `new RegExp` interpolating a value that is not fixed at compile time escapes
 it first, as `azureHostPattern` does (`new RegExp` at `src/dest/provider.ts:107`), which
 escapes every dot in each configured cloud suffix before joining them into the pattern
 (`replace` at `src/dest/provider.ts:106`) so a suffix cannot smuggle a regex metacharacter.
-Enforced by `test/validate-regex-construction.ts` in `validate:chain`: it scans `src/` for
-every `new RegExp(...)` call built from a template literal with an interpolated segment and
-fails on one that is neither escaped nor provably fixed at compile time (a literal union, an
-integer constant, or a parameter closed over at a call site that only ever passes a fixed
-literal). See section 24 for the companion V1.3.12 sweep (every regex, literal or
-constructed, checked for catastrophic backtracking rather than injection), which reviews
-the same three constructed-pattern call sites from the ReDoS angle.
+Every `new RegExp(...)` call under `src/` built from a template literal with an interpolated
+segment either escapes the segment or takes a value fixed at compile time (a literal union, an
+integer constant, or a parameter that every call site fills with a fixed literal). See section 24
+for the matching rule on catastrophic backtracking, which covers every regex, literal or
+constructed, and describes the same three constructed-pattern call sites.
 
 ---
 
-## 24. Regex Safety (ReDoS) Sweep: ASVS V1.3.12 sign-off
+## 24. Regex Safety (ReDoS): ASVS V1.3.12
 
-Source: `test/validate-regex-safety.ts`, wired into `validate:chain`
-(`package.json`, `validate:chain` member list).
+No regex in the engine backtracks without bound. A regex that runs on request data has no
+nested quantifier that can match the same text in more than one way, and every other
+quantified pattern is either bounded or has a single way to parse any input. This is the
+V1.3.12 control: the engine takes no input that makes a pattern run for a time that grows
+faster than the length of that input. See section 23 for the companion V1.2.9 control
+(escape or fix every interpolated value).
 
-Every regex under `src/` is checked for catastrophic backtracking (ReDoS) on every run
-of `npm run validate`: every `/literal/` and every `new RegExp(...)` / `RegExp(...)`
-construction whose pattern (and flags, if given) is a static string. Coverage at the
-time this section was last measured: 442 files under `src/`, 493 distinct patterns
-(regex literals plus static-string constructor calls), plus 3 `RegExp(...)` constructor
-call sites whose pattern is built from a runtime string rather than a literal (see
-24.4). See section 23 for the companion V1.2.9
-control (escape-or-prove-fixed on the same constructor calls); this section is the
-ReDoS-safety sweep over ALL regex, literal or constructed.
+### 24.1 Shapes the engine uses
 
-### 24.1 Method
+1. **Bounded patterns.** Most patterns have no open-ended repetition at all: no bare `*` or
+   `+` and no `{n,}` outside a character class. A search over such a pattern is bounded by
+   its own length. The identifier shapes in this document are of this kind, for example the
+   downpipe id `/^[A-Za-z0-9._-]{1,128}$/` (section 1.1) and the source or secret binding
+   `/^[A-Za-z0-9_]{1,64}$/` (section 1.10).
+2. **Single-pass repetition.** The patterns that do repeat use one unnested repetition over
+   a character class. `normaliseEmail`
+   uses `/^[^@]+@[^@]+$/` (section 3), where the `@` between the two classes forces one way
+   to parse any string.
+3. **Repeated groups with a separator.** A repeated group that contains a repetition is safe
+   when the group's leading character cannot be produced by the inner repetition. The AWS
+   region shape `/^[a-z]{2}(-[a-z]+)+-\d{1,2}$/` (`VALID_STS_REGION` at
+   `src/dest/sts.ts:56`) nests `[a-z]+` inside a repeated group. The group's leading `-`
+   can never come from `[a-z]+`, so every repetition is forced apart and there is one way to
+   parse a given string. Its non-capturing siblings have the same property:
+   `AWS_REGION_SHAPE` at `src/admin/run-fault-records.ts:99` and `AWS_REGION_RE` at
+   `src/dest/fault-log.ts:232`.
+4. **No nested ambiguous quantifier.** The engine uses no pattern of the shape `/^(a+)+$/`
+   or `(a|aa)+$` under `src/`. Each of these takes exponential time on a failed match at an
+   anchor.
 
-1. **Enumeration.** Every `RegularExpressionLiteral` node under `src/` is collected via
-   the TypeScript compiler API (syntactic parse only), deduplicated by exact literal
-   text, and each unique pattern's citing file:line(s) are recorded.
-2. **`RegExp(...)` constructor calls, read the same way when the argument is a static
-   string.** Every `new RegExp(...)` / `RegExp(...)` call site under `src/` is also
-   collected. When its pattern argument (and flags argument, if given) is a plain string
-   literal or a template literal with no `${...}` substitution, its resolved text is
-   known without running anything, and it is folded into the same pattern set as a
-   `/literal/`, checked by steps 3-4 below identically. When the pattern argument is
-   anything else, its concrete text cannot be read syntactically; see 24.4 for how those
-   are handled.
-3. **Static classification.** A pattern with no unbounded repetition (no bare `*` or
-   `+`, no open-ended `{n,}`, outside any character class) is recorded safe without
-   further work: a backtracking search bounded by construction cannot blow up without
-   bound. 398 of 493 patterns are safe on this ground alone.
-4. **Dynamic check, for the remaining 95 patterns.** Each is executed against a
-   generated input built from characters read out of the pattern's own character
-   classes, at doubling lengths (8, 16, 32, and so on up to 8192), with two terminator
-   variants: a clean match, and one astral-plane codepoint no class in this repo
-   admits, chosen to force a failed match at an anchor, which is where classic
-   catastrophic patterns such as `(a|aa)+$` do their damage. Each attempt runs in a
-   freshly spawned Node child process with a 3-second hard OS-level timeout
-   (`SIGKILL`); a child killed before completing its doubling schedule is the finding,
-   because a linear-time pattern finishes the whole schedule in microseconds per step
-   regardless of length. A subprocess-plus-timeout is used rather than an in-process
-   timer because a single `RegExp.prototype.test()` call cannot be interrupted
-   mid-flight in JavaScript's single-threaded model; only an OS-level kill bounds a
-   call this file cannot otherwise interrupt.
-5. **Why dynamic rather than a static nested-quantifier rule.** A naive rule (flag any
-   quantified group that itself contains a quantified sub-pattern) gives a false
-   positive on this repo's own corpus: `/^[a-z]{2}(-[a-z]+)+-\d{1,2}$/`
-   (`VALID_STS_REGION` at `src/dest/sts.ts:56`, an AWS region code) nests `[a-z]+` inside
-   a repeated group and is completely safe, because the outer group's leading `-` can
-   never be produced by the inner `[a-z]+`, so every repetition is forced apart and there
-   is only ever one way to parse a given string. That rule flags this
-   pattern and its non-capturing siblings (`AWS_REGION_SHAPE` at
-   `src/admin/run-fault-records.ts:98`, `AWS_REGION_RE` at `src/dest/fault-log.ts:205`),
-   none of which is unsafe. Executing each pattern
-   against a real generated input answers the only question that matters, whether the
-   engine's cost stays flat as the input grows, without needing to reconstruct
-   NFA-ambiguity theory to get the right answer for this shape.
+### 24.2 Patterns built at run time
 
-### 24.2 Result at the time this section was last measured
+`new RegExp(...)` can compile a pattern from a runtime string. Three call sites in `src/` do
+this. In each, the substituted value comes from engine code and never from a request, and the
+pattern keeps one of the shapes in 24.1.
 
-All 493 distinct patterns pass: 398 safe by bound alone, 95 probed dynamically, 0
-unsafe. Full sweep wall time: approximately 45 seconds. Of the 3 `RegExp(...)`
-constructor call sites whose pattern is a non-literal string, all 3 are on the reviewed
-allowlist (24.4); 0 are unreviewed, and 0 constructor calls in `src/` build their
-pattern from a static string literal today.
-
-Three of the patterns documented elsewhere in this file are asserted present in the
-scan by exact text, so a future edit cannot silently drop one from the tree without the
-validator itself failing:
-
-- `/^[A-Za-z0-9._-]{1,128}$/`, downpipe id (section 1.1)
-- `/^[A-Za-z0-9_]{1,64}$/`, source/secret binding (section 1.10)
-- `/^[^@]+@[^@]+$/`, `normaliseEmail` (section 3)
-
-### 24.3 Negative controls
-
-The validator refuses a nested-quantifier pattern such as `/^(a+)+$/` (the textbook ReDoS shape)
-anywhere under `src/`. The refusal names the pattern's file:line and reports that the probe was
-killed by the 3-second timeout. No pattern in the engine source fails the check.
-
-The constructor-call extension (24.4) refuses each of these patterns anywhere under `src/`:
-
-- `new RegExp("^(" + x + "+)+$")`, a **dynamic, un-allowlisted** pattern (`x` an
-  ordinary local variable, not a literal): fails, naming the pattern's file:line and
-  reporting that its file is not on `DYNAMIC_REGEX_ALLOWLIST`.
-- `new RegExp("^(a+)+$")`, a **static string literal** argument carrying the same
-  nested-quantifier shape: fails, naming the pattern's file:line and reporting that
-  its dynamic probe is killed by the 3-second timeout rather than completing.
-
-### 24.4 `RegExp(...)` constructed from a non-literal string: scope and the allowlist rule
-
-**The gap this closes.** A `/literal/` is not the only way JavaScript builds a RegExp:
-`new RegExp(someString)` compiles a pattern from a runtime string, and a sweep that
-only enumerates `RegularExpressionLiteral` AST nodes never sees it. A pattern built as
-`new RegExp("^(" + x + "+)+$")` is the textbook catastrophic shape from 24.1's step 5,
-constructed instead of written. The sweep also reaches every `new RegExp(...)` /
-`RegExp(...)` call under `src/`, by two different means depending on what the call
-site's own text can prove.
-
-**What is statically analysed, the same way as a `/literal/`.** A constructor call
-whose pattern argument (and flags argument, if any) is a plain string literal or a
-template literal with no `${...}` substitution has a resolved value the TypeScript
-parser already knows, with no execution needed. That value is checked exactly like a
-`/literal/`: the same unbounded-repetition test, the same child-process dynamic probe
-when it applies. There are 0 such call sites in `src/` today; if one is added, it is
-covered automatically, with no allowlist entry needed.
-
-**What requires the reviewed allowlist, and why it cannot be checked automatically.** A
-constructor call whose pattern argument is a template literal WITH a substitution,
-a string concatenation, a bare identifier, or a function call has no text the sweep can
-read without running the program that builds it. The runtime value is exactly the
-thing under test. There is no static shortcut that both stays sound and stays
-syntactic (step 5's rejected nested-quantifier rule, applied here, would need to
-reason about the CALLER's possible values, which is the call-graph analysis 24.5
-already declines to build). Each such call site fails the sweep, naming its file:line
-and its own source text, UNLESS the file it lives in is named in
-`DYNAMIC_REGEX_ALLOWLIST` (`test/validate-regex-safety.ts`): a plain list of file
-paths, each with an inline comment recording the by-hand review of why that file's
-constructed pattern cannot backtrack catastrophically regardless of the runtime value
-substituted into it. The allowlist is file-scoped, not call-site-scoped: a passing
-review excuses every non-literal constructor call already in that file from the
-automatic check, which is why entries are kept few and each one is reasoned in place
-rather than added on request.
-
-There are 3 files on the allowlist, each with its review recorded in place:
-
-- **`new RegExp` at `src/admin/router-sources.ts:549`, inside `matchActionPath`.** `matchActionPath(method, sub, prefix)` builds
-  `` new RegExp(`^/${prefix}/([^/]+)/(approve|reject)$`) ``. `prefix` is a function
-  parameter, so its value cannot be read from this call site alone. The file's
-  only two callers (lines 529 and 537) each pass a hardcoded string
-  (`"config/changes"`, `"owner-actions"`), and the pattern's only unbounded piece,
-  `[^/]+`, is a single un-nested repetition regardless of what text `prefix` supplies.
-  A future caller passing a request-derived prefix would need this entry re-reviewed.
-- **`DOWNPIPE_ID_PATTERN` at `src/sched/config-validate.ts:145`.** `DOWNPIPE_ID_PATTERN` builds
-  `` new RegExp(`^[A-Za-z0-9._-]{1,${DOWNPIPE_ID_MAX_LEN}}$`) ``, interpolating a
-  same-file exported numeric constant (`DOWNPIPE_ID_MAX_LEN = 128`, line 143) into a
-  BOUNDED quantifier's upper bound. The pattern this builds is
-  `/^[A-Za-z0-9._-]{1,128}$/`, byte-identical to the literal already asserted present
-  in 24.2's list (section 1.1), and a bounded quantifier cannot backtrack
-  catastrophically for any value of that constant.
-- **`new RegExp` at `src/dest/provider.ts:107`, inside `azureHostPattern`.** `azureHostPattern(family)` builds
+- **`new RegExp` at `src/admin/router-sources.ts:549`, inside `matchActionPath`.**
+  `matchActionPath(method, sub, prefix)` builds
+  `` new RegExp(`^/${prefix}/([^/]+)/(approve|reject)$`) ``. The function's only two
+  callers (lines 529 and 537) each pass a hardcoded string (`"config/changes"`,
+  `"owner-actions"`). The pattern's only unbounded piece, `[^/]+`, is a single unnested
+  repetition regardless of what text `prefix` supplies. The route prefix is never taken from
+  a request.
+- **`DOWNPIPE_ID_PATTERN` at `src/sched/config-validate.ts:145`.** It builds
+  `` new RegExp(`^[A-Za-z0-9._-]{1,${DOWNPIPE_ID_MAX_LEN}}$`) ``, interpolating a same-file
+  exported numeric constant (`DOWNPIPE_ID_MAX_LEN = 128`, line 143) into the upper bound of a
+  bounded quantifier. The pattern it builds is `/^[A-Za-z0-9._-]{1,128}$/`, the same pattern
+  as section 1.1, and a bounded quantifier cannot backtrack catastrophically for any value of
+  that constant.
+- **`new RegExp` at `src/dest/provider.ts:107`, inside `azureHostPattern`.**
+  `azureHostPattern(family)` builds
   `` new RegExp(`\\.${family}\\.(?:${clouds})$`, "i") ``, interpolating `family`
   (typed `"blob" | "dfs"`, called with only those two literals at lines 110-111) and
-  `clouds` (every element of the same-file literal array `AZURE_STORAGE_SUFFIXES`,
-  joined with `|` after each element's own dots are escaped). Neither substituted
-  piece, nor the literal text around them, carries an unbounded quantifier, so there
-  is nothing to nest.
+  `clouds` (every element of the same-file literal array `AZURE_STORAGE_SUFFIXES`, joined
+  with `|` after each element's own dots are escaped). Neither substituted piece, nor the
+  literal text around them, carries an unbounded quantifier, so there is nothing to nest.
 
-### 24.5 Residual
+A constructor call that takes a request-derived value needs an escape and a bounded
+shape under section 23.
 
-This sweep checks every regex literal syntactically present under `src/`, and every
-`RegExp(...)` constructor call whose pattern is a static string; it does not trace
-which HTTP field, JWT claim, or destination response actually reaches each one (a full
-call-graph/data-flow analysis this repo does not have). Checking the whole tree rather
-than a hand-picked subset is the deliberate, conservative choice this residual implies:
-it costs one dynamic probe pass (about 45 seconds) rather than a reachability analysis
-that could itself be wrong in the lenient direction.
+### 24.3 What a customer can verify
 
-For a `RegExp(...)` built from a non-literal string, the residual is different in kind:
-24.4's allowlist is a recorded human review of the file, not a probe of the constructed
-pattern's actual runtime text, because that text does not exist until the program runs.
-A change to `DOWNPIPE_ID_MAX_LEN`, `AZURE_STORAGE_SUFFIXES`, or `matchActionPath`'s
-callers that introduced an unbounded quantifier into the substituted value would not be
-caught by this sweep; it would need the same by-hand review 24.4 already asks for, and
-this sweep enforces only that a NEW dynamic call site outside these three files gets
-that review before it can pass.
+The patterns are in the source tree under `src/`, and the three run-time constructions are
+listed in 24.2 with their line numbers. A reader can confirm that each substituted value is
+a compile-time constant, a literal union, or an escaped literal list, and that no pattern
+in 24.1 matches the same text two ways.
+
+### 24.4 Residual
+
+The engine does not trace which HTTP field, JWT claim or destination response reaches each
+regex. The control rests on the shape of every pattern rather than on a reachability
+argument, so a pattern is safe whichever input reaches it.
+
+A run-time pattern is a different case: its final text exists only when the program runs.
+Its safety rests on the values listed in 24.2. A change to `DOWNPIPE_ID_MAX_LEN`,
+`AZURE_STORAGE_SUFFIXES` or the callers of `matchActionPath` that put an unbounded
+quantifier into the substituted value would break that argument.
 
 ## 25. Inbound Body Size on the Unauthenticated Surfaces
 

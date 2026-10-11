@@ -274,11 +274,15 @@ async function main(): Promise<void> {
     console.log("\nRA.2 the proposer and an Operator cannot approve the arm");
     if (qid !== "") ageRecord(rig.storage, changeKey(qid), "proposedAt", APPROVAL_MIN_DWELL_MS + 1000);
     const self = await rig.call(OWNER, "POST", `/admin/config/changes/${qid}/approve`);
-    info(`the proposer's own approve answered ${self.status} ${(await self.text()).slice(0, 120)}`);
-    ok(`SAFE: the same Owner cannot approve their own arm (${self.status})`, self.status >= 400 && (await storedRetention(rig, "dp_a"))?.enforce !== true);
+    const selfText = await self.text();
+    info(`the proposer's own approve answered ${self.status} ${selfText.slice(0, 120)}`);
+    // The change is aged past the dwell floor above, so the refusal that answers is the one under test. Each
+    // check pins that guard's own sentence: another 4xx (an unknown id, the dwell floor) would not prove it.
+    ok(`SAFE: the same Owner cannot approve their own arm, refused by maker != checker (${self.status})`, self.status === 400 && /cannot approve your own change/.test(selfText) && (await storedRetention(rig, "dp_a"))?.enforce !== true);
     const opAppr = await rig.call(OPERATOR, "POST", `/admin/config/changes/${qid}/approve`);
-    info(`the Operator's approve answered ${opAppr.status} ${(await opAppr.text()).slice(0, 140)}`);
-    ok(`SAFE: an Operator (no restore.approve) cannot approve the arm (${opAppr.status})`, opAppr.status >= 400 && (await storedRetention(rig, "dp_a"))?.enforce !== true);
+    const opText = await opAppr.text();
+    info(`the Operator's approve answered ${opAppr.status} ${opText.slice(0, 140)}`);
+    ok(`SAFE: an Operator (no restore.approve) cannot approve the arm, refused for the missing restore.approve (${opAppr.status})`, opAppr.status === 400 && /needs an approver who holds restore\.approve/.test(opText) && (await storedRetention(rig, "dp_a"))?.enforce !== true);
 
     // ---- RA.3 a different Owner approves, and the cron prunes. ----
     console.log("\nRA.3 after a different Owner approves, the cron prunes");

@@ -2,7 +2,7 @@
 
 The engine is the in-account Cloudflare Worker that reads Workers KV, R2, Secrets Store
 and D1 and seals them to the `downpipe/0.1.0` archive format. It is byte-compatible with
-the Go reference at the sibling `downpipe` repository and is proven against that
+the Go reference at the sibling `downpipe` repository and is checked against that
 reference's conformance vectors.
 
 ## Contributor Licence Agreement
@@ -24,7 +24,7 @@ pull request; the maintainer records the acceptance and you only do it once.
 - Recover without the vendor and without Cloudflare. The format and the offline
   `downpipe` reader are the contract; the engine must produce archives that reader
   recovers byte-for-byte where the spec says writer-authoritative.
-- Custom domains only. No `*.workers.dev` route, ever.
+- The engine has no `*.workers.dev` route. The shipped console uses a custom domain; a `workers.dev` console is a supported first run.
 
 ## Crypto
 

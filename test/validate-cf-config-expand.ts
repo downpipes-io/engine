@@ -167,12 +167,13 @@ async function testR2BucketConfig(): Promise<void> {
       [`${base}/b1/cors`, { rules: [] }],
       [`${base}/b1/sippy`, { enabled: false }],
       [`${base}/b1/domains/custom`, { domains: [] }],
+      [`${base}/b1/domains/managed`, { enabled: false }],
       [`/accounts/${IDS.accountId}/event_notifications/r2/b1/configuration`, { queues: [] }],
     ]);
     const out = (await s.read(makeApi(lists, gets), IDS)) as Array<Record<string, unknown>>;
     const rec = out[0]!;
     ok("r2-config (lock 404): that part is null, every other part captured, record complete",
-      out.length === 1 && rec.bucket === "b1" && rec.lock === null && rec.lifecycle !== null && rec.cors !== null && rec.sippy !== null && rec.customDomains !== null && rec.eventNotifications !== null);
+      out.length === 1 && rec.bucket === "b1" && rec.lock === null && rec.lifecycle !== null && rec.cors !== null && rec.sippy !== null && rec.customDomains !== null && rec.publicAccess !== null && rec.eventNotifications !== null);
   }
   // (c) EVERY sub-config read throws -> the bucket record is a partial { bucket, every part null }, never a
   //     throw or a silent empty surface.
@@ -184,44 +185,50 @@ async function testR2BucketConfig(): Promise<void> {
       [`${base}/b1/cors`, THROW],
       [`${base}/b1/sippy`, THROW],
       [`${base}/b1/domains/custom`, THROW],
+      [`${base}/b1/domains/managed`, THROW],
       [`/accounts/${IDS.accountId}/event_notifications/r2/b1/configuration`, THROW],
     ]);
     const out = (await s.read(makeApi(lists, gets), IDS)) as Array<Record<string, unknown>>;
     const rec = out[0]!;
     ok("r2-config (all parts 404): a partial record (bucket id kept, all parts null), surface not empty",
-      out.length === 1 && rec.bucket === "b1" && rec.lifecycle === null && rec.lock === null && rec.cors === null && rec.sippy === null && rec.customDomains === null && rec.eventNotifications === null);
+      out.length === 1 && rec.bucket === "b1" && rec.lifecycle === null && rec.lock === null && rec.cors === null && rec.sippy === null && rec.customDomains === null && rec.publicAccess === null && rec.eventNotifications === null);
   }
   // (d) THE LIVE SHAPE, through the real client. The cases above give the read a flat array of buckets.
   //     The live R2 list (read on 28 Sep 2026) answers {result: {buckets: [{name, creation_date}]}}, and
-  //     the real client's getPage makes that object a ONE-row page. The read then finds no bucket name on
-  //     that row, keeps the row as it is, and reads no per-bucket setting. This case records what the surface
-  //     captures today for an account with 3 buckets, byte for byte, and holds the catalogue label to it: the
-  //     label must not name a bucket setting that the capture does not hold.
+  //     the real client's getPage makes that object a ONE-row page. The read must unwrap that row. Before
+  //     the fix it kept the row as it was, found no bucket name and read no per-bucket setting, so the
+  //     archive held the bare bucket list. Each per-bucket endpoint here answers a distinct body, so the
+  //     check proves every setting reached the archive under its own key, for every bucket.
   {
     const buckets = [
       { name: "alpha", creation_date: "2026-01-01T00:00:00.000Z" },
       { name: "bravo", creation_date: "2026-02-01T00:00:00.000Z" },
       { name: "charlie", creation_date: "2026-03-01T00:00:00.000Z" },
     ];
+    const settingOf = (path: string): unknown => {
+      const m = /\/r2\/buckets\/([^/]+)\/(.+)$/.exec(path) ?? /\/event_notifications\/r2\/([^/]+)\/configuration$/.exec(path);
+      return m === null ? null : { bucket: m[1], part: m[2] ?? "eventNotifications" };
+    };
     const paths: string[] = [];
     const liveFetch: typeof fetch = async (input) => {
       const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.toString() : (input as Request).url);
-      paths.push(url.pathname.replace(/^\/client\/v4/, ""));
-      const body = url.pathname.endsWith("/r2/buckets")
-        ? { success: true, errors: [], messages: [], result: { buckets } } // one page: no result_info, as live
-        : { success: true, errors: [], messages: [], result: { rules: [] } };
-      return new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+      const path = url.pathname.replace(/^\/client\/v4/, "");
+      paths.push(path);
+      const result = path.endsWith("/r2/buckets") ? { buckets } : settingOf(path);
+      return new Response(JSON.stringify({ success: true, errors: [], messages: [], result }), { status: 200, headers: { "content-type": "application/json" } });
     };
-    const data = await s.read(makeCfApi("tok", liveFetch), IDS);
-    const archived = JSON.stringify(data ?? null); // the record value, as CloudflareConfigSource.readSurfaceValue writes it
-    const expected = JSON.stringify([{ buckets }]);
-    ok("r2-config (live shape, 3 buckets): the archive holds ONE row, the raw bucket list", archived === expected);
-    const subPartReads = paths.filter((p) => p !== `${base}` && (p.startsWith(`${base}/`) || p.includes("/event_notifications/r2/")));
-    ok("r2-config (live shape): no per-bucket setting is read (no lifecycle, lock, CORS, Sippy, domain or notification call)", subPartReads.length === 0 && paths.length === 1);
+    const data = (await s.read(makeCfApi("tok", liveFetch), IDS)) as Array<Record<string, unknown>>;
+    ok(`r2-config (live shape, 3 buckets): one record per bucket (got ${Array.isArray(data) ? data.length : "no array"})`, Array.isArray(data) && data.length === 3 && data.map((r) => r.bucket).join(",") === "alpha,bravo,charlie");
+    const parts = { lifecycle: "lifecycle", lock: "lock", cors: "cors", sippy: "sippy", customDomains: "domains/custom", publicAccess: "domains/managed", eventNotifications: "eventNotifications" } as const;
+    for (const [key, part] of Object.entries(parts)) {
+      ok(`r2-config (live shape): every bucket carries ${key} from its own endpoint`, Array.isArray(data) && data.every((r) => JSON.stringify(r[key]) === JSON.stringify({ bucket: r.bucket, part })));
+    }
+    ok("r2-config (live shape): the list is read once and 7 settings per bucket", paths.length === 1 + 3 * 7);
     const label = cfConfigCatalogue().find((m) => m.id === "r2-bucket-config")?.label ?? "";
-    const capturesSettings = /"(lifecycle|lock|cors|sippy|customDomains|eventNotifications)"/.test(archived);
-    const labelClaimsSettings = /lifecycle|lock|cors|sippy|domain|notification/i.test(label.replace(/not bucket settings/i, ""));
-    ok(`r2-config label agrees with the capture (label: "${label}")`, labelClaimsSettings === capturesSettings);
+    ok(`r2-config label names the captured settings and the not-restorable state (label: "${label}")`, /CORS/.test(label) && /lifecycle/.test(label) && /custom domains/.test(label) && /public access/.test(label) && /captured, not restorable/.test(label));
+    const meta = cfConfigCatalogue().find((m) => m.id === "r2-bucket-config");
+    ok("r2-config is neither in-band nor available for restore (no writer)", meta?.inBand === false && meta?.available === false && typeof s.write !== "function");
+    ok("r2-config declares its captured, not restorable reason", /captured, not restorable/.test(s.capturedNotRestorable ?? ""));
   }
 }
 

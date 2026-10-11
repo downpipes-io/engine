@@ -6,12 +6,14 @@
 // ./dest-removal-text.ts, kept separate so neither file exceeds the module-size guardrail and each
 // text has one source.
 
+import { gateLockFacts } from "../dest/lock-facts.ts";
 import { isWrappedSecret, type WrappedSecret } from "../admin/config-secret.ts";
 import type { AuthMethod } from "../admin/identity.ts";
 import { boundDestPruneMap, type DestPruneState, foldRetentionRecordIntoDestPrune } from "../cron/retention-dest-prune.ts";
 import type { RetentionPassRecord } from "../cron/retention-record.ts";
 import { validateAddressing, validateAssumeRolePolicy, validateAzureEntraDirectory, validateStorageClass, validateWormPolicyValue } from "../dest/factory.ts";
 import { isInternalSinkHost } from "../notify/types.ts";
+import { appendDestBlockerRefusalAudit, type DestBlockerFacts } from "./dest-remove-refusal-audit.ts";
 import { destInUseRefusal, destOrphanRefusal, destRemovedNotice, type RemovalRisk } from "./dest-removal-text.ts";
 import { allDestinationIds } from "./destinations.ts";
 import { noteDestinationsChanged } from "./runlog-floor.ts";
@@ -167,7 +169,7 @@ export function DestConfigMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
       // seed its edit form: this boundary rebuilds the stored config from the submitted body, so a
       // destination re-saved from a form that could not show its principal would be stored without one.
       const authMode: "keys" | "sts" | "entra" = d.azureEntra ? "entra" : d.assumeRole ? "sts" : "keys";
-      return { present: true, id: d.id, label: d.label, isDefault: d.id === defaultId, endpointHost, bucket: d.bucket, region: d.region, setAt: d.setAt, setBy: d.setBy, verifiedAt: d.verifiedAt, deleteProbe: d.deleteProbe, ...(d.deleteStatusClass ? { deleteStatusClass: d.deleteStatusClass } : {}), ...(d.worm ? { worm: d.worm } : {}), ...(d.objectLock ? { objectLock: d.objectLock } : {}), ...(d.defaultRetention !== undefined ? { defaultRetention: d.defaultRetention } : {}), authMode, ...(d.assumeRole ? { assumeRoleArn: d.assumeRole.roleArn } : {}), ...(d.azureEntra ? { azureEntra: { tenantId: d.azureEntra.tenantId, clientId: d.azureEntra.clientId } } : {}), ...(d.addressing ? { addressing: d.addressing } : {}), ...(d.storageClass ? { storageClass: d.storageClass } : {}), ...(d.pricing ? { pricing: d.pricing } : {}), ...(d.source ? { source: d.source } : {}) };
+      return { present: true, id: d.id, label: d.label, isDefault: d.id === defaultId, endpointHost, bucket: d.bucket, region: d.region, setAt: d.setAt, setBy: d.setBy, verifiedAt: d.verifiedAt, deleteProbe: d.deleteProbe, ...(d.deleteStatusClass ? { deleteStatusClass: d.deleteStatusClass } : {}), ...(d.worm ? { worm: d.worm } : {}), ...(d.objectLock ? { objectLock: d.objectLock } : {}), ...(d.defaultRetention !== undefined ? { defaultRetention: d.defaultRetention } : {}), ...(d.lockMode !== undefined ? { lockMode: d.lockMode } : {}), ...(d.lockRetentionDays !== undefined ? { lockRetentionDays: d.lockRetentionDays } : {}), ...(d.checksumRequired === true ? { checksumRequired: true as const } : {}), authMode, ...(d.assumeRole ? { assumeRoleArn: d.assumeRole.roleArn } : {}), ...(d.azureEntra ? { azureEntra: { tenantId: d.azureEntra.tenantId, clientId: d.azureEntra.clientId } } : {}), ...(d.addressing ? { addressing: d.addressing } : {}), ...(d.storageClass ? { storageClass: d.storageClass } : {}), ...(d.pricing ? { pricing: d.pricing } : {}), ...(d.source ? { source: d.source } : {}) };
     }
 
     // getDestStatus is the redaction-safe view of the DEFAULT destination (back-compat shape: the
@@ -225,7 +227,7 @@ export function DestConfigMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
     // buildDestRecord validates an incoming destination submission into a stored record (throws -> 400).
     // The router has already proved it live-writable; this is shape defence in depth.
     buildDestRecord(config: unknown, id: string, label: string, caller: { email: string | null } | null): StoredDestination {
-      const c = (config ?? {}) as { endpoint?: unknown; bucket?: unknown; region?: unknown; accessKeyId?: unknown; secretAccessKey?: unknown; verifiedAt?: unknown; deleteProbe?: unknown; deleteStatusClass?: unknown; worm?: unknown; objectLock?: unknown; defaultRetention?: unknown; checksumRequired?: unknown; assumeRole?: unknown; addressing?: unknown; storageClass?: unknown; pricing?: unknown; azureEntra?: unknown };
+      const c = (config ?? {}) as { endpoint?: unknown; bucket?: unknown; region?: unknown; accessKeyId?: unknown; secretAccessKey?: unknown; verifiedAt?: unknown; deleteProbe?: unknown; deleteStatusClass?: unknown; worm?: unknown; objectLock?: unknown; defaultRetention?: unknown; lockMode?: unknown; lockRetentionDays?: unknown; checksumRequired?: unknown; assumeRole?: unknown; addressing?: unknown; storageClass?: unknown; pricing?: unknown; azureEntra?: unknown };
       const str = (v: unknown): string => (typeof v === "string" ? v.trim() : "");
       const endpoint = str(c.endpoint);
       const bucket = str(c.bucket);
@@ -272,6 +274,8 @@ export function DestConfigMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
       // defaultRetention is kept only as a real boolean and only beside "enforced", the same gate the router
       // applies, so no path into the DO can store a retention rule on a bucket that applies no lock.
       const defaultRetention = objectLock === "enforced" && typeof c.defaultRetention === "boolean" ? c.defaultRetention : undefined;
+      // The default rule's mode and period, re-gated against the closed vocabulary beside "enforced" only.
+      const lockFacts = gateLockFacts(objectLock, c.lockMode, c.lockRetentionDays);
       // assumeRole is the OPTIONAL STS policy, re-validated as defence in depth (the router validated it +
       // the region already). A malformed value is dropped (fail-safe). When present, the stored
       // accessKeyId/secretAccessKey are the assume-role principal; the run path mints temp creds per slice.
@@ -303,6 +307,7 @@ export function DestConfigMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
         ...(worm !== null ? { worm } : {}),
         ...(objectLock !== undefined ? { objectLock } : {}),
         ...(defaultRetention !== undefined ? { defaultRetention } : {}),
+        ...lockFacts,
         // Only the literal true is kept (the probe learned it); anything else is "not learned", fail-safe in
         // the cheap direction: the destination relearns it on its first refused write.
         ...(c.checksumRequired === true ? { checksumRequired: true as const } : {}),
@@ -433,15 +438,19 @@ export function DestConfigMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
       if (resolved.role !== "owner") throw new AuthError("forbidden: only an Owner may set or clear the archive destination");
       const coll = await this.loadDestinations();
       if (req.config === null && coll.defaultId !== "") {
-        const { pinned, atRisk } = await this.removalScan(coll.defaultId, coll);
+        const { pinned, pinnedIds, atRisk } = await this.removalScan(coll.defaultId, coll);
+        // Each refusal also writes the row that says what blocked it (the destination, the downpipes that name it,
+        // the runs at risk), so the pack answers "why was the clear refused" without the sentence.
         if (pinned.length > 0) {
           await recordAdminRefusal(this.state.storage, "dest-remove-guard", "in-use");
+          await this.recordBlockerRefusal(caller, { refusal: "clear-in-use", destinationId: coll.defaultId, pinnedDownpipeIds: pinnedIds, atRiskRunCount: atRisk.count });
           throw new Error(destInUseRefusal(pinned, atRisk));
         }
         // The orphan guard, as in removeDest. This route has no force: a clear that would drop the only proven
         // copy of runs is refused, and the plural remove (with force) is the one override.
         if (atRisk.count > 0) {
           await recordAdminRefusal(this.state.storage, "dest-remove-guard", "orphan-guard");
+          await this.recordBlockerRefusal(caller, { refusal: "clear-orphan-guard", destinationId: coll.defaultId, pinnedDownpipeIds: pinnedIds, atRiskRunCount: atRisk.count });
           throw new Error(destOrphanRefusal(atRisk));
         }
       }
@@ -606,11 +615,25 @@ export function DestConfigMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
       return this.listDestStatus();
     }
 
+    // recordBlockerRefusal writes the failed dest-config-cleared row for a clear or remove that a guard refused,
+    // with the facts that blocked it (dest-remove-refusal-audit.ts). It is observation only: a failure to write
+    // it never changes the refusal the caller sees.
+    async recordBlockerRefusal(
+      caller: { method: AuthMethod; email: string | null; sourceIp?: string | null } | null,
+      facts: DestBlockerFacts,
+    ): Promise<void> {
+      try {
+        await appendDestBlockerRefusalAudit(this.state.storage, (d) => this.appendAudit(d), caller, facts, Date.now());
+      } catch {
+        // site-fault-waiver: src/sched/scheduler-do-dest-config.ts:DestConfigMixin.recordBlockerRefusal:catch:1 -- the row is observation only; the refusal the caller sees was decided before it, and the dest-remove-guard counter beside it still counts the attempt
+      }
+    }
+
     // removalScan is the scan both removal paths run before they remove a destination: the names of the
     // downpipes that name it (the in-use guard) and its orphan risk (the runs whose only proven copy is
     // here). removeDest and the singular clear in setDestConfig both call it, so the two paths refuse on the
     // same facts with the same text.
-    async removalScan(id: string, coll: DestinationCollection): Promise<{ pinned: string[]; atRisk: RemovalRisk }> {
+    async removalScan(id: string, coll: DestinationCollection): Promise<{ pinned: string[]; pinnedIds: string[]; atRisk: RemovalRisk }> {
       const downpipes = await this.listDownpipes();
       // The orphan-risk scan runs FIRST, before either guard, because the in-use refusal needs it too.
       // The refusal loop this closes: with both destinations on a downpipe, "in use" said "reassign"; the
@@ -637,8 +660,8 @@ export function DestConfigMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
       const atRisk = await this.uncoveredOriginRuns(id, nameById, coll.defaultId, { ...(coll.priorDefaultIds !== undefined ? { priorDefaultIds: coll.priorDefaultIds } : {}), fanOutById, sealedRunsById, liveIds });
       // Refuse to remove a destination a downpipe explicitly PINS (as primary OR replica): it would fail
       // that downpipe's run/replication (a pinned dangling id never silently falls back).
-      const pinned = downpipes.filter((p) => allDestinationIds(p.config).includes(id)).map((p) => p.config.name);
-      return { pinned, atRisk };
+      const pinnedDownpipes = downpipes.filter((p) => allDestinationIds(p.config).includes(id));
+      return { pinned: pinnedDownpipes.map((p) => p.config.name), pinnedIds: pinnedDownpipes.map((p) => p.config.id), atRisk };
     }
 
     // removeDest deletes a destination by id. Removing the default promotes the next remaining one so
@@ -654,13 +677,14 @@ export function DestConfigMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
       if (resolved.role !== "owner") throw new AuthError("forbidden: only an Owner may remove a destination");
       const coll = await this.loadDestinations();
       if (!coll.list.some((d) => d.id === id)) throw new Error("no such destination");
-      const { pinned, atRisk } = await this.removalScan(id, coll);
+      const { pinned, pinnedIds, atRisk } = await this.removalScan(id, coll);
       if (pinned.length > 0) {
         // The console must not SUBSTRING-MATCH this prose to tell "in use" from the orphan guard: record
         // the closed class engine-side so the two remove refusals are separable in the pack without the prose.
         // The in-use text never contains the orphan guard's "only proven copy" phrase, which the console and
         // classifyDestProbeRefusal key on.
         await recordAdminRefusal(this.state.storage, "dest-remove-guard", "in-use");
+        await this.recordBlockerRefusal(caller, { refusal: "remove-in-use", destinationId: id, pinnedDownpipeIds: pinnedIds, atRiskRunCount: atRisk.count, forced: force });
         throw new Error(destInUseRefusal(pinned, atRisk));
       }
       // Refuse (unless forced) to remove a destination that is the only PROVEN copy of backed-up runs: with
@@ -673,6 +697,7 @@ export function DestConfigMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
         // THE DATA-LOSS GUARD firing. Counted as its own closed class (orphan-guard), so the pack can
         // prove the engine REFUSED to drop the only proven copy rather than the operator giving up.
         await recordAdminRefusal(this.state.storage, "dest-remove-guard", "orphan-guard");
+        await this.recordBlockerRefusal(caller, { refusal: "remove-orphan-guard", destinationId: id, pinnedDownpipeIds: pinnedIds, atRiskRunCount: atRisk.count, forced: force });
         throw new Error(destOrphanRefusal(atRisk));
       }
       // Removing the current default silently PROMOTES the next remaining destination: capture before/after.

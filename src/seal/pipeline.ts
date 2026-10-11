@@ -9,6 +9,7 @@ import { decodeULID } from "../format/ulid.ts";
 import { buildArchive, parseRunlog, type RecipientEntry, type RunlogEntry, type Signer, signRunlog, type WriteRecord } from "../format/writer.ts";
 import type { Selector, SourceAdapter } from "../sources/types.ts";
 import { bytesEqual } from "../util/bytes-equal.ts";
+import type { SliceBudget } from "./budget.ts";
 import { addIncompleteId, type IncompleteByMarker, type IncompleteIds, MARKER_ATTRIBUTION_MAX_PER_KIND, safeMarkerAttribution } from "./marker.ts";
 import { throttleRetry, withRetry } from "./retry.ts";
 import { noteLockPlane, noteRunlogAbsent } from "./run-observations.ts";
@@ -47,9 +48,30 @@ const UINT32_MAX = 0xffffffff;
 // never depends on the lock; the CAS + sig-only-if-current are the backstops), but a CAS that still exhausts
 // throws a typed RunlogContendedError so the sliced DO parks the run (checkpoint preserved, idempotent
 // resume) instead of striking it dead -- bounded cross-invocation queueing, not a die-on-exhaustion.
+//
+// SIZED TO A MEASURED HOLD, WITHOUT SPENDING MORE SUBREQUESTS. A holder keeps the lock for one RUNLOG
+// append: a read plus a conditional write, 4 to 5 destination round-trips, hundreds of milliseconds. The
+// old ladder (base 10ms, cap 100ms, full jitter) slept at most 10+20+40 = 70ms across its 3 waits, well
+// under a single append's hold time, so a waiter routinely went lock-free into the CAS while the holder was
+// still writing (measured: lockWindowExhausted counted in a clean round with no fault anywhere else).
+// Adding attempts would also raise FINALISE_RESERVE (budget.ts), charging every finalise more subrequests
+// for a wait that is wall-clock-bound, not subrequest-bound -- a liveness cost with no benefit. So the
+// ATTEMPT COUNT (and FINALISE_LOCK_OPS) stays at 4; only the waits get longer, with EQUAL jitter (sleep =
+// cap/2 + random(0, cap/2)) instead of full jitter, so each wait has a guaranteed minimum rather than a
+// non-zero chance of a near-zero sleep. Base 200ms, cap 800ms: the 3 waits are at least
+// 100 + 200 + 400 = 700ms and at most 200 + 400 + 800 = 1400ms, comfortably past a worst-case append hold
+// on EVERY draw, not just in expectation.
 const RUNLOG_LOCK_ACQUIRE_ATTEMPTS = 4;
-const RUNLOG_LOCK_WAIT_BASE_MS = 10;
-const RUNLOG_LOCK_WAIT_MAX_MS = 100;
+const RUNLOG_LOCK_WAIT_BASE_MS = 200;
+const RUNLOG_LOCK_WAIT_MAX_MS = 800;
+// LOCK_WAIT_WALL_FLOOR_MS: patientAcquire stops waiting (and goes lock-free) once a slice's remaining wall
+// budget falls to or below this floor, even mid-ladder. The equal-jitter waits can run up to 1400ms, which
+// is a meaningful slice of DEFAULT_SLICE_WALL_MS (20_000ms) but could matter a lot on a near-exhausted
+// slice; without this check, a waiter could spend its last wall-clock headroom sleeping for a lock instead
+// of leaving time to go lock-free and still complete (or park) the append inside the budget. 500ms is
+// enough for one more lock-free CAS round-trip plus the append's own read+write, the same order of
+// magnitude as the append hold this ladder is sized against.
+const LOCK_WAIT_WALL_FLOOR_MS = 500;
 
 // RunlogContendedError signals that the RUNLOG read-modify-write could not be committed because another
 // finaliser is writing the SAME destination's RUNLOG (the lock was held for the whole patient window AND the
@@ -72,6 +94,19 @@ function casJitterMs(cap: number): number {
   const buf = crypto.getRandomValues(new Uint8Array(4));
   const r = new DataView(buf.buffer).getUint32(0) / UINT32_MAX;
   return Math.floor(r * cap);
+}
+
+// lockLadderJitterMs returns an EQUAL-jitter delay in [cap/2, cap) for the RUNLOG lock-acquire ladder only
+// -- a separate helper from casJitterMs (the CAS backoff keeps full jitter; it is a short residual-race
+// smoother, not sized against a measured hold). Full jitter's [0, cap) range lets a draw land near zero, so
+// a ladder sized for a worst-case append hold could still, on an unlucky draw, sleep almost nothing. Equal
+// jitter keeps the randomisation (de-correlating waiters) while guaranteeing the cap/2 floor the ladder's
+// sizing comment depends on.
+function lockLadderJitterMs(cap: number): number {
+  const half = cap / 2;
+  const buf = crypto.getRandomValues(new Uint8Array(4));
+  const r = new DataView(buf.buffer).getUint32(0) / UINT32_MAX;
+  return half + Math.floor(r * half);
 }
 
 // destinationLocalPrev computes the per-downpipe prevRunId AS THE RUNLOG APPEND WILL RELINK IT: the runId
@@ -135,14 +170,20 @@ export function noteHistoryChainRestart(localPrev: string | null, prevRunId: str
   if (localPrev === null && prevRunId !== null) noteRunlogAbsent(index);
 }
 
-// patientAcquire takes the per-destination RUNLOG lock with a bounded, full-jitter-backed-off ladder
+// patientAcquire takes the per-destination RUNLOG lock with a bounded, equal-jitter-backed-off ladder
 // (mirroring the handleThrottle park ladder, in miniature): a momentarily-held lock is AWAITED across a few
-// short waits rather than abandoned after one barge, so concurrent finalisers to the same destination queue
+// waits rather than abandoned after one barge, so concurrent finalisers to the same destination queue
 // in the single-threaded DO instead of stampeding the CAS. Returns the lease token, or null if the lock was
 // held for the WHOLE window (the caller then either falls back lock-free, append, or defers, prune). It never
 // throws; an acquire round-trip that itself fails is treated as "not acquired" so a flaky lock plane degrades
 // to the lock-free path rather than failing the run.
-async function patientAcquire(lock: RunlogLock): Promise<string | null> {
+//
+// `budget`, when the caller has a sliced invocation's SliceBudget, bounds the ladder by WALL TIME as well
+// as by attempt count: once the budget's remaining wall time falls to or below LOCK_WAIT_WALL_FLOOR_MS, the
+// ladder stops waiting (even mid-attempt) and goes lock-free, so a near-exhausted slice is never pushed past
+// its wall budget by a lock wait sized for a healthy one. A caller with no budget (the unsliced runBackup
+// path) keeps the attempt-count-only behaviour.
+async function patientAcquire(lock: RunlogLock, budget?: SliceBudget): Promise<string | null> {
   for (let i = 0; i < RUNLOG_LOCK_ACQUIRE_ATTEMPTS; i++) {
     let token: string | null = null;
     try {
@@ -156,8 +197,14 @@ async function patientAcquire(lock: RunlogLock): Promise<string | null> {
     }
     if (token !== null) return token;
     if (i < RUNLOG_LOCK_ACQUIRE_ATTEMPTS - 1) {
+      if (budget !== undefined && budget.wallRemainingMs() <= LOCK_WAIT_WALL_FLOOR_MS) {
+        // Not enough wall time left to keep waiting AND still have room to go lock-free and finish (or
+        // park) the append: stop now rather than spend the slice's last headroom asleep.
+        noteLockPlane("windowExhausted");
+        return null;
+      }
       const cap = Math.min(RUNLOG_LOCK_WAIT_MAX_MS, RUNLOG_LOCK_WAIT_BASE_MS * 2 ** i);
-      await new Promise((r) => setTimeout(r, casJitterMs(cap)));
+      await new Promise((r) => setTimeout(r, lockLadderJitterMs(cap)));
     }
   }
   noteLockPlane("windowExhausted"); // the whole patient window elapsed with the lock held
@@ -230,6 +277,9 @@ export interface RunlogLock {
   // floor returns this destination's anti-rollback floor (sched/runlog-floor.ts): the highest RUNLOG index the
   // engine confirmed it appended here, or undefined when none is recorded or it could not be read.
   floor?(): Promise<number | undefined>;
+  // indexHeld reports an append refused because its archive already holds the run's index, so the scheduler can
+  // hold allocation and move the run counter past the highest index in every archive. Best-effort.
+  indexHeld?(entry: { index: number; downpipeId: string }): Promise<void>;
 }
 
 // runBackup crawls the sources, seals an archive, writes it, and appends to the RUNLOG.
@@ -402,6 +452,9 @@ export async function resolveRunlogSignature(dest: Destination, body: Uint8Array
   const pending = await withRetry(() => dest.get(RUNLOG_SIG_PENDING_KEY), throttleRetry());
   if (pending && (await sigVerifies(pending, body, verifier))) {
     await withRetry(() => dest.put(RUNLOG_SIG_KEY, pending.body), throttleRetry());
+    // An absent .sig restored from the pending signature is not a crash window (that leaves a stale .sig in
+    // place). The bytes are the engine's own, so the write goes ahead, and the anomaly row names the restore.
+    if (!sigObj) noteRunlogAnomaly({ kind: "sig-restored", ...(await runlogDigestField(body)) });
     return "promoted";
   }
   return sigObj ? "sig-invalid" : "sig-absent";
@@ -411,7 +464,7 @@ export async function resolveRunlogSignature(dest: Destination, body: Uint8Array
 // re-sign it. It is not contention (RunlogContendedError) and not transient: no retry clears it. The run, the
 // prune or the replication pass that met it fails loudly, and an Owner decides the RUNLOG through the attended
 // route (GET /admin/runlog/signature, POST /admin/runlog/resign). The message carries no customer id.
-export type RunlogIntegrityReason = "sig-absent" | "sig-invalid" | "unparsable" | "chain-anomaly" | "below-floor" | "absent-above-floor";
+export type RunlogIntegrityReason = "sig-absent" | "sig-invalid" | "unparsable" | "chain-anomaly" | "below-floor" | "absent-above-floor" | "index-held" | "floor-invalid";
 export class RunlogIntegrityError extends Error {
   readonly reason: RunlogIntegrityReason;
   constructor(reason: RunlogIntegrityReason, detail: string) {
@@ -422,16 +475,21 @@ export class RunlogIntegrityError extends Error {
 }
 
 // readFloor asks the lock for the destination's floor. A floor that cannot be read is no floor: the check is
-// skipped, as it was before the floor existed, and never blocks a run on a scheduler-plane fault. The pack
-// names the failed read (siteFaults).
+// skipped and never blocks a run on a scheduler-plane fault. The pack names the failed read (siteFaults).
+// A floor that is read but is not a whole number is a different fault: it is a corrupt anti-rollback pin, and
+// skipping the check would hide a rollback. The writer refuses (reason "floor-invalid"). Undefined and 0 mean
+// no floor.
 export async function readFloor(lock?: RunlogLock): Promise<number | undefined> {
+  let f: unknown;
   try {
-    const f = lock?.floor ? await lock.floor() : undefined;
-    return typeof f === "number" && Number.isInteger(f) && f > 0 ? f : undefined;
+    f = lock?.floor ? await lock.floor() : undefined;
   } catch (e) {
     noteSiteFault("runlog.floor-read", e);
     return undefined;
   }
+  if (f === undefined || f === 0) return undefined;
+  if (typeof f === "number" && Number.isInteger(f) && f > 0) return f;
+  throw new RunlogIntegrityError("floor-invalid", "the destination's anti-rollback floor is not a whole number above zero");
 }
 
 /**
@@ -513,22 +571,36 @@ export async function verifyRunlogForWrite(dest: Destination, existing: { body: 
 // differ -- see destinationLocalPrev residual 2.) Computing
 // it HERE, inside the read the conditional write is based on, recomputed each retry, makes it atomic
 // with the write (no precompute race two interleaving writers could turn into a fork).
-export async function appendRunlog(dest: Destination, signer: Signer, entry: RunlogEntry, lock?: RunlogLock, opts?: { relinkLocalPrev?: boolean }): Promise<void> {
+export async function appendRunlog(dest: Destination, signer: Signer, entry: RunlogEntry, lock?: RunlogLock, opts?: { relinkLocalPrev?: boolean; budget?: SliceBudget }): Promise<void> {
   // Serialise through the PER-DESTINATION RUNLOG write lock with the patient ladder: a waiter takes its
   // turn in the single-threaded DO rather than barging the CAS. If the lock is held for the whole
   // window we still proceed lock-free (correctness never depended on the lock; the conditional write +
   // sig-only-if-current are the backstops) -- but a CAS that then exhausts throws RunlogContendedError so the
-  // sliced DO parks-and-resumes instead of striking the run dead.
+  // sliced DO parks-and-resumes instead of striking the run dead. `opts.budget`, when the caller is a sliced
+  // invocation, lets the ladder cut itself short on a near-exhausted slice (see patientAcquire).
   const floor = await readFloor(lock);
-  const token: string | null = lock ? await patientAcquire(lock) : null;
+  const token: string | null = lock ? await patientAcquire(lock, opts?.budget) : null;
   try {
     await appendRunlogBody(dest, signer, entry, opts?.relinkLocalPrev ?? false, floor);
+  } catch (e) {
+    if (e instanceof RunlogIntegrityError && e.reason === "index-held") await reportIndexHeld(lock, entry);
+    throw e;
   } finally {
     // A lock RELEASE fault is a SCHEDULER-plane fault, and by the time it can happen the archive AND the
     // RUNLOG entry are already committed -- yet it coarsens to the DESTINATION error class, so support is sent
     // to a bucket that is perfectly healthy. The throw is UNCHANGED (the caller's ladder is untouched); the
     // fault is COUNTED, so the pack can say the lock plane, not the destination, is flaking.
     if (lock && token) await releaseCounted(lock, token);
+  }
+}
+
+// reportIndexHeld tells the scheduler an append met an index its archive holds. A report that cannot be made is
+// counted as a lock-plane fault and never changes the refusal the caller sees.
+async function reportIndexHeld(lock: RunlogLock | undefined, entry: RunlogEntry): Promise<void> {
+  try {
+    await lock?.indexHeld?.({ index: entry.index, downpipeId: entry.downpipeId });
+  } catch (e) {
+    noteSiteFault("runlog.index-held-report", e);
   }
 }
 
@@ -565,6 +637,15 @@ async function appendRunlogBody(dest: Destination, signer: Signer, entry: Runlog
     }
     // Verify BEFORE modifying: a RUNLOG this engine cannot vouch for is refused, never re-signed.
     const entries = await verifyRunlogForWrite(dest, existing, verifierOf(signer), floor, relinkLocalPrev ? entry.downpipeId : undefined);
+    // The run counter is per engine and a RUNLOG is per destination, so a destination can already hold the index
+    // this run carries (the counter restarted after a control-plane recovery while this destination's RUNLOG
+    // survived). Any entry at the index under another runId is a duplicate the append would sign into history:
+    // refuse it, whichever downpipe holds it. The same (runId, index) is the idempotent retry below.
+    const holder = entries.find((e) => e.index === entry.index && e.runId !== entry.runId);
+    if (holder !== undefined) {
+      noteRunlogAnomaly({ kind: "duplicate-index", indexA: entry.index, indexB: entry.index, entryCount: entries.length, ...(existing ? await runlogDigestField(existing.body) : {}) });
+      throw new RunlogIntegrityError("index-held", `index ${entry.index} is already held by another run in this RUNLOG, so the run is refused rather than written as a duplicate`);
+    }
     // A COPY so the relink below never mutates the caller's entry (the mirror reuses one entry across
     // several replica targets); push it only when this (runId,index) is not already present (idempotent).
     const toAppend = { ...entry };

@@ -90,6 +90,11 @@ async function run(): Promise<void> {
   const modeOf = async (id: string): Promise<string | undefined> =>
     (await pipes()).find((d) => d.config.id === id)?.config.source.cfConfigMode;
   const idOf = async (r: Response): Promise<string> => (r.status === 202 ? ((await r.json()) as { id: string }).id : "");
+  // authorityRefused is true only for the apply-time authority refusal: 403 {"error":"forbidden"}. The dwell
+  // floor answers 429 too-soon and the base-moved guard answers 400 superseded, and a bare `status >= 400`
+  // would take either for the refusal this file is about. Every approve below is aged past the dwell floor
+  // first, so the one guard left to refuse is the authority re-resolution.
+  const authorityRefused = async (r: Response): Promise<boolean> => r.status === 403 && ((await r.clone().json()) as { error?: string }).error === "forbidden";
   const status = (id: string): string | undefined => store.rawGet<PendingConfigChange>(changeKey(id))?.status;
 
   try {
@@ -137,8 +142,9 @@ async function run(): Promise<void> {
       // THE PREMISE, ASSERTED RATHER THAN ASSUMED, in both directions it can be wrong.
       ok("B2: the config head did NOT move across the lapse, so the approve reaches the authority re-resolution", (await headId()) === before);
       ok("B3: and the lapse is REAL, because the same proposer's own LIVE upsert is now refused", (await call(OPERATOR, "POST", "/admin/downpipes", dp("dplive", "live probe"))).status === 403);
+      ageChange(q);
       const approve = await call(OPERATOR2, "POST", `/admin/config/changes/${q}/approve`);
-      ok("B4: approving a lapsed proposer's queued downpipe-upsert is REFUSED", approve.status >= 400);
+      ok("B4: approving a lapsed proposer's queued downpipe-upsert is REFUSED by the authority axis (403 forbidden, not the dwell floor)", await authorityRefused(approve));
       ok("B5: and the downpipe was NOT created", !(await has("dpattack")));
       // A superseded record would also refuse and also leave nothing applied, so without this B4 could be
       // satisfied by the base-moved guard instead of the authority axis this file is about.
@@ -163,8 +169,9 @@ async function run(): Promise<void> {
       const before = await headId();
       lapse(OPERATOR, true);
       ok("C2: the config head did NOT move across the lapse", (await headId()) === before);
+      ageChange(q);
       const approve = await call(OPERATOR2, "POST", `/admin/config/changes/${q}/approve`);
-      ok("C3: approving a lapsed proposer's queued downpipe-delete is REFUSED", approve.status >= 400);
+      ok("C3: approving a lapsed proposer's queued downpipe-delete is REFUSED by the authority axis (403 forbidden, not the dwell floor)", await authorityRefused(approve));
       ok("C4: and the downpipe SURVIVES", await has("dpdel"));
       ok("C5: and the record is still PENDING, not superseded", status(q) === "pending");
       lapse(OPERATOR, false);
@@ -180,8 +187,9 @@ async function run(): Promise<void> {
       const before = await headId();
       lapse(OPERATOR, true);
       ok("D2: the config head did NOT move across the lapse", (await headId()) === before);
+      ageChange(q);
       const approve = await call(OPERATOR2, "POST", `/admin/config/changes/${q}/approve`);
-      ok("D3: approving a lapsed proposer's queued cf-config-mode-set is REFUSED", approve.status >= 400);
+      ok("D3: approving a lapsed proposer's queued cf-config-mode-set is REFUSED by the authority axis (403 forbidden, not the dwell floor)", await authorityRefused(approve));
       ok("D4: and the capture mode is UNCHANGED", (await modeOf("dpmode")) === "manual");
       ok("D5: and the record is still PENDING, not superseded", status(q) === "pending");
       lapse(OPERATOR, false);
@@ -216,7 +224,8 @@ async function run(): Promise<void> {
       await store.delete(connKey("atc-conn"));
       ok("E2: deleting the IdP connection moved NO config head, which is why this route is reachable", (await headId()) === before);
       ok("E3: the proposer's role row is UNTOUCHED, so E4 is about the connection and not the grant", store.rawGet(roleSubjectKey(subject)) !== undefined);
-      ok("E4: approving is REFUSED once the proposer's IdP connection is deleted", (await call(OPERATOR2, "POST", `/admin/config/changes/${q}/approve`)).status >= 400);
+      ageChange(q);
+      ok("E4: approving is REFUSED by the authority axis once the proposer's IdP connection is deleted (403 forbidden, not the dwell floor)", await authorityRefused(await call(OPERATOR2, "POST", `/admin/config/changes/${q}/approve`)));
       ok("E5: and the downpipe was NOT created", !(await has("dpconn")));
       ok("E6: and the record is still PENDING, not superseded", status(q) === "pending");
     }
@@ -237,7 +246,8 @@ async function run(): Promise<void> {
       await setGate(OWNER, true);
       // Aged so the dwell floor does not itself intercept before the base-moved guard F5 depends on.
       ageChange(q);
-      ok("F3: approving is refused", (await call(OPERATOR2, "POST", `/admin/config/changes/${q}/approve`)).status >= 400);
+      const f3 = await call(OPERATOR2, "POST", `/admin/config/changes/${q}/approve`);
+      ok("F3: approving is refused as superseded (400), not by the dwell floor or the authority axis", f3.status === 400 && /superseded/.test(await f3.text()));
       ok("F4: and the downpipe was NOT created", !(await has("dpdemote")));
       // THE DISCRIMINATOR. This is SUPERSEDED, not pending: the demotion moved the config head, so the
       // refusal is base-moved and says nothing at all about the proposer's authority.

@@ -77,7 +77,8 @@ export function parseRunlog(bytes: Uint8Array): RunlogEntry[] {
   return lines.map((l, i) => {
     try {
       validateCanonicalCounts(l, "index", "recordCount");
-      const e = JSON.parse(l) as Record<string, unknown>;
+      const e = JSON.parse(l) as Record<string, unknown> | null;
+      if (typeof e !== "object" || e === null) throw new Error("RUNLOG entry is not an object");
       if (typeof e.index !== "number" || !Number.isInteger(e.index)) throw new Error("RUNLOG entry index must be an integer");
       if (typeof e.runId !== "string" || e.runId === "") throw new Error("RUNLOG entry runId must be a non-empty string");
       if (typeof e.downpipeId !== "string" || e.downpipeId === "") throw new Error("RUNLOG entry downpipeId must be a non-empty string");

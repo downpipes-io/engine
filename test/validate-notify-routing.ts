@@ -163,7 +163,7 @@ function testEveryEventIsProducedSomewhere(): void {
   };
   walk("src");
   const producing = srcFiles.filter((f) => !classifyOnly.includes(f.split(sep).join("/")));
-  // Comments are stripped, so an event named only in prose (a TODO, a rationale) cannot satisfy this.
+  // Comments are stripped, so an event named only in prose (a note, a rationale) cannot satisfy this.
   const haystack = producing
     .map((f) => readFileSync(f, "utf8"))
     .join("\n")
@@ -234,7 +234,7 @@ function testRestoreAppliedAlertContent(): void {
 // same can't-drift guarantee NOTIFY_EVENT_NAMES gets from having its type DERIVED from it, WITHOUT changing
 // the ChannelKind declaration (which chaos/coverage-map.mjs parses as a literal `= "a" | "b" | ...` union).
 const ALL_CHANNEL_KINDS = ["email", "webhook", "slack", "pagerduty", "teams", "jsm", "servicenow"] as const;
-// The `[X] extends [Y]` tuple wrapping stops union distribution, so this is a true set-equality test: it is
+// Wrapping both sides of `extends` in a tuple stops union distribution, so this is a true set-equality test: it is
 // `true` only when ALL_CHANNEL_KINDS[number] and ChannelKind are the SAME set, else it resolves to `never`
 // and the `const ... = true` assignment below fails to compile.
 type AssertExactChannelKinds<T extends readonly string[]> = [ChannelKind] extends [T[number]]

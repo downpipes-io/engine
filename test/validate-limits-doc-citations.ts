@@ -35,7 +35,6 @@
 //
 // Run with `node test/validate-limits-doc-citations.ts`.
 //
-//
 
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";

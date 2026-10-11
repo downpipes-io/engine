@@ -15,7 +15,8 @@ import { b64urlEncode, hexEncode, utf8 } from "../crypto/bytes.ts";
 import { sha384 } from "../crypto/primitives.ts";
 import { type HybridVerifier, hybridSign } from "../crypto/sign.ts";
 import type { Destination } from "../dest/types.ts";
-import { detectChainAnomaly } from "../format/freshness.ts";
+import { detectChainAnomaly, runlogDigestField } from "../format/freshness.ts";
+import type { RunlogAnomaly } from "../format/integrity-fault-ledger.ts";
 import { parseRunlog, type RunlogEntry, type Signer, signRunlog } from "../format/writer.ts";
 import { bytesEqual } from "../util/bytes-equal.ts";
 import { RUNLOG_SIG_PENDING_KEY, resolveRunlogSignature, sigVerifies } from "./pipeline.ts";
@@ -26,9 +27,24 @@ const RUNLOG_SIG_KEY = "_RECOVERY/RUNLOG.sig";
 const HANDOVER_ATTEMPTS = 4;
 
 /** Why a RUNLOG did not pass the pre-check, as a closed class. */
-export type PrecheckRefusal = "sig-invalid" | "sig-absent" | "unparsable" | "chain-anomaly" | "unreadable";
+export const PRECHECK_REFUSALS = ["sig-invalid", "sig-absent", "unparsable", "chain-anomaly", "unreadable"] as const;
+export type PrecheckRefusal = (typeof PRECHECK_REFUSALS)[number];
 
-export type PrecheckResult = { ok: true; state: "absent" | "verified" | "promoted"; maxIndex: number } | { ok: false; reason: PrecheckRefusal };
+/** Why an attended relink was refused, as a closed class. The audit row and the support pack carry this. */
+export const RELINK_REFUSALS = ["changed-since-read", "absent", "not-verified", "unparsable", "below-floor", "no-anomaly", "not-cleared"] as const;
+export type RelinkRefusal = (typeof RELINK_REFUSALS)[number];
+
+/**
+ * The forensic row behind a chain-anomaly refusal, for the support pack: the downpipe whose chain is anomalous
+ * and the anomaly in the integrity ledger's closed vocabulary. The anomaly's reason text names customer run ids
+ * and is never carried.
+ */
+export interface PrecheckAnomaly {
+  downpipeId: string;
+  row: RunlogAnomaly;
+}
+
+export type PrecheckResult = { ok: true; state: "absent" | "verified" | "promoted"; maxIndex: number } | { ok: false; reason: PrecheckRefusal; anomaly?: PrecheckAnomaly };
 
 /**
  * precheckRunlog verifies one destination's RUNLOG under the outgoing signer's public key: the signature
@@ -42,7 +58,7 @@ export async function precheckRunlog(dest: Destination, oldVerifier: HybridVerif
     if (!existing) return { ok: true, state: "absent", maxIndex: 0 };
     body = existing.body;
     const state = await resolveRunlogSignature(dest, body, oldVerifier);
-    if (state === "sig-invalid" || state === "sig-absent") return { ok: false, reason: state };
+    if (state === "sig-invalid" || state === "sig-absent") return { ok: false, reason: state === "sig-absent" ? "sig-absent" : "sig-invalid" };
     let entries: ReturnType<typeof parseRunlog>;
     try {
       entries = parseRunlog(body);
@@ -51,7 +67,13 @@ export async function precheckRunlog(dest: Destination, oldVerifier: HybridVerif
       noteSiteFault("rekey.runlog-precheck-parse", e);
       return { ok: false, reason: "unparsable" };
     }
-    if (detectChainAnomaly(entries) !== null) return { ok: false, reason: "chain-anomaly" };
+    const anomaly = detectChainAnomaly(entries);
+    if (anomaly !== null) {
+      const at = anomaly.indexA ?? anomaly.indexB;
+      const downpipeId = entries.find((e) => e.index === at)?.downpipeId ?? "";
+      const row: RunlogAnomaly = { kind: anomaly.kind, entryCount: entries.length, ...(await runlogDigestField(body)), ...(anomaly.indexA !== undefined ? { indexA: anomaly.indexA } : {}), ...(anomaly.indexB !== undefined ? { indexB: anomaly.indexB } : {}) };
+      return { ok: false, reason: "chain-anomaly", ...(downpipeId !== "" ? { anomaly: { downpipeId, row } } : {}) };
+    }
     return { ok: true, state, maxIndex: entries.reduce((m, e) => Math.max(m, e.index), 0) };
   } catch (e) {
     noteSiteFault("rekey.runlog-precheck-read", e);

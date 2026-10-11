@@ -12,12 +12,11 @@
 // D1 / Secrets Store are their own data source types; logs, analytics, Radar, Stream/Images
 // CONTENT, compute deployments and billing are deliberately excluded.
 //
-// REGISTRAR IS CAPTURED, and the sentence here used to say the opposite: "Registrar is excluded
-// (needs the Global API Key)". It is not excluded and it does not need that key. registrar-domains
-// and registrar-registrations have been in the registry with ordinary read() builders on the
+// REGISTRAR IS CAPTURED. It does not need the Global API Key. registrar-domains
+// and registrar-registrations are in the registry with ordinary read() builders on the
 // discovery token (cf-config-registry-gaps.ts:83), the console catalogue labels them, the generated
-// surface table in the docs listed them as captured, and a live sweep of all 313 surfaces has both
-// answering 200 to an ordinary discovery token. What IS out of reach is narrower and is recorded
+// surface table in the docs lists them as captured, and both answer 200 to an ordinary
+// discovery token. What IS out of reach is narrower and is recorded
 // beside the surface itself: the registry-side transfer locks and authorisation codes, which are
 // registrar state rather than Cloudflare configuration and are not replayable by any API.
 //

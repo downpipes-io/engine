@@ -61,8 +61,8 @@ export type Block =
 interface Element {
   height: number;
   paint: (topY: number) => string;
-  // breakable: a table body may split across a page boundary; a heading/para is atomic. For simplicity we
-  // keep single rows atomic and let a *table* be one element only when it fits; otherwise we split it into
+  // breakable: a table body may split across a page boundary; a heading/para is atomic. Single rows stay
+  // atomic and a *table* is one element only when it fits; otherwise it is split into
   // per-row elements (header row repeated) so large tables paginate cleanly.
 }
 

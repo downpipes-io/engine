@@ -67,7 +67,7 @@ export function childElements(el: XmlElement): XmlElement[] {
 
 // localName returns the part of a qualified name after the colon, or the whole name when there is no prefix.
 // "ds:Signature" -> "Signature"; "Assertion" -> "Assertion". A name with more than one colon is malformed XML
-// per the Namespaces spec; we split on the FIRST colon so the remainder (whatever it is) is the local part,
+// per the Namespaces spec; the function splits on the FIRST colon so the remainder (whatever it is) is the local part,
 // which keeps the function total rather than throwing on hostile input.
 export function localName(qname: string): string {
   const i = qname.indexOf(":");

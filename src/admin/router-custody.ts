@@ -15,7 +15,7 @@
 // password manager and then delete the email.
 
 import type { RouterCtx } from "./router-helpers.ts";
-import { jsonResponse, jsonError, gate, rateLimited, recordAudit } from "./router-core.ts";
+import { jsonResponse, jsonError, gate, rateLimited, readObjectBody, recordAudit } from "./router-core.ts";
 import { sendEmail, isCustomDomainAddress } from "../email.ts";
 import { b64urlDecode } from "../crypto/bytes.ts";
 import { log } from "../log.ts";
@@ -186,13 +186,14 @@ export async function handleCustody(ctx: RouterCtx): Promise<Response | null> {
     // storage; only the redaction-safe counts (threshold-of-total) are audited. The ciphertext never
     // touches this route, so captured shares stay useless. Body-only, no attachment.
     case "POST /custody/send-share": {
-      const body = (await req.json().catch(() => ({}))) as { toEmail?: unknown; custodianLabel?: unknown; shareB64?: unknown; n?: unknown; m?: unknown };
       const denied = gate(caller, "keys.ceremony");
       if (denied) {
         // A refused attempt: record who tried, with placeholder counts (no share, no address ever recorded).
         await recordAudit(scheduler, caller, sourceIp, "custody-share-emailed", "denied", { kind: "custody-share", n: 0, m: 0 });
         return denied;
       }
+      const body = await readObjectBody<{ toEmail?: unknown; custodianLabel?: unknown; shareB64?: unknown; n?: unknown; m?: unknown }>(req, { malformedAsEmpty: true });
+      if (body instanceof Response) return body;
       const limited = await rateLimited(scheduler, caller);
       if (limited) return limited;
 

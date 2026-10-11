@@ -37,7 +37,7 @@ function schedulerDouble(lastTickAt: number | null): DurableObjectStub {
   } as unknown as DurableObjectStub;
 }
 
-// counts (optional, ASVS ML-43): when passed, counts.downpipes is bumped on every /downpipes read, so a
+// counts (optional): when passed, counts.downpipes is bumped on every /downpipes read, so a
 // caller can prove how many times the roster was actually fetched across a whole runPreflight() run
 // (the source-bindings/source-liveness/api-discovery-token probes now share ONE fetch, not three).
 function schedulerWithDownpipes(lastTickAt: number | null, downpipes: unknown[], counts?: { downpipes: number }): DurableObjectStub {

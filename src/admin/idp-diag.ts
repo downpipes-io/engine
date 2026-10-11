@@ -80,7 +80,7 @@ export const IDP_VALIDATION_CLASSES = [
   "id-shape", // the connection id / label failed its shape gate
   "url-unsafe", // an issuer / endpoint is not an https URL, or is an internal-host / SSRF-screened target
   "cert-invalid", // the pinned SAML signing cert set was empty, over the 8-cert ceiling, or held a PEM that will not parse
-  "secret-mode-unsupported", // the requested client-secret custody mode is not wired in this build (secrets-store / private_key_jwt)
+  "secret-mode-unsupported", // the requested client-secret custody mode is not supported (secrets-store / private_key_jwt)
   "field-missing", // a required field for the chosen preset / kind was not supplied
   "duplicate-id", // a connection with this id already exists
   "other", // residual

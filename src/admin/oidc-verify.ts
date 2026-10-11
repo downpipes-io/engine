@@ -336,7 +336,10 @@ function validateNonce(payload: Record<string, unknown>, opts: VerifyIdTokenOpti
 // takes the first match, so a stale key shadowing a fresh one would otherwise self-DoS). Returns a fail()
 // result on any rejection, or null when the signature is valid.
 async function verifyKeyAndSignature(jwks: JWKS, header: { kid?: unknown }, alg: IdTokenAlg, h64: string, p64: string, s64: string): Promise<VerifyIdTokenResult | null> {
-  const jwk = jwks.keys.find((k) => k.kid === header.kid);
+  // The set is untrusted at this boundary even though the production caller sanitises it: a set without a
+  // keys array, or with a member that is not an object, fails closed with a reason, never a TypeError.
+  if (typeof jwks !== "object" || jwks === null || !Array.isArray(jwks.keys)) return fail("the JWKS has no keys array");
+  const jwk = jwks.keys.find((k) => typeof k === "object" && k !== null && k.kid === header.kid);
   if (!jwk) return { ok: false, reason: "signing key not found for kid", code: "kid_not_found" };
   const family: "RSA" | "EC" = alg === "RS256" ? "RSA" : "EC";
   if (family === "RSA" && jwk.kty !== "RSA") return fail(`alg/key mismatch: RS256 requires an RSA key, got kty ${jwk.kty}`);

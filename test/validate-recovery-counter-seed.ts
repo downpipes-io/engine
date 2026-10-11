@@ -24,6 +24,12 @@ import { fetchRecoveryStatus } from "../src/admin/support-sections-recovery.ts";
 import { b64urlEncode, concat, utf8 } from "../src/crypto/bytes.ts";
 import { mldsaKeygen, mlkemKeygen } from "../src/crypto/pq.ts";
 import { runControlPlaneHealthPass } from "../src/cron/control-plane-pass.ts";
+import { advanceAfterIndexHeld, pinnedVerifier, reseedAfterIndexHeld, seedAcrossArchives, type RunlogReader } from "../src/cron/runlog-index-advance.ts";
+import { fetchSiteFaults } from "../src/admin/site-faults.ts";
+import { fetchRunHistory } from "../src/admin/support-sections-runs.ts";
+import { runlogLockVia } from "../src/seal/runstate-helpers.ts";
+import { coarseRunError } from "../src/seal/slice.ts";
+import { fetchIntegrityFaults } from "../src/admin/support-sections-faults.ts";
 import type { Env } from "../src/env.d.ts";
 import { readVerifiedRunlogSeed } from "../src/format/freshness.ts";
 import { attestKeyless } from "../src/format/keyless.ts";
@@ -158,7 +164,7 @@ async function trigger(rig: Rig, id: string): Promise<Trig> {
 }
 type PackSeed = { seed?: number; noSeed?: string; firstNoSeed?: string; allocatedBeforeSeed?: number; allocationHeld?: boolean; reads?: number; heldAllocations?: number };
 async function packSeed(rig: Rig): Promise<PackSeed | undefined> {
-  return ((await fetchRecoveryStatus(rig.stub)) as { runlogSeed?: PackSeed }).runlogSeed;
+  return ((await fetchRecoveryStatus(rig.stub, {})) as { runlogSeed?: PackSeed }).runlogSeed;
 }
 
 
@@ -175,10 +181,22 @@ async function packSeed(rig: Rig): Promise<PackSeed | undefined> {
 //   E. unreadable holds allocation with a named reason; once the bucket reads again, the next tick seeds the
 //      counter and the next run gets index 4 in a clean RUNLOG.
 //   F. no-signer holds the same way, released once a signer is configured.
-//   G. sig-absent does not hold (no retry clears it): the first run re-uses index 1, and the pack says so; the
-//      next tick's re-read seeds past the document, so the next run gets index 4.
+//   G. sig-absent does not hold (no retry clears it): the first run allocates index 1, the writer refuses it
+//      because the RUNLOG holds it, and the pack says so; once the signature reads, the next tick seeds past
+//      the document, so the next run gets index 4.
 //   H. A fresh bucket with no RUNLOG keeps working: no latch, no seed record, index 1.
 //   I. The DO's seed route refuses an outcome outside the closed shape.
+//   J. A run refused for an index another archive's RUNLOG holds holds allocation; the next pass reads every
+//      archive, sets the counter past the HIGHEST index any of them holds (not only the refusing one), and the
+//      pack names where it moved from, to, and the archive that held the maximum.
+//   L. A failed advance, a failed archive listing, an unreadable archive and an unusable signer each count into
+//      a pack row (siteFaults); a clean advance counts nothing.
+//   M. The refused run reads as an integrity refusal naming index-held in the run record the console reads
+//      (GET /history) and in the pack's run rows.
+//   N. After a recovery whose default RUNLOG has no signature, exactly one run is refused for its index; the
+//      next two passes and their runs succeed.
+//   K. A recovery whose default archive reads sig-absent seeds from the highest index across every other
+//      archive, so the first run succeeds in all of them; an unreadable default still holds.
 async function seedOutcomeCells(): Promise<void> {
   const signerB64 = b64urlEncode(concat(rand(32), rand(32)));
   const signer: Signer = await loadSigner(signerB64);
@@ -300,10 +318,11 @@ async function seedOutcomeCells(): Promise<void> {
     okd("F: and the next trigger allocates index 4", "index" in t2 && t2.index === 4, t2);
   }
 
-  // ---- G: sig-absent does not hold; the re-read limits the collision to the indices already allocated -------
-  console.log("\nG -- a missing signature does not hold, and the pack says what happened");
+  // ---- G: sig-absent does not hold; the writer refuses the repeated index ----------------------------------
+  console.log("\nG -- a missing signature does not hold, the writer refuses the repeated index, and the pack says what happened");
   {
     const d = await survivingBucket();
+    const sigBytes = (await d.get(RUNLOG_SIG))!.body;
     await d.delete(RUNLOG_SIG);
     const rig = makeRig();
     const env = envFor(rig, d, noFaults());
@@ -311,21 +330,252 @@ async function seedOutcomeCells(): Promise<void> {
     await addDownpipe(rig, DP);
     await addDownpipe(rig, DP_B);
     const t1 = await trigger(rig, DP);
-    okd("G: the first trigger is not held, and re-uses index 1 (the documented residual)", "index" in t1 && t1.index === 1, t1);
+    okd("G: the first trigger is not held, and allocates index 1 (the counter is unanchored)", "index" in t1 && t1.index === 1, t1);
+    let refused = "no throw";
     if ("index" in t1) {
-      await runBackup([new FakeSource("post")], cfgFor(DP), signer, d, clockAt(t1.runId, t1.index, 5));
-      await doCall(rig, "POST", "/complete", { id: DP, runId: t1.runId, index: t1.index, status: "ok" });
+      try {
+        await runBackup([new FakeSource("post")], cfgFor(DP), signer, d, clockAt(t1.runId, t1.index, 5));
+      } catch (e) {
+        refused = e instanceof Error ? ((e as { reason?: string }).reason ?? e.message) : String(e);
+      }
     }
+    okd("G: the writer refuses index 1, which the RUNLOG already holds", refused === "index-held", refused);
     const idx = parseRunlog((await d.get(RUNLOG))!.body).map((e) => e.index);
-    okd("G: the writer appended a repeated index 1 and re-signed", idx.filter((i) => i === 1).length === 2, idx);
+    okd("G: the RUNLOG holds each index once", idx.length === 3 && new Set(idx).size === 3, idx);
     const before = await packSeed(rig);
     okd("G: the pack names sig-absent with no hold", before?.noSeed === "sig-absent" && before.allocationHeld === false, before);
+    await d.put(RUNLOG_SIG, sigBytes);
     await tick(env, rig);
     const after = await packSeed(rig);
-    okd("G: the next tick reads the re-signed RUNLOG and seeds 3", after?.seed === 3 && after.firstNoSeed === "sig-absent", after);
+    okd("G: once the signature is back, the next tick seeds 3", after?.seed === 3 && after.firstNoSeed === "sig-absent", after);
     okd("G: and records that 1 index was allocated before the seed", after?.allocatedBeforeSeed === 1, after);
     const t2 = await trigger(rig, DP_B);
     okd("G: the next trigger allocates index 4, past the document", "index" in t2 && t2.index === 4, t2);
+  }
+
+  // ---- J, K: the counter follows the highest index across every archive --------------------------------------
+  const readerOf = (id: string, d: MemoryDestination): RunlogReader => ({ id, get: async (k) => (await d.get(k))?.body ?? null });
+  // A bucket holding indices 1..top for one downpipe, sealed by the production writer.
+  async function bucketTo(top: number, dp: string): Promise<MemoryDestination> {
+    const d = new MemoryDestination();
+    for (let n = 1; n <= top; n++) await runBackup([new FakeSource(`w${n}`)], cfgFor(dp), signer, d, clockAt(RUN(n), n, n));
+    return d;
+  }
+  console.log("\nJ -- an index-held refusal advances the counter past the highest index in every archive");
+  {
+    const a = await survivingBucket(); // archive-a: indices 1..3
+    const b = await bucketTo(9, DP_B); // archive-b: indices 1..9
+    const rig = makeRig();
+    await addDownpipe(rig, DP);
+    await addDownpipe(rig, DP_B);
+    const t1 = await trigger(rig, DP);
+    okd("J: the first trigger allocates index 1", "index" in t1 && t1.index === 1, t1);
+    // The run refused at archive-a (index 1 is held there): the writer reports it through the lock.
+    const post = await doCall(rig, "POST", "/runlog-index-held", { index: 1, downpipeId: DP });
+    okd("J: the DO takes the report", post.ok, post.status);
+    const held = await trigger(rig, DP_B);
+    okd("J: allocation is held until the pass reads the archives", "skipped" in held && /index/.test(held.skipped) && /held/.test(held.skipped), held);
+    await reseedAfterIndexHeld(rig.stub, [readerOf("archive-a", a), readerOf("archive-b", b)], verifier, { index: 1, downpipeId: DP });
+    const counter = await rig.storage.get<number>("runlogCounter");
+    okd("J: the counter is past archive-b's 9, not only archive-a's 3", counter === 9, counter);
+    const t2 = await trigger(rig, DP_B);
+    okd("J: the next trigger allocates index 10", "index" in t2 && t2.index === 10, t2);
+    if ("index" in t2) {
+      let refused = "none";
+      try {
+        await runBackup([new FakeSource("after")], cfgFor(DP_B), signer, a, clockAt(t2.runId, t2.index, 7));
+        await runBackup([new FakeSource("after")], cfgFor(DP_B), signer, b, clockAt(t2.runId, t2.index, 7));
+      } catch (e) {
+        refused = e instanceof Error ? e.message : String(e);
+      }
+      okd("J: index 10 appends to both archives with no second refusal", refused === "none", refused);
+      const ia = parseRunlog((await a.get(RUNLOG))!.body).map((e) => e.index);
+      const ib = parseRunlog((await b.get(RUNLOG))!.body).map((e) => e.index);
+      okd("J: neither RUNLOG repeats an index", new Set(ia).size === ia.length && new Set(ib).size === ib.length, { ia, ib });
+    }
+    const faults = (await fetchIntegrityFaults(rig.stub)) as Record<string, { runlogAnomalies?: Array<{ kind: string; indexA?: number; indexB?: number; archiveId?: string }> }>;
+    const row = faults[DP]?.runlogAnomalies?.find((r) => r.kind === "counter-advanced-after-recovery");
+    okd("J: the pack names counter-advanced-after-recovery with from 1, to 9 and archive-b", row?.indexA === 1 && row.indexB === 9 && row.archiveId === "archive-b", faults);
+    const after = await trigger(rig, DP);
+    okd("J: the hold is released (a later trigger is not refused for it)", !("skipped" in after && /index/.test(after.skipped) && /held/.test(after.skipped)), after);
+    const status = (await (await doCall(rig, "GET", "/control-plane/recovery-status")).json()) as { runlogIndexHeld?: unknown };
+    okd("J: and the recovery status carries no pending report", status.runlogIndexHeld === null || status.runlogIndexHeld === undefined, status);
+  }
+  console.log("\nJ2 -- a report whose archives read lower than the refused index still moves the counter past it");
+  {
+    const rig = makeRig();
+    await addDownpipe(rig, DP);
+    await doCall(rig, "POST", "/runlog-index-held", { index: 5, downpipeId: DP });
+    await reseedAfterIndexHeld(rig.stub, [readerOf("archive-a", await survivingBucket())], verifier, { index: 5, downpipeId: DP });
+    const counter = await rig.storage.get<number>("runlogCounter");
+    okd("J2: the counter is 5, so the next run is past the refused index", counter === 5, counter);
+  }
+
+  console.log("\nJ3 -- the cron pass itself answers a pending report from the archives it can build");
+  {
+    const d = await survivingBucket(); // the default archive: indices 1..3
+    const rig = makeRig();
+    await addDownpipe(rig, DP);
+    await doCall(rig, "POST", "/runlog-index-held", { index: 1, downpipeId: DP });
+    await tick(envFor(rig, d, noFaults()), rig);
+    const counter = await rig.storage.get<number>("runlogCounter");
+    okd("J3: the pass moved the counter to the default archive's 3", counter === 3, counter);
+    const faults = (await fetchIntegrityFaults(rig.stub)) as Record<string, { runlogAnomalies?: Array<{ kind: string; indexA?: number; indexB?: number; archiveId?: string }> }>;
+    const row = faults[DP]?.runlogAnomalies?.find((r) => r.kind === "counter-advanced-after-recovery");
+    okd("J3: the pack row names from 0, to 3 and the default archive", row?.indexA === 0 && row.indexB === 3 && row.archiveId === "default", faults);
+  }
+
+  // ---- L: a failed advance is visible in the pack -------------------------------------------------------------
+  // The scheduler DO drains this isolate's ledger into its storage when a fetch ends, so one read here can miss a
+  // row the same read just caused. The first read drains, the second reads what was stored (the pack build drains first).
+  const siteRow = async (rig: Rig, id: string) => {
+    await fetchSiteFaults(rig.stub);
+    return (await fetchSiteFaults(rig.stub)).find((r) => (r.id as string) === id);
+  };
+  const failingOn = (rig: Rig, path: string): DurableObjectStub =>
+    ({
+      fetch: (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+        const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+        if (url.includes(path)) return Promise.reject(new Error("planted scheduler fault"));
+        return rig.stub.fetch(input, init);
+      },
+    }) as unknown as DurableObjectStub;
+  console.log("\nL -- a failed advance, an unlistable archive set, an unreadable archive and a bad signer reach the pack");
+  {
+    const d = await survivingBucket();
+    const rig = makeRig();
+    await addDownpipe(rig, DP);
+    await doCall(rig, "POST", "/runlog-index-held", { index: 1, downpipeId: DP });
+    const before = await siteRow(rig, "runlog.advance-failed");
+    await advanceAfterIndexHeld(envFor(rig, d, noFaults()), failingOn(rig, "/control-plane/runlog-advance"), { index: 1, downpipeId: DP });
+    const after = await siteRow(rig, "runlog.advance-failed");
+    okd("L: a failed advance counts one runlog.advance-failed row in the pack", (after?.count ?? 0) === (before?.count ?? 0) + 1, after);
+    okd("L: the report still stands, so the hold stays and the next pass tries again", (await rig.storage.get<number>("runlogCounter")) === undefined && "skipped" in (await trigger(rig, DP)));
+    const okBefore = (await siteRow(rig, "runlog.advance-failed"))?.count ?? 0;
+    await advanceAfterIndexHeld(envFor(rig, d, noFaults()), rig.stub, { index: 1, downpipeId: DP });
+    okd("L: control, a clean advance counts nothing and moves the counter to 3", ((await siteRow(rig, "runlog.advance-failed"))?.count ?? 0) === okBefore && (await rig.storage.get<number>("runlogCounter")) === 3);
+
+    const list0 = (await siteRow(rig, "runlog.advance-archive-list"))?.count ?? 0;
+    await doCall(rig, "POST", "/runlog-index-held", { index: 1, downpipeId: DP });
+    await advanceAfterIndexHeld(envFor(rig, d, noFaults()), failingOn(rig, "/control-plane/export"), { index: 1, downpipeId: DP });
+    okd("L: an archive list that cannot be read counts a runlog.advance-archive-list row", ((await siteRow(rig, "runlog.advance-archive-list"))?.count ?? 0) === list0 + 1);
+
+    const f = noFaults();
+    f.throwOnGet.add(RUNLOG);
+    const read0 = (await siteRow(rig, "runlog.advance-archive-read"))?.count ?? 0;
+    await doCall(rig, "POST", "/runlog-index-held", { index: 1, downpipeId: DP });
+    await reseedAfterIndexHeld(rig.stub, [{ id: "archive-x", get: async () => { throw new Error("503"); } }], verifier, { index: 1, downpipeId: DP });
+    okd("L: an archive that cannot be read counts a runlog.advance-archive-read row", ((await siteRow(rig, "runlog.advance-archive-read"))?.count ?? 0) === read0 + 1);
+
+    const sig0 = (await siteRow(rig, "runlog.advance-signer"))?.count ?? 0;
+    const none = await pinnedVerifier({} as Env);
+    okd("L: control, no signer at all is not a fault (null, nothing counted)", none === null && ((await siteRow(rig, "runlog.advance-signer"))?.count ?? 0) === sig0);
+    const bad = await pinnedVerifier({ SIGNER_PRIVATE: "not-a-key" } as unknown as Env);
+    okd("L: an unusable signer counts a runlog.advance-signer row", bad === null && ((await siteRow(rig, "runlog.advance-signer"))?.count ?? 0) === sig0 + 1);
+  }
+
+  // ---- M: the refused run reads as an integrity refusal naming index-held --------------------------------------
+  console.log("\nM -- the refused run is an integrity refusal naming index-held, in the console's run record and the pack");
+  {
+    const d = await survivingBucket();
+    const rig = makeRig();
+    await addDownpipe(rig, DP);
+    const t = await trigger(rig, DP);
+    let message = "";
+    if ("index" in t) {
+      try {
+        await runBackup([new FakeSource("refused")], cfgFor(DP), signer, d, clockAt(t.runId, t.index, 6), runlogLockVia(rig.stub));
+      } catch (e) {
+        message = e instanceof Error ? e.message : String(e);
+      }
+    }
+    const coarse = coarseRunError(message);
+    okd("M: the coarse class names an integrity refusal and index-held", /^runlog integrity refused/.test(coarse) && /index-held/.test(coarse), coarse);
+    okd("M: and differs from the generic integrity class an Owner review follows", coarse !== coarseRunError("RUNLOG integrity: the RUNLOG has no signature; the engine will not modify or re-sign it"));
+    if ("index" in t) {
+      await doCall(rig, "POST", "/complete", { id: DP, runId: t.runId, index: t.index, status: "failed", error: coarse });
+      const hist = (await (await doCall(rig, "GET", `/history?id=${DP}`)).json()) as { entries?: Array<{ status: string; error?: string }> };
+      const row = hist.entries?.find((e) => e.status === "failed");
+      okd("M: the run record the console reads carries that error", row?.error === coarse, hist);
+      const pack = (await fetchRunHistory(rig.stub)) as Record<string, Array<{ status: string; error?: string }>>;
+      okd("M: the pack's run row carries it too", pack[DP]?.find((r) => r.status === "failed")?.error === coarse, pack);
+    }
+  }
+
+  // ---- N: after a recovery, one refused run, then success -----------------------------------------------------
+  console.log("\nN -- after a recovery with an unsigned default RUNLOG: one refused run, then the next two passes succeed");
+  {
+    const d = await survivingBucket(); // indices 1..3, signature removed below; the pending signature stays
+    await d.delete(RUNLOG_SIG);
+    const rig = makeRig();
+    const env = envFor(rig, d, noFaults());
+    await addDownpipe(rig, DP);
+    await addDownpipe(rig, DP_B);
+    await tick(env, rig); // pass 0: the recovery latch reads sig-absent and seeds nothing
+    const lock = runlogLockVia(rig.stub);
+    let refused = 0;
+    let succeeded = 0;
+    const attempt = async (dp: string, day: number): Promise<string> => {
+      const t = await trigger(rig, dp);
+      if (!("index" in t)) return `skipped: ${t.skipped}`;
+      try {
+        await runBackup([new FakeSource(`n${t.index}`)], cfgFor(dp), signer, d, clockAt(t.runId, t.index, day), lock);
+        await doCall(rig, "POST", "/complete", { id: dp, runId: t.runId, index: t.index, status: "ok" });
+        succeeded++;
+        return `ok ${t.index}`;
+      } catch (e) {
+        refused++;
+        await doCall(rig, "POST", "/complete", { id: dp, runId: t.runId, index: t.index, status: "failed", error: coarseRunError(e instanceof Error ? e.message : String(e)) });
+        return `refused ${t.index}`;
+      }
+    };
+    const r1 = await attempt(DP, 4);
+    okd("N: the first run after the recovery is refused for its index", r1 === "refused 1", r1);
+    const held = await attempt(DP_B, 4);
+    okd("N: a trigger before the next pass is held, not run", /^skipped: .*held/.test(held), held);
+    await tick(env, rig); // pass 1
+    const r2 = await attempt(DP, 5);
+    okd("N: after pass 1 the next run succeeds past the document", r2 === "ok 4", r2);
+    await tick(env, rig); // pass 2
+    const r3 = await attempt(DP_B, 6);
+    okd("N: after pass 2 the next run succeeds", r3 === "ok 5", r3);
+    okd("N: exactly one run was refused, and two succeeded", refused === 1 && succeeded === 2, { refused, succeeded });
+    const idx = parseRunlog((await d.get(RUNLOG))!.body).map((e) => e.index);
+    okd("N: the RUNLOG holds each index once", new Set(idx).size === idx.length, idx);
+  }
+
+  console.log("\nK -- a sig-absent default archive seeds from the other archives");
+  {
+    const a = await survivingBucket(); // default archive: 1..3, signature removed below
+    const b = await bucketTo(9, DP_B);
+    await a.delete(RUNLOG_SIG);
+    const readers = [readerOf("archive-b", b)];
+    const primary = { noSeed: "sig-absent" } as const;
+    const got = await seedAcrossArchives(primary, readers, verifier);
+    okd("K: sig-absent default plus archive-b at 9 gives seed 9", "seed" in got && got.seed === 9, got);
+    const higher = await seedAcrossArchives({ seed: 12 }, readers, verifier);
+    okd("K: a default seed above every other archive stays 12", "seed" in higher && higher.seed === 12, higher);
+    const lower = await seedAcrossArchives({ seed: 3 }, readers, verifier);
+    okd("K: a default seed below archive-b's 9 rises to 9", "seed" in lower && lower.seed === 9, lower);
+    const held = await seedAcrossArchives({ noSeed: "unreadable" }, readers, verifier);
+    okd("K: an unreadable default stays unreadable, so allocation still holds", "noSeed" in held && held.noSeed === "unreadable", held);
+    const bad = await seedAcrossArchives(primary, [{ id: "archive-x", get: async () => { throw new Error("503"); } }], verifier);
+    okd("K: an unreadable other archive does not invent a seed", "noSeed" in bad, bad);
+    const rig = makeRig();
+    await addDownpipe(rig, DP);
+    const post = await doCall(rig, "POST", "/control-plane/runlog-seed", { runlogSeed: got });
+    okd("K: the DO takes the seed", post.ok, post.status);
+    const t = await trigger(rig, DP);
+    okd("K: the first trigger allocates index 10", "index" in t && t.index === 10, t);
+    if ("index" in t) {
+      let refused = "none";
+      try {
+        await runBackup([new FakeSource("first")], cfgFor(DP), signer, b, clockAt(t.runId, t.index, 8));
+      } catch (e) {
+        refused = e instanceof Error ? e.message : String(e);
+      }
+      okd("K: the first run succeeds with no refusal", refused === "none", refused);
+    }
   }
 
   // ---- H: a fresh bucket keeps working ----------------------------------------------------------------------

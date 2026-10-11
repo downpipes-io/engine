@@ -558,3 +558,20 @@ export function destCoercionClasses(config: unknown): ConfigDropClass[] {
   return out;
 }
 
+
+// ---- the destination write probe's closed failure class ---------------------------------------------------
+//
+// A refused destination save whose live write probe failed carries WHICH way it failed, as a closed class, and the
+// HTTP status the store answered with when there was one. probeFailure reads the thrown message ONLY to select a
+// member (and the "status NNN" the destination layer writes), and returns the member and the number: the endpoint,
+// bucket, credential and the store's verbatim body never leave it. A message that matches no member is "other".
+export const DEST_PROBE_FAIL_CLASSES = ["auth-refused", "redirect", "tls", "unreachable", "write-probe-failed", "object-lock-mismatch", "other"] as const;
+export type DestProbeFailClass = (typeof DEST_PROBE_FAIL_CLASSES)[number];
+
+export function probeFailure(raw: string, taggedStatus: number | undefined): { failClass: DestProbeFailClass; status?: number } {
+  const m = raw.match(/status (\d{3})/);
+  const status = taggedStatus ?? (m ? Number(m[1]) : undefined);
+  const base = classifyDestProbeRefusal(raw);
+  const failClass: DestProbeFailClass = /unexpected redirect|status 301/i.test(raw) ? "redirect" : base === "auth-refused" || base === "tls" || base === "unreachable" || base === "write-probe-failed" || base === "object-lock-mismatch" ? base : "other";
+  return { failClass, ...(status !== undefined && status >= 100 && status <= 599 ? { status } : {}) };
+}

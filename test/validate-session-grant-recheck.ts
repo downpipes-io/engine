@@ -159,13 +159,15 @@ console.log("A native session ends when the grant that admitted it is removed\n"
 
 {
   console.log("\n(b) the mapping is moved to another group");
-  const { env } = await world();
+  const { env, storage } = await world();
   await mapGroup(env, "staff", "operator");
   const s = await signIn(env, "corp", member("m2", "m2@acme.example", ["staff"]));
   ok("(b) precondition: the group-mapped member gets a session", s !== null && (await alive(env, s)));
   await mapGroup(env, "admins", "operator");
+  const lapsedBefore = await signalCount(storage, "session-grant-lapsed");
   await admin(env, "POST", "/admin/group-roles/delete", { group: "staff", connId: "corp" });
   ok("(b) the member's session is refused once its group maps to nothing", s !== null && !(await alive(env, s)));
+  ok("(b) and it is the grant re-check that refused it (the session-grant-lapsed signal is counted)", (await signalCount(storage, "session-grant-lapsed")) === lapsedBefore + 1);
 }
 
 {

@@ -6,7 +6,8 @@
 //
 // Each entry is what the support pack shows beside the id: the subsystem, what failed (one sentence, no
 // customer value), and the fix class from the closed list below. The pack carries the entry text for the
-// sites that fired and nothing for the others.
+// sites that fired and nothing for the others. A row for a site whose class undermines also carries the evidence
+// it undermines.
 
 export const SITE_FAULT_FIX_CLASSES = [
   // A platform fault that clears on its own. Wait, then check that the next run or read succeeds.
@@ -25,6 +26,10 @@ export interface SiteFaultLegendEntry {
   readonly subsystem: string;
   readonly what: string;
   readonly fixClass: SiteFaultFixClass;
+  // Present on every storage-health and engine-defect entry, and on no other. It names the pack evidence that
+  // fault may leave wrong, as pack paths. An empty list means the entry names no pack section, so the whole
+  // pack needs review.
+  readonly undermines?: readonly string[];
 }
 
 export const SITE_FAULT_LEGEND = {
@@ -32,11 +37,13 @@ export const SITE_FAULT_LEGEND = {
     subsystem: "replication",
     what: "A replica copy was recorded as good, but the write that raises that replica's anti-rollback floor failed. The floor stays at its old value, so a later restore from that replica does not refuse an older RUNLOG.",
     fixClass: "storage-health",
+    undermines: ["downpipes[].replication"],
   },
   "ratelimit.health-read": {
     subsystem: "rate-limit",
     what: "The account rate limiter could not read its own health record. The pack's rateLimitDoHealth then shows zero fail-open counts, which may be false.",
     fixClass: "storage-health",
+    undermines: ["rateLimitDoHealth"],
   },
   "source.kv-resume-cursor": {
     subsystem: "sources",
@@ -47,6 +54,7 @@ export const SITE_FAULT_LEGEND = {
     subsystem: "support-pack",
     what: "The scheduler could not write its site-fault record to its own storage. The rows were kept in memory for the next request, so their counts may arrive late or, if the isolate ended, not at all.",
     fixClass: "storage-health",
+    undermines: ["siteFaults"],
   },
   "diag.site-fault-drain-post": {
     subsystem: "support-pack",
@@ -62,11 +70,13 @@ export const SITE_FAULT_LEGEND = {
     subsystem: "admin-edge",
     what: "An approval-policy change answered 200 with a body that is not JSON, so the Worker could not read whether a policy was turned off and sent no disarm alert. The body was returned to the caller unchanged.",
     fixClass: "engine-defect",
+    undermines: ["notify"],
   },
   "admin.member-invite-body": {
     subsystem: "admin-edge",
     what: "A role change answered 200 with a body that is not JSON, so the Worker could not check it for a member-only invite link. The body was returned to the caller unchanged.",
     fixClass: "engine-defect",
+    undermines: [],
   },
   "notify.retention-armed-alone-alert": {
     subsystem: "notify",
@@ -82,11 +92,13 @@ export const SITE_FAULT_LEGEND = {
     subsystem: "restore",
     what: "A restore request carried a plan that the engine could not hash. The request was refused as a plan mismatch, so the operator runs the dry run again and requests from the plan it returns.",
     fixClass: "engine-defect",
+    undermines: [],
   },
   "change-control.prune-widen-check": {
     subsystem: "change-control",
     what: "The check that decides whether a downpipe edit widens the retention prune failed. The edit was treated as widening, so it queued for a second approver where one exists.",
     fixClass: "engine-defect",
+    undermines: [],
   },
   "rekey.runlog-precheck-read": {
     subsystem: "re-key",
@@ -97,6 +109,7 @@ export const SITE_FAULT_LEGEND = {
     subsystem: "re-key",
     what: "Before a signer re-key, a destination's RUNLOG verified under the current signer but did not parse. The re-key stopped before any key changed and named the destination as unparsable.",
     fixClass: "engine-defect",
+    undermines: [],
   },
   "rekey.runlog-handover-read": {
     subsystem: "re-key",
@@ -122,16 +135,19 @@ export const SITE_FAULT_LEGEND = {
     subsystem: "re-key",
     what: "The key install response was not JSON when the RUNLOG hand-over outcome was added to it. The response carried the hand-over outcome only.",
     fixClass: "engine-defect",
+    undermines: [],
   },
   "rekey.verifier-decode": {
     subsystem: "re-key",
     what: "The held old public key of a signer re-key did not decode. The engine treated it as no held key, so no RUNLOG was handed over under it.",
     fixClass: "engine-defect",
+    undermines: [],
   },
   "sched.runlog-route-body": {
     subsystem: "runlog",
     what: "The scheduler received a RUNLOG floor or re-key hand-over request whose body was not JSON. It read the request as empty.",
     fixClass: "engine-defect",
+    undermines: [],
   },
   "runlog.attended-dest-open": {
     subsystem: "runlog",
@@ -142,11 +158,38 @@ export const SITE_FAULT_LEGEND = {
     subsystem: "runlog",
     what: "An attended relink found a RUNLOG that verified under the current signer but did not parse. Nothing was written, and the relink was refused.",
     fixClass: "engine-defect",
+    undermines: [],
   },
   "runlog.floor-read": {
     subsystem: "runlog",
     what: "A RUNLOG writer could not read the destination's anti-rollback floor from the scheduler. The write went ahead without the floor check, as a fresh destination would.",
     fixClass: "transient-platform",
+  },
+  "runlog.index-held-report": {
+    subsystem: "runlog",
+    what: "A RUNLOG append refused an index its destination already holds, and the report to the scheduler failed. The run was refused as usual, but allocation was not held and the counter was not moved until a later refusal reports it.",
+    fixClass: "transient-platform",
+  },
+  "runlog.advance-failed": {
+    subsystem: "runlog",
+    what: "The cron pass that moves the run counter past the highest RUNLOG index failed. The scheduler keeps the report and holds new runs, and the next pass tries again.",
+    fixClass: "transient-platform",
+  },
+  "runlog.advance-archive-list": {
+    subsystem: "runlog",
+    what: "The cron pass could not list the configured destinations while it moved the run counter. Only the default destination was read for this pass.",
+    fixClass: "transient-platform",
+  },
+  "runlog.advance-archive-read": {
+    subsystem: "runlog",
+    what: "A destination's RUNLOG could not be read while the cron pass moved the run counter. The counter moved past the indices the other destinations hold, and a repeated index at this one is refused again.",
+    fixClass: "transient-platform",
+  },
+  "runlog.advance-signer": {
+    subsystem: "runlog",
+    what: "The engine's signer could not be loaded to verify a RUNLOG while the cron pass moved the run counter. The counter moved past the refused index only.",
+    fixClass: "engine-defect",
+    undermines: [],
   },
   "repl.runlog-read": {
     subsystem: "replication",
@@ -162,11 +205,13 @@ export const SITE_FAULT_LEGEND = {
     subsystem: "replication",
     what: "A run's root manifest verified on a replica but did not parse. The replica copy was refused as an integrity failure and is retried next pass.",
     fixClass: "engine-defect",
+    undermines: ["downpipes[].replication"],
   },
   "diag.site-fault-post-body": {
     subsystem: "support-pack",
     what: "The scheduler received a site-fault batch it could not parse. The batch was dropped.",
     fixClass: "engine-defect",
+    undermines: ["siteFaults"],
   },
 } as const satisfies Record<string, SiteFaultLegendEntry>;
 

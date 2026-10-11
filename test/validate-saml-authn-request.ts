@@ -14,7 +14,7 @@
 //      percent-encoded so the IdP cannot misread it as a space.
 //
 // The builder is exercised exactly as in production (the DO hands it a minted id + issueInstant; we pass fixed
-// ones). The parser used to assert the shape is the same hardened parseXml the inbound path trusts.
+// ones). The parser that asserts the shape is the same hardened parseXml the inbound path trusts.
 //
 // Node 25 strip-types; Web Streams + parseXml only, no Node builtins beyond the harness exit code. console is
 // the WebWorker global.

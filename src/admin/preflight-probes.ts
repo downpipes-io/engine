@@ -375,7 +375,7 @@ export async function probeAccess(items: PreflightItem[], env: Env): Promise<voi
 // 7. Email sending: presence is checkable; a real send is not exercised here (it
 // would email someone), so a configured binding is honestly configured-unproven with
 // the test-send remediation. It names the console's real location (Settings, the Email delivery
-// disclosure, src/screens/settings.ts in the console); it used to say "Settings, Support", which does not exist.
+// disclosure, src/screens/settings.ts in the console).
 export function probeEmail(items: PreflightItem[], env: Env): void {
   const bound = env.EMAIL !== undefined;
   const from = typeof env.EMAIL_FROM === "string" && env.EMAIL_FROM.includes("@");

@@ -23,6 +23,13 @@
 // (seal/pipeline.ts verifyRunlogForWrite), so no index can collide there either; an Owner decides the document
 // through the attended re-sign (POST /admin/runlog/resign). The per-tick re-read still runs for them: once the
 // document verifies, the counter moves past its highest index.
+//
+// THE COUNTER IS PER ENGINE, A RUNLOG IS PER DESTINATION. The seed reads one destination's RUNLOG. Another
+// destination whose RUNLOG verifies accepts an unanchored index, so every RUNLOG append also refuses an index
+// that an entry under another run already holds (seal/pipeline.ts appendRunlogBody, reason "index-held") and
+// records a duplicate-index anomaly. An unanchored run is then refused, never written as a duplicate. The
+// refusal also reports the index (below); allocation holds until the cron pass reads every archive and moves
+// the counter past the highest index any holds (cron/runlog-index-advance.ts).
 
 import { RUNLOG_NO_SEED_REASONS, type RunlogNoSeedReason, type RunlogSeedResult } from "../format/freshness.ts";
 import { nowMillisISO } from "./scheduler-helpers.ts";
@@ -108,6 +115,64 @@ export async function recordRunlogSeed(storage: SeedStorage, result: RunlogSeedR
     return;
   }
   await storage.put(RUNLOG_SEED_KEY, { noSeed: result.noSeed, ...base } satisfies RunlogSeedRecord);
+}
+
+// ---- A refused index: the report, the hold and the advance --------------------------------------------------
+// A RUNLOG append that meets an index its archive already holds (seal/pipeline.ts, reason "index-held") reports
+// the index here through the RUNLOG lock. Allocation holds until the cron pass has read every archive and
+// advanced the counter past the highest index any of them holds. The record carries two integers and the
+// customer's own downpipe id.
+const RUNLOG_INDEX_HELD_KEY = "runlogIndexHeld";
+
+/** The pending report of a refused index. */
+export interface RunlogIndexHeld {
+  index: number; // the highest refused index reported since the last advance
+  downpipeId: string; // the downpipe whose run was refused first
+  at: string;
+}
+
+/**
+ * readRunlogIndexHeld returns the pending report, or null when none stands.
+ *
+ * @param storage - the DO storage.
+ * @returns the report, or null.
+ */
+export async function readRunlogIndexHeld(storage: SeedStorage): Promise<RunlogIndexHeld | null> {
+  const r = await storage.get<RunlogIndexHeld>(RUNLOG_INDEX_HELD_KEY);
+  return r && typeof r === "object" && Number.isSafeInteger(r.index) ? r : null;
+}
+
+/**
+ * recordRunlogIndexHeld stores a refused index. A later report raises the index and keeps the first downpipe.
+ *
+ * @param storage - the DO storage.
+ * @param report - the refused index and its downpipe.
+ * @returns false when the report is outside the closed shape and recorded nothing.
+ */
+export async function recordRunlogIndexHeld(storage: SeedStorage, report: { index?: unknown; downpipeId?: unknown }): Promise<boolean> {
+  if (typeof report.index !== "number" || !Number.isSafeInteger(report.index) || report.index < 1) return false;
+  if (typeof report.downpipeId !== "string" || report.downpipeId.length === 0 || report.downpipeId.length > 128) return false;
+  const prior = await readRunlogIndexHeld(storage);
+  await storage.put(RUNLOG_INDEX_HELD_KEY, { index: Math.max(report.index, prior?.index ?? 0), downpipeId: prior?.downpipeId ?? report.downpipeId, at: prior?.at ?? nowMillisISO() } satisfies RunlogIndexHeld);
+  return true;
+}
+
+/**
+ * advanceRunlogCounter raises runlogCounter to at least `to` and clears the pending report. It never lowers
+ * the counter.
+ *
+ * @param storage - the DO storage.
+ * @param to - the highest index the cron pass found across the archives.
+ * @returns where the counter moved from and to, and the downpipe the report named; null when no report stands.
+ */
+export async function advanceRunlogCounter(storage: SeedStorage, to: number): Promise<{ from: number; to: number; downpipeId: string } | null> {
+  const held = await readRunlogIndexHeld(storage);
+  if (held === null) return null;
+  const from = (await storage.get<number>(RUNLOG_COUNTER_KEY)) ?? 0;
+  const target = Math.max(from, held.index, Number.isSafeInteger(to) && to > 0 ? to : 0);
+  if (target > from) await storage.put(RUNLOG_COUNTER_KEY, target);
+  await storage.put(RUNLOG_INDEX_HELD_KEY, null);
+  return { from, to: target, downpipeId: held.downpipeId };
 }
 
 /**

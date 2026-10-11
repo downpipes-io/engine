@@ -11,7 +11,7 @@ import { adminRefusalReasonForStatus, recordAdminRefusal } from "./diag-admin.ts
 import { runDrill } from "./drill.ts";
 import { fetchRunlogFloor } from "./restore-open.ts";
 import { recordDrillOutcome } from "./restore-faults.ts";
-import { callerHeaders, gate, rateLimited, recordAudit, stampRestoreTested } from "./router-core.ts";
+import { callerHeaders, gate, peekObjectBody, rateLimited, readObjectBody, recordAudit, stampRestoreTested } from "./router-core.ts";
 import { routeRetentionArmedAloneAlert } from "./router-notify.ts";
 import { doURL, type RouterCtx } from "./router-helpers.ts";
 import { withRunDestFallback } from "./router-sources.ts";
@@ -29,10 +29,9 @@ export async function handlePipelines(ctx: RouterCtx): Promise<Response | null> 
   switch (`${req.method} ${sub}`) {
     // ---- mutations: Operator+ (engine role) ----------------------------------------------
     case "POST /downpipes": {
-      // Read the body ONCE: it is needed both to forward to the DO and to build the redaction-safe
-      // audit target (the downpipe id + name, both the customer's own config, never a secret).
-      const body = (await req.json()) as Partial<DownpipeConfig>;
-      const target: AuditTarget = { kind: "downpipe", id: String(body.id ?? ""), ...(body.name ? { name: String(body.name) } : {}) };
+      // The gate runs before any body field is read. The body is read once: to forward to the DO and to build the
+      // redaction-safe audit target (the downpipe id + name, both the customer's own config, never a secret).
+      const targetOf = (b: Partial<DownpipeConfig>): AuditTarget => ({ kind: "downpipe", id: String(b.id ?? ""), ...(b.name ? { name: String(b.name) } : {}) });
       // Section 8: the upsert gates on downpipe.write. operator/approver/owner hold it; restore-operator
       // and access-admin do not (recovery/people roles do not edit downpipes). Same allow/deny as the
       // prior "operator" rank gate for the four existing roles. CHANGING restoreTestCadenceSeconds carries
@@ -43,9 +42,13 @@ export async function handlePipelines(ctx: RouterCtx): Promise<Response | null> 
       // 403, forwarded verbatim and recorded as failed below). A prune-widening retention edit needs restore.apply.
       const denied = gate(caller, "downpipe.write");
       if (denied) {
-        await recordAudit(scheduler, caller, sourceIp, "downpipe-create", "denied", target);
+        const peek = await peekObjectBody<Partial<DownpipeConfig>>(req);
+        await recordAudit(scheduler, caller, sourceIp, "downpipe-create", "denied", targetOf(peek));
         return denied;
       }
+      const body = await readObjectBody<Partial<DownpipeConfig>>(req);
+      if (body instanceof Response) return body;
+      const target = targetOf(body);
       const limited = await rateLimited(scheduler, caller);
       if (limited) return limited;
       const resp = await scheduler.fetch(doURL("/downpipes"), { method: "POST", body: JSON.stringify(body), headers: callerHeaders(caller) });
@@ -65,7 +68,7 @@ export async function handlePipelines(ctx: RouterCtx): Promise<Response | null> 
       await recordAudit(scheduler, caller, sourceIp, "downpipe-create", resp.status === 200 ? "success" : "failed", target);
       // A widening retention edit that applied with no second approver alerts (the DO sets the header and
       // writes the audit row). With a second approver the edit is a 202 queued change instead.
-      if (resp.headers.has(RETENTION_ARMED_ALONE_HEADER)) await routeRetentionArmedAloneAlert(env, scheduler, caller.email ?? null, target.id, 1);
+      if (resp.headers.has(RETENTION_ARMED_ALONE_HEADER)) await routeRetentionArmedAloneAlert(env, scheduler, caller.email ?? null, String(body.id ?? ""), 1);
       return resp;
     }
     case "POST /downpipes/bulk": {
@@ -91,15 +94,18 @@ export async function handlePipelines(ctx: RouterCtx): Promise<Response | null> 
       // Delete is Operator (not Approver): it stops scheduling and drops the history ring but
       // does NOT delete archives, so it is reversible-by-recreate and lower blast radius than a
       // restore apply.
-      const body = (await req.json()) as { id?: string };
-      const target: AuditTarget = { kind: "downpipe", id: String(body.id ?? "") };
+      const targetOf = (b: { id?: string }): AuditTarget => ({ kind: "downpipe", id: String(b.id ?? "") });
       // Section 8: delete gates on downpipe.delete (operator/approver/owner). Same allow/deny as the
       // prior "operator" rank gate for the four existing roles.
       const denied = gate(caller, "downpipe.delete");
       if (denied) {
-        await recordAudit(scheduler, caller, sourceIp, "downpipe-delete", "denied", target);
+        const peek = await peekObjectBody<{ id?: string }>(req);
+        await recordAudit(scheduler, caller, sourceIp, "downpipe-delete", "denied", targetOf(peek));
         return denied;
       }
+      const body = await readObjectBody<{ id?: string }>(req);
+      if (body instanceof Response) return body;
+      const target = targetOf(body);
       const limited = await rateLimited(scheduler, caller);
       if (limited) return limited;
       const resp = await scheduler.fetch(doURL("/delete"), { method: "POST", body: JSON.stringify(body), headers: callerHeaders(caller) });
@@ -232,7 +238,9 @@ export async function handlePipelines(ctx: RouterCtx): Promise<Response | null> 
         fireInBackground(runtime, recordAdminRefusal(scheduler, "drill", "forbidden"));
         return denied;
       }
-      const { runId, destinationId } = (await req.json()) as { runId?: string; destinationId?: string };
+      const drillBody = await readObjectBody<{ runId?: string; destinationId?: string }>(req);
+      if (drillBody instanceof Response) return drillBody;
+      const { runId, destinationId } = drillBody;
       if (!runId) {
         fireInBackground(runtime, recordAdminRefusal(scheduler, "drill", "validation"));
         return new Response(JSON.stringify({ error: "runId required" }), { status: 400, headers: { "content-type": "application/json" } });

@@ -39,7 +39,7 @@ interface RunResult {
 
 function run(args: string[], env: Record<string, string> = {}): RunResult {
   try {
-    const stdout = execFileSync("node", [TOOL, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, ...env } });
+    const stdout = execFileSync("node", [TOOL, "--first-release", ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, ...env } });
     return { status: 0, stdout, stderr: "" };
   } catch (e) {
     const err = e as { status?: number; stdout?: string; stderr?: string };
@@ -51,7 +51,7 @@ function run(args: string[], env: Record<string, string> = {}): RunResult {
 // for --signer-seed-stdin, which reads its seed off fd 0.
 function runWithStdin(args: string[], input: string, env: Record<string, string> = {}): RunResult {
   try {
-    const stdout = execFileSync("node", [TOOL, ...args], { encoding: "utf8", input, stdio: ["pipe", "pipe", "pipe"], env: { ...process.env, ...env } });
+    const stdout = execFileSync("node", [TOOL, "--first-release", ...args], { encoding: "utf8", input, stdio: ["pipe", "pipe", "pipe"], env: { ...process.env, ...env } });
     return { status: 0, stdout, stderr: "" };
   } catch (e) {
     const err = e as { status?: number; stdout?: string; stderr?: string };
@@ -360,7 +360,7 @@ try {
   const v19viaKey = run(["--version", "0.0.3", "--key", throwawaySeed, "--allow-unsequenced"]);
   ok("a control run with the same seed via --key succeeds", v19viaKey.status === 0);
   const out19viaKey = JSON.parse(v19viaKey.stdout) as { updateSignerPublic: string };
-  const v19 = runWithStdin(["--version", "0.0.3", "--signer-seed-stdin", "--allow-unsequenced"], throwawaySeed);
+  const v19 = runWithStdin(["--version", "0.0.3", "--channel", "internal", "--signer-seed-stdin", "--allow-unsequenced"], throwawaySeed);
   ok("--signer-seed-stdin publish succeeds", v19.status === 0);
   const out19 = JSON.parse(v19.stdout) as { channel: string; signature: string; updateSignerPublic: string };
   ok("--signer-seed-stdin derives the SAME public key as --key with the same seed bytes", out19.updateSignerPublic === out19viaKey.updateSignerPublic);
@@ -369,7 +369,7 @@ try {
 
   // V20: a trailing newline on stdin (what `echo`/a file's own trailing newline would add) is
   // trimmed exactly like --key-file's contents are.
-  const v20 = runWithStdin(["--version", "0.0.3", "--signer-seed-stdin", "--allow-unsequenced"], `${throwawaySeed}\n`);
+  const v20 = runWithStdin(["--version", "0.0.3", "--channel", "internal", "--signer-seed-stdin", "--allow-unsequenced"], `${throwawaySeed}\n`);
   ok("--signer-seed-stdin tolerates a trailing newline (trimmed like --key-file)", v20.status === 0 && JSON.parse(v20.stdout).updateSignerPublic === out19viaKey.updateSignerPublic);
 
   // V21: empty/closed stdin is refused loudly, never silently falls through to a fresh generated key.
@@ -383,6 +383,38 @@ try {
   // V23: --signer-seed-stdin together with --key is refused the same way.
   const v23 = runWithStdin(["--version", "0.0.3", "--signer-seed-stdin", "--key", throwawaySeed, "--allow-unsequenced"], throwawaySeed);
   ok("--signer-seed-stdin with --key refuses as ambiguous", v23.status !== 0 && /mutually exclusive/.test(v23.stderr));
+
+  // ================================================================================================
+  // The stable channel reaches every customer. With the production seed on stdin it is signed only from
+  // the attested release trees, so it always carries provenance blocks. A local build or bundle signs
+  // other channels, and test keys sign anything.
+  // ================================================================================================
+  const stableRefusal = /signs only from attested release trees/;
+
+  // V30: stable from local bundles with the stdin seed is refused, and no channel file is written.
+  const out30 = path.join(tmp, "v30-channel.json");
+  const v30 = runWithStdin(["--version", "0.0.2", "--channel", "stable", "--signer-seed-stdin", "--allow-unsequenced", "--bundle", looseEngine, "--url", "https://u.example/e.mjs", "--console-bundle", looseConsole, "--console-url", "https://u.example/c.json", "--console-risk-class", "routine", "--out", out30], throwawaySeed);
+  ok("stable with the stdin seed and local bundles refuses", v30.status !== 0 && stableRefusal.test(v30.stderr));
+  ok("the refused stable publish writes no channel file", !existsSync(out30));
+
+  // V31: the channel defaults to stable, so the same refusal holds with no --channel flag.
+  const v31 = runWithStdin(["--version", "0.0.2", "--signer-seed-stdin", "--allow-unsequenced", "--bundle", looseEngine, "--url", "https://u.example/e.mjs"], throwawaySeed);
+  ok("the default channel (stable) with the stdin seed and a local bundle refuses", v31.status !== 0 && stableRefusal.test(v31.stderr));
+
+  // V32: an attested engine tree alone is not enough. Stable needs the attested console tree too.
+  const v32 = runWithStdin(["--version", "0.0.2", "--channel", "stable", "--signer-seed-stdin", "--allow-unsequenced", "--from-release-dir", engineDir, "--url", "https://u.example/e.mjs", "--provenance-out-dir", provOut], throwawaySeed, { PUBLISH_CHANNEL_COSIGN: stubPass });
+  ok("stable with the stdin seed and only the engine release tree refuses", v32.status !== 0 && stableRefusal.test(v32.stderr));
+
+  // V33, a control: the internal channel still signs from a local bundle with the stdin seed.
+  const v33 = runWithStdin(["--version", "0.0.2", "--channel", "internal", "--signer-seed-stdin", "--allow-unsequenced", "--bundle", looseEngine, "--url", "https://u.example/e.mjs"], throwawaySeed);
+  ok("the internal channel signs from a local bundle with the stdin seed", v33.status === 0);
+
+  // V34, a control: stable signs with the stdin seed from both attested release trees, with provenance.
+  const v34 = runWithStdin(["--version", "0.0.2", "--channel", "stable", "--signer-seed-stdin", "--sequence", "40", "--sequence-state", path.join(tmp, "seq34.json"), "--issued-at", "2026-07-05T04:00:00.000Z", "--from-release-dir", engineDir, "--url", "https://u.example/e.mjs", "--console-release-dir", consoleDir, "--console-url", "https://u.example/c.json", "--console-risk-class", "routine", "--provenance-out-dir", path.join(tmp, "prov34")], throwawaySeed, { PUBLISH_CHANNEL_COSIGN: stubPass });
+  ok("stable signs with the stdin seed from both attested release trees", v34.status === 0);
+  const out34 = v34.status === 0 ? (JSON.parse(v34.stdout) as { channel: string; signature: string; updateSignerPublic: string }) : null;
+  const verified34 = out34 === null ? null : await verifyChannel(utf8(out34.channel), b64urlDecode(out34.signature), parseVerifier(b64urlDecode(out34.updateSignerPublic)));
+  ok("that stable channel verifies and carries the engine provenance block", verified34?.artefacts?.[0]?.provenance?.attestations?.intoto === "provenance/0.0.2/engine.intoto.jsonl");
 } finally {
   rmSync(tmp, { recursive: true, force: true });
 }

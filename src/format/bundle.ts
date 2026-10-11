@@ -84,6 +84,12 @@ export interface BundleSigner {
 /** The bundle file name of the signer public key (SPEC 9.1). */
 export const BUNDLE_SIGNER_NAME = "signer.pub";
 
+/** The recovery-bundle file names addBundle writes under BUNDLE_PREFIX, SHA384SUMS last: addBundle writes
+ * every other file before it, so a caller that mirrors the bundle elsewhere (seal/replicate.ts
+ * syncRecoveryBundle) can treat a byte-identical SHA384SUMS as proof the whole set already matches,
+ * without reading the other four files. */
+export const BUNDLE_FILE_NAMES = ["FORMAT.md", "RECOVER.md", BUNDLE_SIGNER_NAME, "SHA384SUMS.sig", "SHA384SUMS"] as const;
+
 /**
  * Renders the signer public key as a recovery-kit signer.pub file: one "<label> <base64url>" line over
  * Ed25519 public (32) || ML-DSA-87 public (2592), the form the Go reader's --signer reads.

@@ -588,9 +588,9 @@ async function main(): Promise<void> {
       // A label that is not full major.minor.patch is refused on SHAPE, before any version comparison.
       ok("checkFormatVersion REJECTS a non-semver label (downpipe/2.0, no patch component)", (() => { try { checkFormatVersion("downpipe/2.0"); return false; } catch { return true; } })());
 
-      // ---- three labels this gate USED TO ACCEPT, each a version it does not implement ------------------
-      // The split was unbounded and the components were only checked for non-emptiness, so anything whose
-      // first two components read "0" and "1" was opened whatever followed. A gate that accepts a label it
+      // ---- three labels this gate must refuse, each a version it does not implement ------------------
+      // An unbounded split that checks the components only for non-emptiness would open anything whose
+      // first two components read "0" and "1", whatever followed. A gate that accepts a label it
       // does not implement is the failure this whole function exists to prevent, and it is the direction
       // that loses data rather than the one that merely says the wrong thing.
       const refuses = (v: string): boolean => { try { checkFormatVersion(v); return false; } catch { return true; } };

@@ -58,7 +58,7 @@ the bucket can put anything there, including a truncated, substituted or hostile
 - The magic-byte and version gate is evaluated **as the argument to the decrypt**, so a bad `DPS1`
   magic or an unsupported version byte throws before the stream is ever opened
   (`src/format/container.ts:61,73`, called at `src/crypto/segment.ts:26,46`,
-  `src/format/reader.ts:276,597`, `src/seal/fanout.ts:405`, `src/seal/replicate.ts:724`). This is a
+  `src/format/reader.ts:276,608`, `src/seal/fanout.ts:405`, `src/seal/replicate.ts:753`). This is a
   structural property rather than a convention: there is no call path that opens a stream first and
   validates afterwards.
 - Everything is AEAD-sealed, so a substituted or edited body fails authentication rather than being
@@ -66,7 +66,7 @@ the bucket can put anything there, including a truncated, substituted or hostile
 - Sizes are bounded by construction: `CHUNK_SIZE` is 65,536 bytes and `MAX_SEGMENT_CHUNKS` is 16,384
   (`src/format/version.ts:33,50`), so a hostile container cannot ask the runtime for unbounded memory.
 - Replication read-back deliberately re-unframes a bounded sample of what it just wrote
-  (`src/seal/replicate.ts:709,724`), so a truncated, empty or wrong-object copy is caught at write
+  (`src/seal/replicate.ts:738,724`), so a truncated, empty or wrong-object copy is caught at write
   time rather than at restore time. The check reads the framing only. It does not detect a changed
   byte inside a well-framed segment; the keyed restore drill checks that.
 
@@ -224,7 +224,7 @@ attacker can choose, into a file a human opens in a spreadsheet.
 
 **Containment.** `csvCell` neutralises a leading formula trigger (`=`, `+`, `-`, `@`, tab, CR, NUL)
 with a single quote before the RFC-4180 quote-wrap, applied uniformly to every column rather than to
-the ones someone remembered (`src/admin/audit.ts:502-506`). The export carries the flattened target
+the ones someone remembered (`src/admin/audit.ts:517-521`). The export carries the flattened target
 description and safe scalars only, never a raw target object, so no unreviewed value can ride out.
 
 ---

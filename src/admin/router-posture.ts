@@ -6,13 +6,15 @@
 
 import { ab } from "../crypto/bytes.ts";
 import type { CanaryView } from "../canary/types.ts";
+import type { Destination } from "../dest/types.ts";
+import { isRegionHint } from "../dest/fault-log.ts";
 import { buildDestination, parseWormPolicy, resolveDestination, type RuntimeDestConfig } from "../dest/factory.ts";
 import { destStatusOf, WORM_UNKNOWN_REASONS, type WormUnknownReason } from "../dest/types.ts";
 import type { Env } from "../env.d.ts";
 import { loadSigner } from "../keys-env.ts";
 import { log } from "../log.ts";
 import { drainReportRenderFaults, renderReportPDF } from "../pdf.ts";
-import { type TestDeleteProbe, type TestStatusClass, testStatusClass } from "../sched/sched-fault-ledger.ts";
+import { type DestProbeFailClass, probeFailure, type TestDeleteProbe, type TestStatusClass, testStatusClass } from "../sched/sched-fault-ledger.ts";
 import type { AuditEvent } from "./audit-types.ts";
 import { beaconConfigured } from "../cron/beacon-config.ts";
 import { loadConfigWrapKey } from "./config-secret.ts";
@@ -43,6 +45,7 @@ import { verifyAtSealEnabled } from "../seal/verify-at-seal.ts";
 import { consumeReportDataFault } from "./test-faults.ts";
 import { buildStatus, resolveDestKind } from "./status.ts";
 import { type ConsoleDestFacts, readConsoleDestFacts } from "./console-dest-facts.ts";
+import { consoleOriginSlice } from "./posture-checks-console.ts";
 import { releaseSignerPinVerdict } from "./update-signer-pin.ts";
 
 
@@ -62,16 +65,18 @@ export async function probeDestination(
   env: Env,
   override?: RuntimeDestConfig,
 ): Promise<
-  | { ok: true; deleteProbe: TestDeleteProbe; deleteStatusClass?: TestStatusClass; objectLock: "enforced" | "not-enforced" | "unknown"; objectLockUnknownReason?: WormUnknownReason; credentialExpiry?: { kind: "sas"; expiresAtMs: number | null }; defaultRetention?: boolean; checksumRequired?: true; ms: number }
-  | { ok: false; reason: string }
+  | { ok: true; deleteProbe: TestDeleteProbe; deleteStatusClass?: TestStatusClass; objectLock: "enforced" | "not-enforced" | "unknown"; objectLockUnknownReason?: WormUnknownReason; credentialExpiry?: { kind: "sas"; expiresAtMs: number | null }; defaultRetention?: boolean; lockMode?: "GOVERNANCE" | "COMPLIANCE" | "none"; lockRetentionDays?: number; checksumRequired?: true; ms: number }
+  | { ok: false; reason: string; failClass: DestProbeFailClass; status?: number; regionHint?: string }
 > {
   const started = Date.now();
   // The bucket this probe targets, for an ACTIONABLE auth-denied reason. Operator-facing only
   // (the verify/POST handlers return it, never log it), so naming the operator's own bucket is
   // safe; the endpoint URL stays sanitised below (NC-5).
   const bucket = override?.bucket ?? (typeof env.DEST_BUCKET === "string" && env.DEST_BUCKET !== "" ? env.DEST_BUCKET : undefined);
+  let probed: Destination | undefined;
   try {
     const dest = await buildDestination(env, undefined, override ?? null);
+    probed = dest;
     await dest.exists("_RECOVERY/RUNLOG");
     const probeKey = "_RECOVERY/.write-probe";
     await dest.put(probeKey, new TextEncoder().encode(`downpipes destination write probe ${new Date().toISOString()}`));
@@ -121,7 +126,7 @@ export async function probeDestination(
     // Both are closed: a member of a closed vocabulary and a boolean. The bucket's retention DAYS and mode are the
     // customer's configuration and stay where they are.
     let objectLockUnknownReason: WormUnknownReason | undefined;
-    let defaultRetention: boolean | undefined;
+    let defaultRetention: boolean | undefined; let lockMode: "GOVERNANCE" | "COMPLIANCE" | "none" | undefined; let lockRetentionDays: number | undefined; // the default rule's mode and period: closed facts beside "enforced"; "none" is a lock with no default rule
     try {
       if (typeof dest.objectLockStatus === "function") {
         const status = await dest.objectLockStatus();
@@ -131,7 +136,7 @@ export async function probeDestination(
         }
         // A store that cannot read its own default rule (Azure Blob, defaultRuleUnread) leaves the field
         // absent, which is cannot-confirm. A false there would claim that nothing is retained.
-        if (status.enabled === true && status.defaultRuleUnread !== true) defaultRetention = status.defaultMode !== undefined;
+        if (status.enabled === true && status.defaultRuleUnread !== true) { defaultRetention = status.defaultMode !== undefined; lockMode = status.defaultMode === "governance" ? "GOVERNANCE" : status.defaultMode === "compliance" ? "COMPLIANCE" : "none"; lockRetentionDays = typeof status.defaultDays === "number" && Number.isInteger(status.defaultDays) && status.defaultDays > 0 ? status.defaultDays : undefined; }
       }
     } catch {
       objectLock = "unknown";
@@ -172,11 +177,14 @@ export async function probeDestination(
       objectLock,
       ...(objectLockUnknownReason !== undefined ? { objectLockUnknownReason } : {}),
       ...(credentialExpiry !== undefined ? { credentialExpiry } : {}),
-      ...(defaultRetention !== undefined ? { defaultRetention } : {}), ...(dest.checksumRequired?.() === true ? { checksumRequired: true as const } : {}), // learned by the probe write: the router stores it
+      ...(defaultRetention !== undefined ? { defaultRetention } : {}), ...(lockMode !== undefined ? { lockMode } : {}), ...(lockRetentionDays !== undefined && lockMode !== "none" ? { lockRetentionDays } : {}), ...(dest.checksumRequired?.() === true ? { checksumRequired: true as const } : {}), // learned by the probe write: the router stores it
       ms: Date.now() - started,
     };
   } catch (e) {
-    return classifyProbeError((e as Error).message, bucket);
+    // A probe redirected to another region: the destination already reduced the redirect to a closed region token
+    // (fault-log.ts regionHintFromLocation); re-gate it here and carry it. Never the Location URL.
+    const hint = probed?.destFaults?.().redirectRegionHint;
+    return { ...classifyProbeError((e as Error).message, bucket), ...probeFailure((e as Error).message, destStatusOf(e)), ...(isRegionHint(hint) ? { regionHint: hint } : {}) };
   }
 }
 
@@ -232,11 +240,9 @@ export const REPORT_DEFAULT_WINDOW_SECONDS = 90 * 24 * 60 * 60;
 // statusSliceForPosture builds the env-derived presence slice computePosture needs (the part the DO
 // cannot read, since the DO holds no env). It reuses buildStatus (the single presence projection) so the
 // posture and the onboarding status agree on what "configured" means, then narrows it to the fields
-// posture reads. destFacts is the console-set destination read from the DO (readConsoleDestFacts), the
-// same fact /admin/status passes: without it buildStatus sees only a deploy-time env destination, and a
-// destination set in the console reads as none. The downpipe count is irrelevant to the slice, so 0 is
-// passed (buildStatus does not use it for these fields). It carries only booleans; no secret.
-export function statusSliceForPosture(env: Env, destFacts: ConsoleDestFacts): { destConfigured: boolean; breakGlassConfigured: boolean; operationalConfigured: { public: boolean; private: boolean }; operationalRetired: boolean; tokenFallbackDisabled: boolean; adminTokenPresent: boolean } {
+// posture reads. destFacts is the console-set destination (readConsoleDestFacts), as /admin/status passes it,
+// and 0 is the unused downpipe count. Only booleans cross, the console hostname verdict among them; no secret.
+export function statusSliceForPosture(env: Env, destFacts: ConsoleDestFacts): { destConfigured: boolean; breakGlassConfigured: boolean; operationalConfigured: { public: boolean; private: boolean }; operationalRetired: boolean; tokenFallbackDisabled: boolean; adminTokenPresent: boolean; consoleOnWorkersDev?: boolean } {
   const s = buildStatus(env, 0, destFacts);
   return {
     destConfigured: s.destConfigured,
@@ -248,6 +254,7 @@ export function statusSliceForPosture(env: Env, destFacts: ConsoleDestFacts): { 
     // dispose-bootstrap-token finding (the DO supplies the bootstrapConsumed/breakGlassTokenRetired latches
     // from its own storage). No secret crosses; only the presence boolean.
     adminTokenPresent: s.adminTokenConfigured,
+    ...consoleOriginSlice(env.CONSOLE_ORIGIN),
   };
 }
 

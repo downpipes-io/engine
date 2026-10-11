@@ -11,7 +11,6 @@
 // everything runs on an ephemeral temp dir, a locally built binary, and harness-minted keys; there is no
 // estate, bucket, network, seed or spend. assertEphemeralWorkdir refuses any repo-tree or live-keys path.
 //
-//
 
 import { execFileSync, spawnSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";

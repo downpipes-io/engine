@@ -105,6 +105,11 @@ export const MAX_SINGLE_SLICE_RECORD_BYTES = Math.floor(MAX_SLICE_SUBREQUESTS / 
 const REHASH_BYTES_PER_MS = 64 * 1024; // 64 MiB/s conservative SHA-384 streaming-hash throughput floor
 export const MAX_SINGLE_RECORD_CONTENT_BYTES = REHASH_BYTES_PER_MS * Math.floor(MAX_SLICE_WALL_MS / 2);
 
+// SHARE_WINDOW_FLOOR is the usable-work threshold below which SliceBudget.shareWindow stops halving (see
+// its comment): under this many subrequests of real work left, the window already fits at most one
+// caller's turn, so splitting it further only slows that caller for no one else's benefit.
+const SHARE_WINDOW_FLOOR = 2 * FINALISE_RESERVE;
+
 export class SliceBudget implements Meter {
   private readonly maxSubrequests: number;
   private readonly maxWallMs: number;
@@ -180,6 +185,36 @@ export class SliceBudget implements Meter {
   // canFinalise reports whether finalisation can safely run in THIS invocation.
   canFinalise(): boolean {
     return this.remaining() >= FINALISE_RESERVE;
+  }
+
+  // shareWindow returns a budget that SHARES this budget's subrequest tally (every real spend still
+  // counts once against the per-invocation platform cap) but can use only `fraction` of what is left of
+  // this budget RIGHT NOW, on both axes, with its own wall clock starting at this call.
+  //
+  // It exists for one caller inside a shared pass window (replicate.ts mirrorRunToReplica, capping
+  // syncSegmentStore): without it, a single long-running call can spend the WHOLE shared window before it
+  // next checks in, so a round-robin built on the same window never gets a turn until that call is done.
+  // Capping one call's share leaves the rest of the window for the round to reach everyone else; the
+  // caller resumes on a later pass or tick with its own fresh share of whatever is left then.
+  //
+  // The subrequest share is `fraction` of the USABLE work left above FINALISE_RESERVE, not of the raw
+  // remaining() count: remaining() already includes that reserve, so halving remaining() directly would
+  // halve the reserve too, and on an already-tight window (remaining() barely above the reserve) that can
+  // leave less than the reserve in the share, which yields at once and does NO work at all, worse than the
+  // unshared budget would have done. Giving half of the usable work, plus the same reserve, keeps a tight
+  // window able to do half as much instead of nothing.
+  //
+  // Below SHARE_WINDOW_FLOOR of usable work, the window is already so tight that at most one caller can do
+  // anything useful with it THIS tick (a second caller reached after it would see almost nothing left
+  // whether this one is capped or not), so capping buys no other caller a turn and only slows the one
+  // caller there is. The cap applies only once usable work actually exists to divide.
+  shareWindow(fraction: number): SliceBudget {
+    const f = Math.min(1, Math.max(0, fraction));
+    const usable = Math.max(0, this.remaining() - FINALISE_RESERVE);
+    const share = usable <= SHARE_WINDOW_FLOOR ? usable : Math.floor(usable * f);
+    const subrequests = this.tally.spent + FINALISE_RESERVE + share;
+    const wallMs = Math.floor(this.wallRemainingMs() * f);
+    return new SliceBudget({ subrequests, wallMs }, this.tally);
   }
 }
 

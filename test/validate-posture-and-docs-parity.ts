@@ -28,7 +28,6 @@
 //
 // Run with `node test/validate-posture-and-docs-parity.ts [--require]`.
 //
-//
 
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";

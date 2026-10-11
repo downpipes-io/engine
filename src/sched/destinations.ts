@@ -127,6 +127,112 @@ export function replNeverReportedSince(
   return { ...(maxSince !== undefined ? { maxSince } : {}), unanchored };
 }
 
+// latestSuccessfulRun returns the newest OK entry in a downpipe's run-history ring (index-ascending,
+// newest-last), skipping over any failed/abandoned/in-flight entries above it, or undefined when no run
+// in the ring has ever succeeded. This is DELIBERATELY NOT the same rule reconcileReplicationAlerts uses
+// for its own proven-copy accounting (scheduler-do-sre-alerting.ts): that detector stops at the newest
+// RESOLVED run and treats a non-ok newest run as nothing to reason about this tick, because it is
+// answering "is replication keeping up right now". redundant-copies answers a different question --
+// "does a backed-up source currently exist in two places" -- and a run that failed after a prior run
+// succeeded does not erase the two proven copies of that last successful run. Pure.
+export function latestSuccessfulRun<T extends { status: string }>(ring: readonly T[]): T | undefined {
+  for (let i = ring.length - 1; i >= 0; i--) {
+    const h = ring[i];
+    if (h !== undefined && h.status === "ok") return h;
+  }
+  return undefined;
+}
+
+// REPL_VISIT_FALLBACK_MS bounds how long a non-origin destination gets the benefit of the doubt when the
+// replication pass has not visited it since the downpipe's newest successful run finished. Posture is read
+// on every GET /posture and every 6-hourly cron pass; the replication pass itself defers whole downpipes
+// (and individual destinations within a downpipe) for budget, often for several ticks running, with no
+// change at all to that destination's own state. Grading a destination on a run the pass has not reached
+// yet, the instant that run lands, turned a healthy estate's read into a pass/fail flap at every seal (see
+// gradedRunFor). After this bound with still no visit, the gap is real, not a deferral, and the check stops
+// giving credit it cannot back up.
+export const REPL_VISIT_FALLBACK_MS = 6 * 60 * 60 * 1000;
+
+// runFinishedAtMs is the wall-clock moment a run-history entry finished: its recorded start plus its
+// measured duration, when known. durationMs is absent only on a legacy row recorded before it was tracked;
+// such a row's start is read as its finish too, which can only UNDERSTATE how long ago it finished -- the
+// conservative direction, since it never gives a destination MORE time to be visited before the fallback
+// bound applies.
+export function runFinishedAtMs(entry: { startedAt: string; durationMs?: number }): number {
+  const started = Date.parse(entry.startedAt);
+  return started + (typeof entry.durationMs === "number" && entry.durationMs >= 0 ? entry.durationMs : 0);
+}
+
+// gradedRunFor picks which of a downpipe's successful runs (ascending by index, oldest first) ONE
+// non-origin destination is graded against this tick: the newest run the replication pass has actually
+// VISITED this destination for since that run finished (lastAttemptAt >= the run's finish). A fresh run the
+// pass has not reached yet therefore cannot fail a destination that is still proven current on the run
+// before it -- the destination is graded on that older, already-visited run instead, so a deferred tick (or
+// one simply not yet due) reads no differently from a quiet one. Once the NEWEST run is older than
+// REPL_VISIT_FALLBACK_MS with still no visit recorded on this destination, it is graded on that newest run
+// regardless: a destination the pass has not reached in that long is a real gap. Returns undefined when
+// neither holds -- the newest run is both unvisited and still within the fallback bound -- meaning there is
+// nothing fair to grade this destination on yet. Pure.
+export function gradedRunFor<T extends { index: number; startedAt: string; durationMs?: number }>(runs: readonly T[], lastAttemptAt: number, now: number): T | undefined {
+  for (let i = runs.length - 1; i >= 0; i--) {
+    const run = runs[i];
+    if (run !== undefined && lastAttemptAt >= runFinishedAtMs(run)) return run;
+  }
+  const newest = runs[runs.length - 1];
+  if (newest !== undefined && now - runFinishedAtMs(newest) > REPL_VISIT_FALLBACK_MS) return newest;
+  return undefined;
+}
+
+// DestinationRedundancyGap is one non-origin destination assessRedundancy found NOT (yet, truthfully)
+// holding the run it was graded on: lastOk is its most recent replication attempt's outcome (the
+// reachability heartbeat), heldRuns/totalRuns are how many of the downpipe's retained successful runs it
+// currently holds, of how many exist, for a plain "catching up" readout. Redaction-safe: an id, a
+// boolean and two counts, never a key, endpoint or credential.
+export interface DestinationRedundancyGap {
+  destinationId: string;
+  lastOk: boolean;
+  heldRuns: number;
+  totalRuns: number;
+}
+
+// assessRedundancy is the proven half of "N of M copies", read against the run EACH destination is fairly
+// graded on (gradedRunFor) rather than a single downpipe-wide run: the origin of the downpipe's newest
+// successful run always counts (the seal wrote it there); every other configured destination counts only
+// when its holdsIndex is at or past the index of the run IT is graded on. A destination gradedRunFor could
+// not yet fairly judge (a fresh run, not yet visited, still within the fallback bound) never counts toward
+// PROVEN, but it IS still reported in `gaps`: an unvisited destination that counted toward neither side AND
+// stayed unnamed would leave a downpipe failing with no explanation at all, which reads just as wrongly as
+// a vacuous pass -- the operator is owed a reason either way. lastOk defaults to true (catching up, not
+// failing) for a destination with no replication record at all: the absence of a repl row is "not yet
+// attempted", never evidence of a failed attempt, so it must not read the same as a destination whose last
+// real attempt actually failed. `runs` is the downpipe's successful runs, ascending by index (oldest
+// first), exactly the shape the run-history ring already carries. Pure; no I/O.
+export function assessRedundancy<T extends { index: number; startedAt: string; durationMs?: number }>(
+  allDests: readonly string[],
+  origin: string | undefined,
+  runs: readonly T[],
+  repl: Readonly<Record<string, { holdsIndex: number; lastOk?: boolean; lastAttemptAt?: number } | undefined>>,
+  now: number,
+): { provenCopies: number; gaps: DestinationRedundancyGap[] } {
+  const totalRuns = runs.length;
+  const originCounts = origin !== undefined && allDests.includes(origin);
+  let provenCopies = originCounts ? 1 : 0;
+  const gaps: DestinationRedundancyGap[] = [];
+  for (const destId of allDests) {
+    if (originCounts && destId === origin) continue;
+    const st = repl[destId];
+    const graded = gradedRunFor(runs, st?.lastAttemptAt ?? 0, now);
+    const holdsIndex = st?.holdsIndex ?? -1;
+    if (graded !== undefined && holdsIndex >= graded.index) {
+      provenCopies++;
+      continue;
+    }
+    const heldRuns = runs.filter((r) => r.index <= holdsIndex).length;
+    gaps.push({ destinationId: destId, lastOk: st?.lastOk ?? true, heldRuns, totalRuns });
+  }
+  return { provenCopies, gaps };
+}
+
 // retentionWidensPrune says whether a downpipe upsert lets the cron retention pass delete more than the
 // stored config lets it delete. addDownpipe asks for restore.apply when it does, which is the capability
 // the attended prune route needs (router-retention-prune.ts). It lives here because the replica rule
@@ -161,3 +267,24 @@ export function retentionWidensPrune(prior: RetentionScope | undefined, next: Re
 // second approver (the bare token, or no other holder of restore.approve). The router reads it and raises
 // the retention-armed-alone alert. The value is the number of downpipes armed alone.
 export const RETENTION_ARMED_ALONE_HEADER = "x-downpipe-retention-armed-alone";
+
+// FAILED_DESTINATION_BASES is the closed set naming how a FAILED run's destination id is known: attempted (the
+// destination the seal selected and wrote to), pinned (the downpipe's pinned id, the run failed before one
+// resolved), default (the default id that was being resolved). The pack adds "unknown" for a row with none.
+export const FAILED_DESTINATION_BASES = ["attempted", "pinned", "default"] as const;
+export type FailedDestinationBasis = (typeof FAILED_DESTINATION_BASES)[number];
+const DESTINATION_ID_SHAPE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
+
+// failedDestinationOf re-gates an untrusted (id, basis) pair posted on a failed completion: both must pass, or
+// the run records no attribution. The id keeps only the shape of a destination id (dest-81ddfcc4, deploy), so a
+// URL, a bucket name or free text can never ride onto the row or into the pack.
+export function failedDestinationOf(id: unknown, basis: unknown): { id: string; basis: FailedDestinationBasis } | undefined {
+  if (typeof id !== "string" || !DESTINATION_ID_SHAPE.test(id)) return undefined;
+  if (typeof basis !== "string" || !(FAILED_DESTINATION_BASES as readonly string[]).includes(basis)) return undefined;
+  return { id, basis: basis as FailedDestinationBasis };
+}
+
+// destinationIdOf gates a posted destination id to the same shape (undefined when it is not one).
+export function destinationIdOf(id: unknown): string | undefined {
+  return typeof id === "string" && DESTINATION_ID_SHAPE.test(id) ? id : undefined;
+}

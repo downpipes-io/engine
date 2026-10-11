@@ -25,7 +25,7 @@ import { x25519 } from "@noble/curves/ed25519.js";
 import { mlkemKeygen } from "../src/crypto/pq.ts";
 import { buildArchive, type RecipientEntry, type Signer } from "../src/format/writer.ts";
 import { loadSigner, verifierFrom } from "../src/keys-env.ts";
-import { b64urlEncode, concat, utf8 } from "../src/crypto/bytes.ts";
+import { b64urlDecode, b64urlEncode, concat, utf8 } from "../src/crypto/bytes.ts";
 import {
   verifyAtSeal,
   verifyAtSealEnabled,
@@ -35,6 +35,7 @@ import {
   type SealVerification,
 } from "../src/seal/verify-at-seal.ts";
 import { computePosture, type PostureInput } from "../src/admin/posture.ts";
+import { drainIntegrityFaultLedger, noteRunlogAnomaly, resetIntegrityFaultLedger } from "../src/format/integrity-fault-ledger.ts";
 import type { Env } from "../src/env.d.ts";
 import type { Destination, GetResult, PutConditionalResult } from "../src/dest/types.ts";
 import type { NotifyChannel, NotifyEmission } from "../src/notify.ts";
@@ -160,6 +161,29 @@ class SpyDestination implements Destination {
   firstSegmentKey(): string {
     for (const k of this.store.keys()) if (k.startsWith("seg/") && k.endsWith(".seg")) return k;
     throw new Error("no segment object in the store");
+  }
+}
+
+// TornRunlogSigDestination models a concurrent writer landing a RUNLOG update between the two gets a
+// freshness check makes: the body first, its detached signature second. A read in that window sees the
+// NEW body beside the OLD signature, so the signature check fails even though both writes are about to
+// land cleanly. tornSigReads counts down the number of RUNLOG.sig reads that return a corrupted
+// (mismatched) signature before reads go back to the consistent, stored pair; tornSigPermanent never lets
+// them recover, modelling a genuine tamper rather than a torn read.
+class TornRunlogSigDestination extends SpyDestination {
+  tornSigReads = 0;
+  tornSigPermanent = false;
+  async get(key: string): Promise<GetResult | null> {
+    if (key === "_RECOVERY/RUNLOG.sig" && (this.tornSigPermanent || this.tornSigReads > 0)) {
+      if (!this.tornSigPermanent) this.tornSigReads--;
+      const real = await super.get(key);
+      if (!real) return real;
+      const sigBytes = b64urlDecode(new TextDecoder().decode(real.body).trim());
+      const corrupt = new Uint8Array(sigBytes);
+      flipBit(corrupt, corrupt.length - 1);
+      return { body: utf8(b64urlEncode(corrupt)), etag: real.etag };
+    }
+    return super.get(key);
   }
 }
 
@@ -767,6 +791,62 @@ async function main(): Promise<void> {
     ok("knobs: a malformed value falls back to the default (maxBytes 5 GiB)", clamped.maxBytes === 5 * 1024 * 1024 * 1024);
     const zeroAttempts = resolveSealVerifyKnobs({ SEAL_VERIFY_ATTEMPTS: "0" } as Env);
     ok("knobs: attempts is floored to >=1 (matches maxAttempts Math.max(1,...))", zeroAttempts.attempts === 1);
+  }
+
+  // ---- SCENARIO 12: a torn RUNLOG read heals with no false integrity fault -----------------------
+  // A concurrent writer lands the RUNLOG body and its .sig as two separate writes. A verify read
+  // between them sees the NEW body beside the OLD signature, so attempt 1's signature check fails and
+  // records a sig-invalid anomaly, but the write finishes before attempt 2 reads, which sees a
+  // consistent pair and passes. The healed verdict must not carry the superseded attempt's false fault.
+  console.log("scenario-12: torn RUNLOG read (new body, stale sig) heals with no false sig-invalid fault");
+  {
+    resetIntegrityFaultLedger();
+    const dest = new TornRunlogSigDestination();
+    dest.seed(await freshArchive());
+    dest.tornSigReads = 1; // attempt 1's RUNLOG.sig read is torn; attempt 2 reads the consistent pair
+    const v = await verifyAtSeal({ ...envOp, SEAL_VERIFY_ATTEMPTS: "3" } as Env, dest, RUN_ID, totalBytes);
+    ok("verdict is verified (the retry rode out the torn read)", v.status === "verified");
+    ok("attempts is 2 (healed on the second read)", v.attempts === 2);
+    ok("recovered is true", v.recovered === true);
+    const snap = drainIntegrityFaultLedger();
+    ok("no sig-invalid runlogAnomaly row survives the healed retry", !snap.runlogAnomalies.some((a) => a.kind === "sig-invalid"));
+    ok("no freshness-signature failStage survives the healed retry", (snap.failStages["freshness-signature"] ?? 0) === 0);
+  }
+
+  // ---- SCENARIO 13: a persistent signature tamper still surfaces its fault -----------------------
+  // A rollback-on-retry must never hide a REAL tamper: when the RUNLOG signature never matches (every
+  // attempt, not just the first), the final suspect verdict's ledger row is the proof support needs.
+  console.log("scenario-13: a RUNLOG signature that never verifies stays a suspect with its fault on record");
+  {
+    resetIntegrityFaultLedger();
+    const dest = new TornRunlogSigDestination();
+    dest.seed(await freshArchive());
+    dest.tornSigPermanent = true; // every attempt sees a mismatched signature: a real tamper, not a torn read
+    const N = 3;
+    const v = await verifyAtSeal({ ...envOp, SEAL_VERIFY_ATTEMPTS: String(N) } as Env, dest, RUN_ID, totalBytes);
+    ok("verdict is a final suspect (a persistent tamper never heals)", v.status === "suspect");
+    ok("attempts === N (the bounded retries were exhausted)", v.attempts === N);
+    const snap = drainIntegrityFaultLedger();
+    const sigRows = snap.runlogAnomalies.filter((a) => a.kind === "sig-invalid");
+    ok("the ledger holds exactly the final attempt's sig-invalid row, not one per attempt", sigRows.length === 1);
+    ok("the freshness-signature failStage count is exactly 1 (the rollback did not hide the real tamper)", snap.failStages["freshness-signature"] === 1);
+  }
+
+  // ---- SCENARIO 14: a fault noted before verifyAtSeal runs survives a later healed verify ---------
+  // markIntegrityFaultLedger/rollbackIntegrityFaultLedger must only ever undo what THIS call added: a
+  // fault the run already held before verify-at-seal started is not the deciding attempt's to discard.
+  console.log("scenario-14: an earlier-recorded fault is kept across a later healed verify");
+  {
+    resetIntegrityFaultLedger();
+    noteRunlogAnomaly({ kind: "run-missing", indexA: 1, entryCount: 1 });
+    const dest = new TornRunlogSigDestination();
+    dest.seed(await freshArchive());
+    dest.tornSigReads = 1; // attempt 1 is torn, attempt 2 heals, exactly as scenario 12
+    const v = await verifyAtSeal({ ...envOp, SEAL_VERIFY_ATTEMPTS: "3" } as Env, dest, RUN_ID, totalBytes);
+    ok("verdict is verified (self-healed)", v.status === "verified");
+    const snap = drainIntegrityFaultLedger();
+    ok("the fault noted BEFORE verifyAtSeal ran is still present", snap.runlogAnomalies.some((a) => a.kind === "run-missing"));
+    ok("the healed attempt's own sig-invalid row is still dropped", !snap.runlogAnomalies.some((a) => a.kind === "sig-invalid"));
   }
 
   console.log(failures === 0 ? "\nVERIFY-AT-SEAL PASS (good runs verify; corrupt/truncated writes are caught suspect, fail-open, posture + notification)" : `\n${failures} FAILURE(S)`);

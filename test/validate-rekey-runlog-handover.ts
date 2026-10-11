@@ -18,6 +18,7 @@
 
 import { x25519 } from "@noble/curves/ed25519.js";
 import { handleAdmin } from "../src/admin/router.ts";
+import { buildSupportBundle } from "../src/admin/support.ts";
 import { b64urlDecode, b64urlEncode, concat } from "../src/crypto/bytes.ts";
 import { mlkemKeygen } from "../src/crypto/pq.ts";
 import { type HybridVerifier, hybridVerify } from "../src/crypto/sign.ts";
@@ -143,6 +144,20 @@ async function install(e: Estate, cf: ReturnType<typeof cfSecrets>, newSigner: s
     globalThis.fetch = realFetch;
   }
 }
+// packOf builds the real support bundle for the estate, with every outbound fetch refused (the pack reads the DO).
+async function packOf(e: Estate): Promise<Record<string, unknown>> {
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async () => new Response("offline", { status: 503 })) as typeof fetch;
+  try {
+    return await buildSupportBundle(e.env, e.env.SCHEDULER.get(e.env.SCHEDULER.idFromName("scheduler")));
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+}
+function runlogAnomaliesIn(pack: Record<string, unknown>, downpipeId: string): Array<{ kind?: string; indexA?: number; indexB?: number; digest?: string; entryCount?: number }> {
+  const f = (pack.integrityFaults ?? {}) as Record<string, { runlogAnomalies?: Array<{ kind?: string }> }>;
+  return f[downpipeId]?.runlogAnomalies ?? [];
+}
 async function handoverRecord(e: Estate): Promise<{ open?: boolean; pending?: string[]; oldVerifier?: unknown }> {
   return (await (await e.dobj.fetch(new Request("https://scheduler.internal/rekey-handover"))).json()) as { open?: boolean; pending?: string[]; oldVerifier?: unknown };
 }
@@ -191,6 +206,36 @@ async function main(): Promise<void> {
     ok("the changed bytes are left as they were", e.store.get(RUNLOG)!.every((b, i) => b === tampered[i]));
     ok("the audit records the refused hand-over with the destination and reason", r.audit.some((a) => a.action === "runlog-handover" && a.outcome === "failed" && a.target?.op === "handover-refused" && JSON.stringify(a.target.reasons) === '["sig-invalid"]'));
     ok("the DO holds no old key and holds no allocation", (await handoverRecord(e)).open === false);
+    ok("CONTROL: a signature refusal posts no chain-anomaly row, so the pack has none for this downpipe", runlogAnomaliesIn(await packOf(e), DP).length === 0);
+  }
+
+  console.log("\n-- 2b. a validly signed RUNLOG with a chain anomaly stops the re-key, and the pack names the anomaly --");
+  {
+    const oldSigner = signerB64();
+    const newSigner = signerB64();
+    const oldV = verifierFrom(await loadSigner(oldSigner));
+    const e = await estate(oldSigner);
+    // The plant: entry 2's predecessor is a run that is not in the RUNLOG, signed under
+    // the old key, so the signature and the parse pass and only the chain check refuses.
+    const s = await loadSigner(oldSigner);
+    const planted = await signRunlog([entry(1, null), entry(2, R(9))], s.edPrivate, s.mldsaSecret);
+    await e.dest.put(RUNLOG, planted.runlog);
+    await e.dest.put(RUNLOG_SIG, new TextEncoder().encode(b64urlEncode(planted.sig)));
+    await e.dest.delete("_RECOVERY/RUNLOG.sig.pending");
+    ok("CONTROL: the planted RUNLOG verifies under the old key", await sigVerifies(e.store, oldV));
+    ok("CONTROL: before the re-key the pack has no RUNLOG anomaly for the downpipe", runlogAnomaliesIn(await packOf(e), DP).length === 0);
+    const cf = cfSecrets({ SIGNER_PRIVATE: oldSigner });
+    const r = await install(e, cf, newSigner);
+    ok(`the re-key is refused with 409 (got ${r.status})`, r.status === 409, r.body);
+    ok("the refusal names the chain anomaly", /deploy-time destination: chain-anomaly/.test(String(r.body.error ?? "")), r.body);
+    ok("no secret was written", cf.log.length === 0 && cf.bound.get("SIGNER_PRIVATE") === oldSigner, cf.log);
+    const pack = await packOf(e);
+    const rows = runlogAnomaliesIn(pack, DP);
+    // Entry 2 does not chain to entry 1, so the linearity check (run before the dangling check) names a chain-break.
+    ok("the pack names the refused re-key's anomaly: integrityFaults carries a chain-break row for the downpipe", rows.some((a) => a.kind === "chain-break" && a.indexA === 1 && a.indexB === 2), pack.integrityFaults);
+    ok("the row carries the entry count and a 12-hex RUNLOG digest", rows.some((a) => a.kind === "chain-break" && a.entryCount === 2 && /^[0-9a-f]{12}$/.test(a.digest ?? "")), rows);
+    const text = JSON.stringify(pack);
+    ok("the pack carries no run id from the anomaly's reason text", !text.includes(R(9)) && !text.includes(R(2)));
   }
 
   console.log("\n-- 3. an install that fails AFTER the signer PUT still hands over under the new key --");
@@ -301,6 +346,38 @@ async function main(): Promise<void> {
     const cf = cfSecrets({});
     const r = await install({ env, dobj, store: new Map(), dest: await buildDestination(env) }, cf, newSigner);
     ok(`a first install returns 200 with no hand-over (got ${r.status})`, r.status === 200 && r.body.runlogHandover === undefined, r.body);
+  }
+
+  console.log("\n-- 8. the support pack's configEvents names a re-key's hand-over and a refused re-key --");
+  {
+    // packEvents builds the real support bundle (outbound fetches refused) and returns its runlog-handover rows.
+    const packEvents = async (e: Estate): Promise<Array<Record<string, unknown>>> => {
+      const realFetch = globalThis.fetch;
+      globalThis.fetch = (async () => new Response("offline", { status: 503 })) as typeof fetch;
+      try {
+        const pack = await buildSupportBundle(e.env, e.env.SCHEDULER.get(e.env.SCHEDULER.idFromName("scheduler")));
+        return ((pack.configEvents ?? []) as Array<Record<string, unknown>>).filter((c) => c.action === "runlog-handover");
+      } finally {
+        globalThis.fetch = realFetch;
+      }
+    };
+    const ok1 = await estate(signerB64());
+    ok("CONTROL: before any re-key the pack has no runlog-handover row", (await packEvents(ok1)).length === 0);
+    const oldSigner = signerB64();
+    const done = await estate(oldSigner);
+    await install(done, cfSecrets({ SIGNER_PRIVATE: oldSigner }), signerB64());
+    const ev = await packEvents(done);
+    ok("a completed hand-over: the pack has runlogOp handover with 1 re-signed and 0 pending", ev.some((c) => c.runlogOp === "handover" && c.resigned === 1 && c.pending === 0), ev);
+    ok("...and runlogOp held-key-discarded", ev.some((c) => c.runlogOp === "held-key-discarded"), ev);
+    const refusedSigner = signerB64();
+    const refused = await estate(refusedSigner);
+    const s = await loadSigner(refusedSigner);
+    const changed = parseRunlog(refused.store.get(RUNLOG)!).map((x) => (x.runId === R(1) ? { ...x, recordCount: 999 } : x));
+    await refused.dest.put(RUNLOG, (await signRunlog(changed, s.edPrivate, s.mldsaSecret)).runlog);
+    await install(refused, cfSecrets({ SIGNER_PRIVATE: refusedSigner }), signerB64());
+    const rv = await packEvents(refused);
+    ok("a refused re-key: the pack has runlogOp handover-refused with reasons sig-invalid", rv.some((c) => c.runlogOp === "handover-refused" && JSON.stringify(c.reasons) === '["sig-invalid"]'), rv);
+    ok("the pack rows carry no destination id or digest", [...ev, ...rv].every((c) => !("destinationIds" in c) && !("digest" in c)), [...ev, ...rv]);
   }
 
   console.log(failures === 0 ? "\nREKEY RUNLOG HANDOVER PASS" : `\n${failures} FAILURE(S)`);

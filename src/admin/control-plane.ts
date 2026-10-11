@@ -25,7 +25,7 @@
 import type { CpExportFailClass } from "../cron/cron-fault-ledger.ts";
 import { b64urlDecode, b64urlEncode } from "../crypto/bytes.ts";
 import { type HybridVerifier, type HybridVerifyVerdict, hybridSign, hybridVerifyDetailed } from "../crypto/sign.ts";
-import { canonicalJSON } from "../format/canonjson.ts";
+import { canonicalJSON, NotCanonicalisableError } from "../format/canonjson.ts";
 import type { Signer } from "../format/writer.ts";
 import type { TestDeleteProbe } from "../sched/sched-fault-ledger.ts";
 import { isWrappedSecret, type WrappedSecret } from "./config-secret.ts";
@@ -134,6 +134,9 @@ export interface ExportedDestination {
   // "enforced" only. It rides so an estate reconciled from the export keeps the answer. Without it every
   // locked destination came back as "rule not checked" until each one was saved again with Replace.
   defaultRetention?: boolean;
+  // lockMode and lockRetentionDays are the default rule's mode and period (lock-facts.ts), beside "enforced" only.
+  lockMode?: "GOVERNANCE" | "COMPLIANCE" | "none";
+  lockRetentionDays?: number;
   // assumeRole is projected to its NON-SECRET roleArn + durationSeconds only; the externalId
   // (credential-class) is dropped and recorded as needing re-establishment.
   assumeRole?: { roleArn: string; durationSeconds?: number; externalIdReestablish: true };
@@ -292,6 +295,20 @@ export function serialiseControlPlaneExport(exp: ControlPlaneExport): Uint8Array
   return canonicalJSON(exp);
 }
 
+// controlPlaneExportBytesOrNull is serialiseControlPlaneExport for an UNTRUSTED parsed export (a request body,
+// a bucket artefact): it returns null where the export has no canonical form (a non-integer number, a lone
+// surrogate) instead of throwing. The signer canonicalises before it signs, so such an export can never be
+// one that was signed, and every caller turns null into the refusal for an altered export.
+export function controlPlaneExportBytesOrNull(exp: ControlPlaneExport): Uint8Array | null {
+  try {
+    return serialiseControlPlaneExport(exp);
+  } catch (e) {
+    // site-fault-waiver: src/admin/control-plane.ts:controlPlaneExportBytesOrNull:catch:1 -- a body with no canonical form was never signed, and every caller records the altered-export refusal for the null
+    if (e instanceof NotCanonicalisableError) return null;
+    throw e;
+  }
+}
+
 // signControlPlaneExport attaches a DETACHED hybrid signature over the canonical export bytes (b64url).
 export async function signControlPlaneExport(signer: Signer, exp: ControlPlaneExport): Promise<string> {
   const sig = await hybridSign(signer.edPrivate, signer.mldsaSecret, serialiseControlPlaneExport(exp));
@@ -326,7 +343,11 @@ export async function verifyControlPlaneSignatureDetailed(exp: ControlPlaneExpor
   } catch {
     return "sig-decode"; // not base64url at all: the signature FILE is damaged, and nothing was ever checked
   }
-  return await hybridVerifyDetailed(verifier, serialiseControlPlaneExport(exp), bytes);
+  // An export with no canonical form was never signed: it is an altered artefact, so it takes the verdict
+  // for one rather than throwing out of a function whose callers rely on it never throwing.
+  const canonical = controlPlaneExportBytesOrNull(exp);
+  if (canonical === null) return "ed25519-mismatch";
+  return await hybridVerifyDetailed(verifier, canonical, bytes);
 }
 
 // verifyControlPlaneSignature re-derives the canonical bytes and verifies BOTH hybrid halves against the
@@ -385,10 +406,17 @@ function isPermittedSecretFieldShape(v: unknown): boolean {
 // ExportedSecret union ({wrapped}|{reestablish}), or absent (null / empty string); never a bare string and
 // never an arbitrary object that could hide a plaintext. This is the no-custody invariant, asserted
 // structurally so it holds even if a future projection change accidentally let a value through.
-export function assertNoPlaintextSecretInExport(value: unknown, path = "$"): void {
+//
+// The walk is bounded: a value nested deeper than EXPORT_MAX_NESTING levels is refused with the same
+// no-custody error rather than recursed into, so hostile input cannot overflow the stack before the
+// signature check. A genuine export nests well under ten levels.
+export const EXPORT_MAX_NESTING = 64;
+
+export function assertNoPlaintextSecretInExport(value: unknown, path = "$", depth = 0): void {
   if (value === null || typeof value !== "object") return;
+  if (depth > EXPORT_MAX_NESTING) throw new Error(`no-custody violation: export nesting exceeds ${EXPORT_MAX_NESTING} levels at ${path.slice(0, 80)}`);
   if (Array.isArray(value)) {
-    for (let i = 0; i < value.length; i++) assertNoPlaintextSecretInExport(value[i], `${path}[${i}]`);
+    for (let i = 0; i < value.length; i++) assertNoPlaintextSecretInExport(value[i], `${path}[${i}]`, depth + 1);
     return;
   }
   // An EXACT WrappedSecret (v/iv/ct only) is the permitted encrypted form; do not recurse into its iv/ct
@@ -405,7 +433,7 @@ export function assertNoPlaintextSecretInExport(value: unknown, path = "$"): voi
         throw new Error(`no-custody violation: secret field "${k}" at ${path} is neither a wrapped envelope nor a reestablish marker`);
       }
     }
-    assertNoPlaintextSecretInExport(v, `${path}.${k}`);
+    assertNoPlaintextSecretInExport(v, `${path}.${k}`, depth + 1);
   }
 }
 

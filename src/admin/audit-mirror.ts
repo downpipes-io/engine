@@ -7,7 +7,7 @@ import type { AuditEvent } from "./audit.ts";
 // Exabeam, Rapid7 InsightIDR, CrowdStrike NG-SIEM, Wazuh), or R2/S3 for batch pickup.
 // The complementary PULL path (a platform-issued client/secret reading
 // GET /support/audit-feed) serves collectors that prefer polling; both carry the same
-// events. See docs/SCALE-AND-ENTERPRISE.md section 3 (where the logs are, and how they reach a SIEM).
+// events.
 //
 // The line is REDACTION-SAFE BY CONSTRUCTION: an AuditEvent already carries only the
 // closed-union action/outcome, the coarse target labels, the actor's verified email and

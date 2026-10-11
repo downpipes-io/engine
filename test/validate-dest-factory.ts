@@ -141,8 +141,7 @@ async function testHttpsEnforcement(): Promise<void> {
   // byte is signed, so the SigV4 Authorization header and archive bytes never ride cleartext.
   const httpMsg = await rejects(() => buildDestination(env({ DEST_KIND: "s3", ...S3_OK, DEST_ENDPOINT: "http://s3.example.com" })));
   ok("S3 path refuses a non-https (http://) endpoint", httpMsg !== null);
-  // THE LOOPBACK EXEMPTION IS GONE FROM THIS PATH. This assertion used to read "S3 path permits
-  // http://localhost (the local test exception)", and it was measuring a real hole rather than a test
+  // THERE IS NO LOOPBACK EXEMPTION ON THIS PATH. A loopback exception would be a real hole rather than a test
   // convenience: buildDestination is the DEPLOYED builder for both the env destination and the console one,
   // so DEST_ENDPOINT=http://localhost:9000 built a live archive destination that signed the SigV4 credential
   // onto a cleartext request. requireHttpsEndpoint's allowance is now a seam this builder does not pass, so

@@ -46,7 +46,6 @@
 // guard in that checkout compute 0 whatever the pin is. A line that says 0 in both places must be able to say
 // WHY it is 0, so the sha is printed beside the number and never on its own.
 //
-//
 
 import { execFileSync } from "node:child_process";
 import { existsSync, realpathSync } from "node:fs";

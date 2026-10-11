@@ -251,7 +251,7 @@ async function handleSamlAcs(req: Request, env: Env, scheduler: DurableObjectStu
   // an SP-POST ACS carries no caller header). Server-read from the edge header, never a client field.
   const sourceIp = req.headers.get("CF-Connecting-IP");
   try {
-    const resp = await scheduler.fetch(doURL("/idp/saml/acs"), { method: "POST", body: JSON.stringify({ connId, samlResponse, relayState, acsUrl, browserBind, ...(sourceIp !== null ? { sourceIp , ...(readSessionCookie(req) ? { priorToken: readSessionCookie(req) } : {}) } : {}) }), headers: { "content-type": "application/json" } });
+    const resp = await scheduler.fetch(doURL("/idp/saml/acs"), { method: "POST", body: JSON.stringify({ connId, samlResponse, relayState, acsUrl, browserBind, ...(sourceIp !== null ? { sourceIp } : {}), ...(readSessionCookie(req) ? { priorToken: readSessionCookie(req) } : {}) }), headers: { "content-type": "application/json" } });
     const out = (await resp.json()) as { ok?: boolean; token?: string; returnTo?: string; newSignInContext?: boolean; reason?: unknown };
     if (out.ok !== true || typeof out.token !== "string") {
       // Count the SAML sub-cause (the IdP's own StatusCode class, an encrypted assertion, an IdP-initiated

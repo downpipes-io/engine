@@ -1,0 +1,14 @@
+{
+  "$schema": "../../node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "testRunner": "command",
+  "commandRunner": { "command": "node test/validate-integrity-faults.ts && node test/validate-checkpoint-wrap-vectors.ts && node test/validate-crypto.ts && node test/validate-pq.ts && node test/validate-key-derivation-separation.ts && node test/validate-hybrid-capsule-and.ts && node test/validate-hybrid-signature-and.ts && node test/validate-signer-rotation-explain.ts && node test/validate-crypto-kat-multichunk.ts && node test/validate-attest-crypto.ts && node test/validate-streamseal.ts && node test/validate-config-rewrap.ts" },
+  "mutate": ["src/crypto/sign.ts", "src/crypto/capsule.ts", "src/crypto/kem.ts", "src/crypto/combiner.ts"],
+  "ignorePatterns": [".worktrees", ".stryker-tmp", "coverage", "*.log", "test/mutation-pilot/reports"],
+  "reporters": ["clear-text", "json"],
+  "jsonReporter": { "fileName": "test/mutation-pilot/reports/crypto.json" },
+  "thresholds": { "high": 95, "low": 90, "break": null },
+  "timeoutMS": 60000,
+  "concurrency": 4,
+  "tempDirName": ".stryker-tmp-crypto",
+  "cleanTempDir": true
+}

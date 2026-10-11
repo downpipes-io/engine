@@ -98,7 +98,7 @@ The subject is shaped at the trust boundary, distinctly per method:
   never collide.
 
 The email is still canonicalised exactly once, at the trust boundary in `resolveCaller`,
-via `canonicalEmail` (trim and `toLowerCase`) (`engine/src/admin/router-session.ts:54`;
+via `canonicalEmail` (trim and `toLowerCase`) (`engine/src/admin/router-session.ts:55`;
 `engine/src/admin/identity-roles.ts:114-118`), so a single canonical display form is seen by the
 audit and the pending invite. The DO's own `normaliseEmail` applies the
 same lowercase-and-trim normalisation at its authority boundary
@@ -112,7 +112,7 @@ reassigned email can NEVER inherit a departed member's role. A caller whose emai
 departed member's but whose subject differs has no bound role entry (the departed member's
 grant bound to the departed subject, or was deleted) and matches no pending invite of the
 departed member, so it resolves to the least-privilege `viewer`
-(`engine/src/sched/scheduler-do-rbac-authority.ts:82-140`, `roleForCaller`). The OIDC-preferred stable identifier is the
+(`engine/src/sched/scheduler-do-rbac-authority.ts:83-141`, `roleForCaller`). The OIDC-preferred stable identifier is the
 key in fact, not in aspiration.
 
 A user who changes their own email address at Cloudflare Access or at a native OIDC IdP keeps
@@ -136,13 +136,13 @@ authenticated caller from the break-glass:
   verdict, if the canonical email is null on any verdict other than the `token` method, the
   request is refused with HTTP 401 and a log line tagged `authn failure method=<method>
   reason=session verified but carried no usable email`.
-- `resolveCaller` in `engine/src/admin/router-session.ts:43-94`: the bearer-token Owner
+- `resolveCaller` in `engine/src/admin/router-session.ts:44-95`: the bearer-token Owner
   break-glass (`method === "token"`, `:59`) is the only path that resolves without an email or
   subject. Any other method's verdict missing either is explicitly not allowed to take the
   token break-glass branch and instead resolves to the least-privilege `viewer` role (`:74`).
 - The scheduler DO's `roleForCaller` keys on the stable subject and fails closed to `viewer`
   for a subjectless non-token caller, with a matching `SECURITY:` comment
-  (`engine/src/sched/scheduler-do-rbac-authority.ts:82-140`, `roleForCaller`).
+  (`engine/src/sched/scheduler-do-rbac-authority.ts:83-141`, `roleForCaller`).
 
 The only emailless authenticated path that exists by design is the `ADMIN_TOKEN` break-glass
 (`method: "token"`), presented as the bare bearer or as the session it is exchanged for. It
@@ -174,7 +174,7 @@ ordering in `ROLE_RANK` at `:65-72`; per-route authority is decided by the `ROLE
 capability map (`engine/src/admin/identity-rbac.ts:47-95`), not by rank. The last-Owner guard
 prevents the only effective Owner from being demoted or removed, enforced inside a single
 storage read-modify-write in the DO so there is no race (`setRole` at
-`engine/src/sched/scheduler-do-rbac-mutations.ts:41`, `deleteRole` at `:229`, each calling
+`engine/src/sched/scheduler-do-rbac-mutations.ts:42`, `deleteRole` at `:229`, each calling
 `checkOwnerRemoval` at `:89` and `:294`). While Require Approver is on, the floor is two Owners.
 While two or more Owners exist, a change that takes the owner role away from a current Owner (a
 demotion to any other role, a custom-role assignment or a delete) is queued for a second Owner's
@@ -184,14 +184,14 @@ it (`:570`). A revoke of every sign-in factor of an Owner is refused while two o
 (`engine/src/sched/scheduler-do-signin-factors.ts:404`). So one Owner cannot bring the Owner count
 down to one and then act alone. The bare-token break-glass is exempt from both rules.
 A separate guard, `requireNotOwnerEscalation`
-(`engine/src/sched/scheduler-do-rbac-authority.ts:495`), lets only an Owner grant or remove the
+(`engine/src/sched/scheduler-do-rbac-authority.ts:496`), lets only an Owner grant or remove the
 owner role. The Owner count operates over both bound and pending
 entries, so the guard cannot be defeated by removing the only bound Owner while a pending
 Owner exists, or vice versa (`countOwners`, `engine/src/sched/scheduler-do-rbac.ts:371-376`).
 
 The optional identity-provider group-to-role mapping is additive and capped below `owner`: a
 group can never confer `owner`. The cap is enforced both at write time (`setGroupRole` rejects
-`owner`, `engine/src/sched/scheduler-do-rbac-mutations.ts:435`) and at resolution (`capGroupRole`
+`owner`, `engine/src/sched/scheduler-do-rbac-mutations.ts:442`) and at resolution (`capGroupRole`
 clamps any stored `owner` value back to `approver`, `engine/src/sched/scheduler-do-rbac.ts:389-399`).
 The last-Owner count operates only over explicit `role:sub:`/pending entries; a group mapping can
 never count toward it (`engine/src/sched/scheduler-do-rbac.ts:371-376`, `countOwners`).
@@ -241,7 +241,7 @@ controls bound its lifetime:
   to Owner, it can never un-retire itself, and the admin API has no un-retire route. Without a
   second Owner, the gate requires working recovery codes held by a passkey-bound Owner, because an
   Access-bound Owner's codes recover to viewer (`recoveryBreakGlassVerdict`,
-  `engine/src/sched/scheduler-do-recovery.ts:589`).
+  `engine/src/sched/scheduler-do-recovery.ts:590`).
 
 ---
 
@@ -259,7 +259,7 @@ that session, section 2.2), and the bare `ADMIN_TOKEN` bearer carries no session
 
 The session token is `<body_b64url>.<mac_b64url>`, where `mac = HMAC-SHA-256(key, body)`. The
 signing key is a 32-byte CSPRNG value generated ONCE by the DO and persisted under a single DO
-key (`sessionSigningKey`, `engine/src/sched/scheduler-do-session.ts:187-219`); it never leaves the
+key (`sessionSigningKey`, `engine/src/sched/scheduler-do-session.ts:188-220`); it never leaves the
 DO, so both the sign and the constant-time verify run inside the DO (`session.ts` is the pure,
 key-as-argument core the DO drives: `signSession`, `engine/src/admin/session.ts:245`, and
 `verifySessionClassified`, `engine/src/admin/session.ts:319`). Key properties:
@@ -269,7 +269,7 @@ key-as-argument core the DO drives: `signSession`, `engine/src/admin/session.ts:
   tampered or forged body can never set the email or extend the expiry
   (`engine/src/admin/session.ts:319-387`, the constant-time compare at `:338`). The per-request
   check runs over the in-DO key via a DO fetch (`passkeySessionVerify`,
-  `engine/src/sched/scheduler-do-session.ts:387-500`).
+  `engine/src/sched/scheduler-do-session.ts:388-501`).
 - **Identity and epoch only; role is never carried.** The signed body holds a format version,
   the authentication method, the email (an OIDC IdP may not have verified it), the stable subject, the IdP connection id for
   an OIDC or SAML session, a per-email session `epoch`, a per-session id, and the issued-at,
@@ -279,7 +279,7 @@ key-as-argument core the DO drives: `signSession`, `engine/src/admin/session.ts:
   pinned in the token, so a session can never smuggle an elevated role.
 - **Absolute 12-hour TTL.** The session is bounded by an absolute `exp` set once at mint
   (`SESSION_TTL_MS`, `engine/src/admin/session.ts:53`). The absolute expiry is never slid; only
-  `lastSeen` is refreshed (the slide re-mint at `engine/src/sched/scheduler-do-session.ts:490-495`
+  `lastSeen` is refreshed (the slide re-mint at `engine/src/sched/scheduler-do-session.ts:491-496`
   passes the original `iat` and `exp` back into `signSession`), so a leaked cookie is useless past
   the TTL deterministically. `verifySessionClassified` rejects a token at or past its `exp`
   (`engine/src/admin/session.ts:374`) and a token idle past `SESSION_IDLE_MS` (`:464`). The full
@@ -301,7 +301,7 @@ The native session carries five time bounds. Each is a named constant in
 |-------|----------|-------|-------------|
 | Absolute lifetime | `SESSION_TTL_MS` (`engine/src/admin/session.ts:53`) | 12 hours | `exp` is set once at mint (`signSession`, `engine/src/admin/session.ts:245`; the `exp` computation at `:250-255`); `verifySessionClassified` rejects a token at or past `exp` (`engine/src/admin/session.ts:374`). |
 | Inactivity timeout | `SESSION_IDLE_MS` (`engine/src/admin/session.ts:59`) | 2 hours | `verifyV3Body` rejects a token whose `lastSeen` is that old (`engine/src/admin/session.ts:464`). Evaluated on every request, independent of the absolute cap. |
-| Slide cadence | `SESSION_SLIDE_MS` (`engine/src/admin/session.ts:71`) | 15 minutes | `slideDue` (`engine/src/admin/session.ts:484`); the DO re-mints with the original `iat` and `exp` preserved, moving only `lastSeen` (`engine/src/sched/scheduler-do-session.ts:534-538`). The slide never extends the absolute lifetime. |
+| Slide cadence | `SESSION_SLIDE_MS` (`engine/src/admin/session.ts:71`) | 15 minutes | `slideDue` (`engine/src/admin/session.ts:484`); the DO re-mints with the original `iat` and `exp` preserved, moving only `lastSeen` (`engine/src/sched/scheduler-do-session.ts:541-545`). The slide never extends the absolute lifetime. |
 | Step-up freshness | `STEPUP_FRESH_MS` (`engine/src/admin/session.ts:84`) | 5 minutes | `stepUpCheck` admits a passkey session whose `iat` is younger than this without a fresh assertion (`engine/src/sched/scheduler-do-stepup.ts:221`). An `oidc` or `saml` session qualifies only on passkey self-add and on ending the member's own sessions. |
 | Step-up token | `STEPUP_TOKEN_TTL_MS` (`engine/src/admin/session.ts:90`) | 2 minutes | A minted step-up token is single use and consumed at the check. |
 
@@ -331,7 +331,7 @@ long run without that effect.
 **Compensating controls, each stricter than the session model revision 4 assumes.** The idle bound
 does not stand alone. The following controls apply to every native session regardless of its age:
 
-- Every step-up gated action (`STEPUP_SUBS`, `engine/src/admin/router-core.ts:408`) is
+- Every step-up gated action (`STEPUP_SUBS`, `engine/src/admin/router-core.ts:454`) is
   refused unless the session is a passkey session authenticated within 5 minutes, or the request
   carries a single-use step-up token from a fresh passkey assertion
   (`engine/src/sched/scheduler-do-stepup.ts:221-227`). The IdP-established sessions get the
@@ -341,9 +341,9 @@ does not stand alone. The following controls apply to every native session regar
 - The role is re-resolved from the DO role table on every request and is never carried in the token
   (§2.1), so a demotion or removal takes effect on the next request rather than at session end.
 - Epoch revocation kills every session for an identity on its next request: on logout
-  (`passkeySessionLogout`, `engine/src/sched/scheduler-do-session.ts:653`), on offboarding
-  (`deleteRole`, `engine/src/sched/scheduler-do-rbac-mutations.ts:229`, the epoch bumps at `:276`
-  and `:374-375`), and on a factor change (§2.4). The three termination actions in §2.4 end
+  (`passkeySessionLogout`, `engine/src/sched/scheduler-do-session.ts:660`), on offboarding
+  (`deleteRole`, `engine/src/sched/scheduler-do-rbac-mutations.ts:230`, the epoch bumps at `:281`
+  and `:381-382`), and on a factor change (§2.4). The three termination actions in §2.4 end
   sessions on demand.
 - The cookie is `__Host-`, `HttpOnly`, `Secure`, `SameSite=Strict` (`sessionSetCookie`,
   `engine/src/admin/session.ts:495-497`), and every mutating cookie-borne request passes the
@@ -413,12 +413,12 @@ The passkey session is self-contained yet revocable, via a per-email session epo
 signing-key rotation. A monotonic per-email `epoch` counter is stored in the DO
 (`SESSION_EPOCH_PREFIX`, `engine/src/sched/scheduler-do-keys.ts:190`); the token carries the
 epoch at issue, and `passkeySessionVerify` rejects a token whose epoch is below the email's
-current stored value (`engine/src/sched/scheduler-do-session.ts:420-426`). Bumping the epoch
+current stored value (`engine/src/sched/scheduler-do-session.ts:421-427`). Bumping the epoch
 therefore invalidates every session minted before the bump, with no session store to walk.
 Logout bumps the email's epoch and clears the cookie with the same attributes and `Max-Age=0`
 (`sessionClearCookie`, `engine/src/admin/session.ts:505-507`; route `POST /admin/auth/logout`,
 `handleLogout`, `engine/src/admin/router-auth-flow.ts:274`; `passkeySessionLogout`,
-`engine/src/sched/scheduler-do-session.ts:639-668`).
+`engine/src/sched/scheduler-do-session.ts:646-675`).
 A native (OIDC, OAuth2 or SAML) session is the exception: its email is what the IdP asserted and may
 be unverified, so its logout moves only its own subject's not-before instant, never the email
 epoch. Another identity that asserts the same email is not signed out. The same rule holds for the
@@ -432,24 +432,24 @@ The termination capabilities are:
     (`engine/src/admin/router-account-session.ts:179`) bumps the caller's own epoch and returns a
   freshly-minted token carrying the new epoch, so the current session stays alive while all
   others die. A native caller instead revokes its own subject's other sessions one by one by id
-  and moves no epoch (`terminateOwnOtherSessions`, `engine/src/sched/scheduler-do-session.ts:549-601`).
+  and moves no epoch (`terminateOwnOtherSessions`, `engine/src/sched/scheduler-do-session.ts:556-608`).
 - **Terminate a member's sessions (admin).** `POST /admin/sessions/terminate-user`
     (`engine/src/admin/router-account-session.ts:221`) bumps a target email's epoch and the bound
   subject's not-before instant. Gated on `roles.write` re-resolved, and an Owner's sessions may
   be terminated only BY an Owner (`terminateUserSessions`,
-  `engine/src/sched/scheduler-do-session.ts:565-589`).
+  `engine/src/sched/scheduler-do-session.ts:572-596`).
 - **Terminate ALL sessions (owner).** `POST /admin/sessions/terminate-all`
     (`engine/src/admin/router-account-session.ts:282`) DELETES the session signing key, so every
   outstanding token fails its next MAC verify and a fresh key is generated on the next issue.
   Gated on `roles.write` re-resolved AND `role === "owner"` (`terminateAllSessions`,
-  `engine/src/sched/scheduler-do-session.ts:265-285`).
+  `engine/src/sched/scheduler-do-session.ts:266-286`).
 - **Revoke a credential.** `POST /admin/passkey/credentials/delete`
     (`engine/src/admin/router-account-session.ts:94`) removes a WebAuthn credential (the
   theft/loss path) and bumps the bound email's session epoch so any session that credential
   authenticated also dies. Self-service, or by a `roles.write` holder; an Owner's credential
   requires an Owner caller, and the last credential of the sole Owner is refused so an Owner is
   never locked out of the in-app factor (`revokePasskeyCredential`,
-  `engine/src/sched/scheduler-do-recovery.ts:863-915`).
+  `engine/src/sched/scheduler-do-recovery.ts:864-916`).
 
 The epoch is also bumped on a factor change (a passkey revoke, a recovery-code regeneration),
 so changing an authentication factor invalidates outstanding sessions for that email.
@@ -464,29 +464,29 @@ so changing an authentication factor invalidates outstanding sessions for that e
 | V7.1.2 - Concurrent session policy documented | Documented (policy: unbounded, revocable en masse) | Allowed: unlimited. Maximum-reached behaviour: none, a further sign-in is always admitted. A sign-in from another browser evicts nothing; a sign-in from a browser that presents a live session cookie ends every session of the account (revokePresentedSession, V7.2.4); the operator reduces the count with terminate-others / terminate-user / terminate-all (§2.4). The V7.4.1 row below carries the mechanism. Customer statement: docs.downpipes.io/identity-access/session-management, "Concurrent sessions". |
 | V7.1.3 - Federated session systems and their coordination documented | Documented (§2.7) | The four systems that mint or manage a session (native OIDC/OAuth2 RP, native SAML SP, Cloudflare Access at the engine, Cloudflare Access at the control-plane admin portal) are tabled in §2.7 with lifetime coordination, termination coordination and the conditions that force re-authentication. Two facts an operator needs are stated there: SAML `SessionNotOnOrAfter` caps the native session and OIDC carries no IdP bound; there is no single logout in either direction. |
 | V7.2.1 / V7.8.1 - Session invalidation on logout | Engine-enforced (passkey); Access-managed (Access) | `POST /admin/auth/logout` bumps the epoch and clears the cookie (`engine/src/admin/router-auth-flow.ts:274`); termination routes (section 2.4) revoke server-side via the epoch/key. Access sign-out remains Access's. |
-| V7.2.2 - Session creation after re-authentication | Engine-enforced (passkey) | A fresh signed token is minted only after a completed sign-in: a WebAuthn login (`passkeySessionIssue`, `engine/src/sched/scheduler-do-session.ts:333-357`), a recovery code, a verified OIDC or SAML response, or the bootstrap-token exchange. A live session the browser presents is ended first (`revokePresentedSession`, `:336`); the role is re-resolved, never carried. Access creates its own session. |
+| V7.2.2 - Session creation after re-authentication | Engine-enforced (passkey) | A fresh signed token is minted only after a completed sign-in: a WebAuthn login (`passkeySessionIssue`, `engine/src/sched/scheduler-do-session.ts:334-358`), a recovery code, a verified OIDC or SAML response, or the bootstrap-token exchange. A live session the browser presents is ended first (`revokePresentedSession`, `:336`); the role is re-resolved, never carried. Access creates its own session. |
 | V7.3.1 - Session inactivity timeout | Engine-enforced (native session) | A session is rejected after `SESSION_IDLE_MS` (2 hours, `engine/src/admin/session.ts:59`) of no activity (`engine/src/admin/session.ts:464`), independent of the 12h absolute cap. Activity is recorded as `lastSeen` in the signed V3 body and refreshed by a slide re-mint that preserves the original `iat`/`exp` (so it never extends the absolute cap). Access's own inactivity window stays operator-configured. |
 | V7.3.2 - Absolute session duration limit | Engine-enforced (native session) | Absolute 12-hour TTL set once at mint (`SESSION_TTL_MS`, `engine/src/admin/session.ts:53`; rejected at `:357`). The idle-slide re-mint refreshes `lastSeen` only; it preserves the original `iat`/`exp`, so the absolute cap is never slid forward. Access duration is operator-configured. |
-| V7.4.1 / V7.1.2 - Concurrent session mechanism | Documented (policy: unbounded, revocable en masse) | The engine does NOT cap the NUMBER of concurrent sessions. Allowed: unlimited. Maximum-reached behaviour: none, a further sign-in is always admitted. A sign-in from another browser evicts nothing; a sign-in from a browser that presents a live session cookie ends every session of the account (revokePresentedSession, V7.2.4); the operator reduces the count with terminate-others / terminate-user / terminate-all. EVERY session for an identity is revocable at once via the per-email epoch (`engine/src/sched/scheduler-do-session.ts:450`), the per-subject not-before instant (`:431`) and signing-key rotation (section 2.4). A removed member's or a logged-out identity's sessions all die on their next request (the epoch is bumped on offboarding AND logout). Two sessions for one Owner coexisting, and terminate-others keeping the caller's own, is proved at `engine/test/validate-session.ts:764`. Access concurrency, where used, stays operator-configured. |
-| V7.4.3 / V7.4.5 - Terminate a user's sessions (admin) | Engine-enforced | `terminate-user` (admin, owner-guarded) and `terminate-all` (owner) bump the epoch / rotate the key (`engine/src/sched/scheduler-do-session.ts:606-630`, `:265-285`). |
+| V7.4.1 / V7.1.2 - Concurrent session mechanism | Documented (policy: unbounded, revocable en masse) | The engine does NOT cap the NUMBER of concurrent sessions. Allowed: unlimited. Maximum-reached behaviour: none, a further sign-in is always admitted. A sign-in from another browser evicts nothing; a sign-in from a browser that presents a live session cookie ends every session of the account (revokePresentedSession, V7.2.4); the operator reduces the count with terminate-others / terminate-user / terminate-all. EVERY session for an identity is revocable at once via the per-email epoch (`engine/src/sched/scheduler-do-session.ts:451`), the per-subject not-before instant (`:431`) and signing-key rotation (section 2.4). A removed member's or a logged-out identity's sessions all die on their next request (the epoch is bumped on offboarding AND logout). Two sessions for one Owner coexisting, and terminate-others keeping the caller's own, is proved at `engine/test/validate-session.ts:764`. Access concurrency, where used, stays operator-configured. |
+| V7.4.3 / V7.4.5 - Terminate a user's sessions (admin) | Engine-enforced | `terminate-user` (admin, owner-guarded) and `terminate-all` (owner) bump the epoch / rotate the key (`engine/src/sched/scheduler-do-session.ts:613-637`, `:266-286`). |
 | V7.5.2 - View and terminate any or all active sessions (self), having authenticated again | Engine-enforced | Every mint carries a per-session id and writes a `sessionRef` row; `GET /admin/sessions` lists the caller's live sessions with the presenting one flagged (`engine/src/admin/router-account-session.ts`, `listOwnSessions` in `engine/src/sched/scheduler-do-session.ts`); `POST /admin/sessions/terminate { sid }` ends one session by writing `sessionRevoked:<sid>`, consulted at every verify (`terminateOneSession`, `passkeySessionVerify`); `terminate-others` bumps the caller's epoch and re-issues their current session (`terminateOwnOtherSessions`). For a native (OIDC, OAuth2, SAML) caller the list, the single terminate and terminate-others are scoped to its signed-in subject, and its logout moves only its subject's not-before instant, so an identity asserting another member's email cannot see or end that member's sessions. A passkey, recovery-code or Access caller lists and ends every session recorded under its email, including a native session of another subject that asserts the same email (`engine/test/validate-session-subject-keyed.ts`). Both terminations are in `STEPUP_SUBS` (`engine/src/admin/router-core.ts`), so a stale session completes a passkey assertion first. |
-| V7.5.1 - Session token properties (length, entropy, unpredictability) | Engine-enforced (passkey) | The session is a server-signed HMAC over a 32-byte CSPRNG key (`SESSION_KEY_BYTES`, `engine/src/admin/session.ts:96`; `engine/src/sched/scheduler-do-session.ts:187-219`), not a guessable bearer. The Access JWT is RS256, verified not generated. |
-| V7.6.1 - RP/IdP session lifetime and termination behave as documented | Engine-enforced and documented (§2.7) | SAML: the native `exp` is `min(now + SESSION_TTL_MS, SessionNotOnOrAfter)` (`engine/src/admin/saml/assertion.ts:277-278` reads the bound, `engine/src/sched/scheduler-do-idp.ts:552-553` hands it on, `engine/src/admin/session.ts:254` takes the minimum); a present-but-unreadable bound is read as no bound and recorded as `sso-session-cap-dropped` (`engine/src/admin/saml/assertion.ts:283`). OIDC/OAuth2: no IdP bound is passed (`engine/src/sched/scheduler-do-idp.ts:1011`), so the 12-hour cap, the 2-hour idle bound and the revocation axes are the only re-authentication triggers. Access: `verifyAccessJWT` checks `exp` and `nbf` on every request (`engine/src/admin/access.ts:288-289`); the passkey session's absolute `exp` is checked at `engine/src/admin/session.ts:374`. Tests: `engine/test/validate-saml-assertion.ts:268`, `engine/test/validate-cov-sched-scheduler-do-idp.ts:293`. Customer statement: docs.downpipes.io/identity-access/session-management. |
+| V7.5.1 - Session token properties (length, entropy, unpredictability) | Engine-enforced (passkey) | The session is a server-signed HMAC over a 32-byte CSPRNG key (`SESSION_KEY_BYTES`, `engine/src/admin/session.ts:96`; `engine/src/sched/scheduler-do-session.ts:188-220`), not a guessable bearer. The Access JWT is RS256, verified not generated. |
+| V7.6.1 - RP/IdP session lifetime and termination behave as documented | Engine-enforced and documented (§2.7) | SAML: the native `exp` is `min(now + SESSION_TTL_MS, SessionNotOnOrAfter)` (`engine/src/admin/saml/assertion.ts:277-278` reads the bound, `engine/src/sched/scheduler-do-idp.ts:553-554` hands it on, `engine/src/admin/session.ts:254` takes the minimum); a present-but-unreadable bound is read as no bound and recorded as `sso-session-cap-dropped` (`engine/src/admin/saml/assertion.ts:283`). OIDC/OAuth2: no IdP bound is passed (`engine/src/sched/scheduler-do-idp.ts:1012`), so the 12-hour cap, the 2-hour idle bound and the revocation axes are the only re-authentication triggers. Access: `verifyAccessJWT` checks `exp` and `nbf` on every request (`engine/src/admin/access.ts:288-289`); the passkey session's absolute `exp` is checked at `engine/src/admin/session.ts:374`. Tests: `engine/test/validate-saml-assertion.ts:268`, `engine/test/validate-cov-sched-scheduler-do-idp.ts:293`. Customer statement: docs.downpipes.io/identity-access/session-management. |
 
 **Authentication strength (ASVS V6.8.4):** the native OIDC/OAuth2/SAML RP reads the IdP's strength claims
 (`acr`, `amr`, `auth_time`; SAML `AuthnContextClassRef` and `AuthnInstant`) as a bounded advisory that is
 recorded on the `idp-sign-in` audit event and never authorises anything (`engine/src/admin/auth-context.ts`,
 `engine/src/admin/oidc.ts:584`, `engine/src/admin/saml/assertion.ts:310`,
-`engine/src/sched/scheduler-do-idp.ts:1020-1024`). Because the engine cannot verify which factor the IdP used,
+`engine/src/sched/scheduler-do-idp.ts:1021-1025`). Because the engine cannot verify which factor the IdP used,
 and because the session's `iat` is the engine's own callback instant rather than the IdP's `auth_time`, every
 IdP-established session is treated as single-factor, the minimum strength: a step-up-gated action
 (`STEPUP_SUBS` in `engine/src/admin/router-core.ts`, recovery-code regeneration, the dual-control
 approvals) is refused for an `oidc` or `saml` session however recently it signed in, and is
 admitted only on a fresh UV passkey assertion through the step-up ceremony
 (`engine/src/sched/scheduler-do-stepup.ts`, `stepUpCheck`). The recency shortcut applies to `passkey`
-sessions (a UV WebAuthn login, or the recovery-code sign-in, which mints method `passkey`). Two
-exceptions accept a fresh IdP sign-in. Passkey self-add passes the `enrol-passkey` purpose, because an
-SSO member has no passkey to assert with. `/sessions/terminate` and `/sessions/terminate-others` pass
+sessions (a UV WebAuthn login; a session a recovery code minted is held to the `oidc` rule). Two
+exceptions accept a fresh IdP or recovery sign-in. Passkey self-add passes the `enrol-passkey` purpose, because an
+SSO or recovered member may have no passkey to assert with. `/sessions/terminate` and `/sessions/terminate-others` pass
 the `end-own-session` purpose, because they end only the caller's own sessions. An operator who needs a
 specific factor at the IdP (for example MFA for every sign-in) configures that policy at the IdP; the engine
 does not depend on it. `engine/test/validate-session.ts` (section 4d) and `engine/test/validate-idp-wiring.ts`
@@ -505,8 +505,7 @@ ASVS V8.1.3 asks the application to document the environmental and contextual at
 make security decisions. V8.1.4 asks that documentation to define how those factors are used: the
 attributes evaluated, the thresholds, and the actions taken. V8.2.4 asks that adaptive controls based
 on those attributes apply both when a session is created and during an existing session. This section
-is that documentation. The gate `engine/test/validate-contextual-authz-docs-parity.ts` resolves every
-citation below against the tree on each run and renders each threshold from the exported constant.
+is that documentation. Every citation below points at the tree, and each threshold is the value of the exported constant.
 
 A note on custody first, because it is the usual point of confusion: the engine runs in the
 CUSTOMER's own Cloudflare account. Any contextual attribute it observes (a source IP, a connection
@@ -534,8 +533,8 @@ The contextual attributes the engine evaluates for authentication and authorizat
   request (never carried in the token), and the session is checked against three revocation axes
   (per-email epoch, per-subject not-before, signing-key generation; section 2.4). A change in the
   subject's authority or standing takes effect on the next request.
-- **Action sensitivity.** A POST whose route is in `STEPUP_SUBS` (`engine/src/admin/router-core.ts:408`)
-  passes `requireStepUp` (`engine/src/admin/router-core.ts:566`) before it is dispatched
+- **Action sensitivity.** A POST whose route is in `STEPUP_SUBS` (`engine/src/admin/router-core.ts:454`)
+  passes `requireStepUp` (`engine/src/admin/router-core.ts:612`) before it is dispatched
   (`engine/src/admin/router.ts:576-582`). Three further legs call `requireStepUp` directly because a
   static route string cannot match them: the config-change approve leg (`engine/src/admin/router.ts:625`),
   the owner-action approve leg (`engine/src/admin/router.ts:672`) and the restore apply leg
@@ -546,10 +545,10 @@ The contextual attributes the engine evaluates for authentication and authorizat
 - **Source network address.** The router reads the edge-injected `CF-Connecting-IP` header and the
   engine uses it in five ways, each a row of the decision table below: the per-IP throttle on the
   unauthenticated sign-in ceremonies (the `ip:` namespace; `authRateLimited`,
-  `engine/src/admin/router-core.ts:629`); the per-IP and per-email throttle on the recovery-code sign-in
-  (the `recovery-rate:` namespace; `recoveryRateAllow`, `engine/src/sched/scheduler-do-recovery.ts:518`);
+  `engine/src/admin/router-core.ts:675`); the per-IP and per-email throttle on the recovery-code sign-in
+  (the `recovery-rate:` namespace; `recoveryRateAllow`, `engine/src/sched/scheduler-do-recovery.ts:519`);
   the per-IP throttle on the bare `ADMIN_TOKEN` compare (the `admin-token-ip:` namespace;
-  `adminTokenRateLimitedViaDO`, `engine/src/admin/router-session.ts:337`); the opt-in
+  `adminTokenRateLimitedViaDO`, `engine/src/admin/router-session.ts:338`); the opt-in
   sign-in-new-context notification, which compares a coarse prefix of the address against the
   operator's seen-set when the `notifyNewSignInContext` policy is on (`getNotifyNewSignInContext`,
   `engine/src/sched/scheduler-do-org-policy.ts:123`); and audit provenance, where `sourceIp` is recorded
@@ -563,8 +562,7 @@ The contextual attributes the engine evaluates for authentication and authorizat
 
 #### Contextual decision table
 
-One row per factor. The threshold column renders the exported constant, and the parity gate re-renders
-each value from the code on every run. The action set is allow, deny, step-up challenge and notify.
+One row per factor. The threshold column shows the value of the exported constant. The action set is allow, deny, step-up challenge and notify.
 There is no silent risk score: every decision is one of those four, and each is observable to the
 caller or, for notify, to the operator.
 
@@ -572,14 +570,14 @@ caller or, for notify, to the operator.
 |-----------|-----------------|-----------|--------|
 | Session absolute age | `verifySessionClassified`, `engine/src/admin/session.ts:374`, on every cookie-session request | the token's expiry is the mint instant plus `SESSION_TTL_MS` (12 h, `engine/src/admin/session.ts:53`); the idle slide never moves it | deny: `session-fault-expired`, answered 401 `unauthorised` (`engine/src/admin/router.ts:385`); the operator signs in again |
 | Session inactivity | `verifySessionClassified`, `engine/src/admin/session.ts:464`, on every cookie-session request | `lastSeen` older than `SESSION_IDLE_MS` (2 h, `engine/src/admin/session.ts:59`) | deny: `session-fault-idle`, answered 401 `unauthorised` (`engine/src/admin/router.ts:385`); the operator signs in again |
-| Action sensitivity | `requireStepUp` (`engine/src/admin/router-core.ts:566`), gated once before the main switch (`engine/src/admin/router.ts:580-582`) and directly on the three dynamic legs named above | the route is in `STEPUP_SUBS` (49 routes, `engine/src/admin/router-core.ts:408`) and the caller holds no passkey proof fresher than `STEPUP_FRESH_MS` (5 min, `engine/src/admin/session.ts:84`) and presents no single-use step-up token, which lives `STEPUP_TOKEN_TTL_MS` (2 min, `engine/src/admin/session.ts:90`); an Access caller is judged on the assertion's issued-at against the same 5 min; an OIDC or SAML session must assert a passkey, except when it ends its own sessions (section 2.5) | challenge: 401 with `stepUpRequired` true in the body (`engine/src/admin/router-core.ts:607`; with `reauth: "access"` for an Access caller, `engine/src/admin/router-core.ts:572`); the `ADMIN_TOKEN` method is exempt, as the bare bearer and as its exchanged session; fails closed when the DO check is unavailable (`stepup-check-unavailable`, `engine/src/admin/router-core.ts:605`) |
-| Source IP on the sign-in ceremonies (`/admin/auth/*`, `/admin/oidc/*`, `/admin/saml/*`, all unauthenticated) | `authRateLimited` (`engine/src/admin/router-core.ts:629`), keyed `ip:<CF-Connecting-IP>` with the cap `AUTH_RATE_LIMIT_MAX_PER_WINDOW` (`engine/src/admin/router-core.ts:641`), counted by the DO `rateCheck` (`engine/src/sched/scheduler-do.ts:813`) | more than `AUTH_RATE_LIMIT_MAX_PER_WINDOW` requests in one `RATE_LIMIT_WINDOW_MS` window: 30 per 60 s (`engine/src/sched/scheduler-do-limits.ts:673`; window `engine/src/sched/scheduler-do-limits.ts:652`) | deny: 429 with `Retry-After` (`rateLimitedResponse`, `engine/src/admin/router-core.ts:274`); fails closed: only `allowed === true` admits (`engine/src/admin/router-core.ts:649`) and a limiter outage also answers 429 (`engine/src/admin/router-core.ts:649`) |
-| Source IP and target email on the recovery-code sign-in (`POST /admin/auth/recovery`) | `recoveryRecover` derives `emailKey` and `ipKey` (`engine/src/sched/scheduler-do-recovery.ts:364-365`); `recoveryRateAllow` checks both (`engine/src/sched/scheduler-do-recovery.ts:518`) under the `RECOVERY_RATE_PREFIX` storage prefix `recovery-rate:` (`engine/src/sched/scheduler-do-limits.ts:740`) | `RECOVERY_RATE_MAX_PER_IP`: 5 per 60 s per IP, and `RECOVERY_RATE_MAX_PER_EMAIL`: 5 per 60 s per email (`engine/src/sched/scheduler-do-limits.ts:742-743`); both buckets must admit | deny: one generic 401 `unauthorised` with no `Retry-After` (`engine/src/admin/router-auth-flow.ts:82`), so no oracle separates a throttle from a wrong code; fails closed on a limiter fault (`recovery-limiter-unavailable`, `engine/src/sched/scheduler-do-recovery.ts:539-542`); the ceremony also passes the per-IP sign-in throttle above first |
-| Source IP on the break-glass bearer (`ADMIN_TOKEN` compare) | `adminTokenRateLimitedViaDO` (`engine/src/admin/router-session.ts:337`), keyed `admin-token-ip:<CF-Connecting-IP>` with the cap `ADMIN_TOKEN_RATE_LIMIT_MAX_PER_WINDOW` (`engine/src/admin/router-session.ts:343`), consulted inside `authorise` before the token compare | more than `ADMIN_TOKEN_RATE_LIMIT_MAX_PER_WINDOW` attempts in one window: 10 per 60 s (`engine/src/sched/scheduler-do-limits.ts:682`) | deny: 429 with `Retry-After` set to the full window (`adminTokenThrottledResponse`, `engine/src/admin/router-core.ts:298`; answered at `engine/src/admin/router.ts:363`); fails closed on a limiter fault (`admin-token-ratelimited-unavailable`, `engine/src/admin/router-session.ts:369-377`) |
-| Verified caller identity on a mutating route | `rateLimited` (`engine/src/admin/router-core.ts:303`) after the route reads its body; keyed in the `sub:` namespace by `rateLimitKey`, with the bare token sharing one `token` bucket (`engine/src/admin/router-core.ts:218-219`) | more than `RATE_LIMIT_MAX_PER_WINDOW` mutating requests in one window: 120 per 60 s (`engine/src/sched/scheduler-do-limits.ts:659`) | deny: 429 with `Retry-After` (`rateLimitedResponse`, `engine/src/admin/router-core.ts:274`); fail open: a malformed verdict or an unavailable limiter admits the request and records `limiter-verdict-malformed` (`engine/src/admin/router-core.ts:322`, `engine/src/admin/router-core.ts:341`) |
+| Action sensitivity | `requireStepUp` (`engine/src/admin/router-core.ts:612`), gated once before the main switch (`engine/src/admin/router.ts:580-582`) and directly on the three dynamic legs named above | the route is in `STEPUP_SUBS` (49 routes, `engine/src/admin/router-core.ts:454`) and the caller holds no passkey proof fresher than `STEPUP_FRESH_MS` (5 min, `engine/src/admin/session.ts:84`) and presents no single-use step-up token, which lives `STEPUP_TOKEN_TTL_MS` (2 min, `engine/src/admin/session.ts:90`); an Access caller is judged on the assertion's issued-at against the same 5 min; an OIDC or SAML session must assert a passkey, except when it ends its own sessions (section 2.5) | challenge: 401 with `stepUpRequired` true in the body (`engine/src/admin/router-core.ts:653`; with `reauth: "access"` for an Access caller, `engine/src/admin/router-core.ts:618`); the `ADMIN_TOKEN` method is exempt, as the bare bearer and as its exchanged session; fails closed when the DO check is unavailable (`stepup-check-unavailable`, `engine/src/admin/router-core.ts:651`) |
+| Source IP on the sign-in ceremonies (`/admin/auth/*`, `/admin/oidc/*`, `/admin/saml/*`, all unauthenticated) | `authRateLimited` (`engine/src/admin/router-core.ts:675`), keyed `ip:<source group>` with the cap `AUTH_RATE_LIMIT_MAX_PER_WINDOW` (`engine/src/admin/router-core.ts:687`), counted by the DO `rateCheck` (`engine/src/sched/scheduler-do.ts:813`) | more than `AUTH_RATE_LIMIT_MAX_PER_WINDOW` requests in one `RATE_LIMIT_WINDOW_MS` window: 30 per 60 s (`engine/src/sched/scheduler-do-limits.ts:673`; window `engine/src/sched/scheduler-do-limits.ts:652`) | deny: 429 with `Retry-After` (`rateLimitedResponse`, `engine/src/admin/router-core.ts:320`); fails closed: only `allowed === true` admits (`engine/src/admin/router-core.ts:695`) and a limiter outage also answers 429 (`engine/src/admin/router-core.ts:695`) |
+| Source IP and target email on the recovery-code sign-in (`POST /admin/auth/recovery`) | `recoveryRecover` derives `emailKey` and `ipKey` (`engine/src/sched/scheduler-do-recovery.ts:365-366`); `ipKey` is `ip:<source group>`, as above; `recoveryRateAllow` checks both (`engine/src/sched/scheduler-do-recovery.ts:519`) under the `RECOVERY_RATE_PREFIX` storage prefix `recovery-rate:` (`engine/src/sched/scheduler-do-limits.ts:740`) | `RECOVERY_RATE_MAX_PER_IP`: 5 per 60 s per IP, and `RECOVERY_RATE_MAX_PER_EMAIL`: 5 per 60 s per email (`engine/src/sched/scheduler-do-limits.ts:742-743`); both buckets must admit | deny: one generic 401 `unauthorised` with no `Retry-After` (`engine/src/admin/router-auth-flow.ts:82`), so no oracle separates a throttle from a wrong code; fails closed on a limiter fault (`recovery-limiter-unavailable`, `engine/src/sched/scheduler-do-recovery.ts:540-543`); the ceremony also passes the per-IP sign-in throttle above first |
+| Source IP on the break-glass bearer (`ADMIN_TOKEN` compare) | `adminTokenRateLimitedViaDO` (`engine/src/admin/router-session.ts:338`), keyed `admin-token-ip:<source group>` with the cap `ADMIN_TOKEN_RATE_LIMIT_MAX_PER_WINDOW` (`engine/src/admin/router-session.ts:344`), consulted inside `authorise` before the token compare | more than `ADMIN_TOKEN_RATE_LIMIT_MAX_PER_WINDOW` attempts in one window: 10 per 60 s (`engine/src/sched/scheduler-do-limits.ts:682`) | deny: 429 with `Retry-After` set to the full window (`adminTokenThrottledResponse`, `engine/src/admin/router-core.ts:344`; answered at `engine/src/admin/router.ts:363`); fails closed on a limiter fault (`admin-token-ratelimited-unavailable`, `engine/src/admin/router-session.ts:370-378`) |
+| Verified caller identity on a mutating route | `rateLimited` (`engine/src/admin/router-core.ts:349`) after the route reads its body; keyed in the `sub:` namespace by `rateLimitKey`, with the bare token sharing one `token` bucket (`engine/src/admin/router-core.ts:264-265`) | more than `RATE_LIMIT_MAX_PER_WINDOW` mutating requests in one window: 120 per 60 s (`engine/src/sched/scheduler-do-limits.ts:659`) | deny: 429 with `Retry-After` (`rateLimitedResponse`, `engine/src/admin/router-core.ts:320`); fail open: a malformed verdict or an unavailable limiter admits the request and records `limiter-verdict-malformed` (`engine/src/admin/router-core.ts:368`, `engine/src/admin/router-core.ts:387`) |
 | Request Origin on a mutating cookie-session request | `originFailClass` against `CONSOLE_ORIGIN` before any body read (`engine/src/admin/router.ts:462-465`) | the `Origin` header is absent, or differs from `CONSOLE_ORIGIN`, or `CONSOLE_ORIGIN` is unset | deny: 403 `csrf origin check failed` (`engine/src/admin/router.ts:480`); Access and bearer callers are exempt because they present an explicit header a cross-site page cannot set |
-| Absent `CF-Connecting-IP` on the sign-in ceremonies and the bearer compare | `authRateLimited` (`engine/src/admin/router-core.ts:629-637`) and `adminTokenRateLimitedViaDO` (`engine/src/admin/router-session.ts:339-340`) | the header is missing or empty | allow, with no throttle bucket. On the custom-domain-only deployment the Cloudflare edge always injects `CF-Connecting-IP` (overwriting any client value), and the engine rejects `workers.dev`, so a real edge request can never lack it. Its absence means a non-edge or local context (a validator), not a stripped header. Failing closed here would buy zero production security while bucketing every header-less local caller into one shared key. This is the V2.4.1 / V8.1.4 accept decision |
-| Source IP prefix on a proven sign-in (R6, opt-in) | `recordSignInContext` (`engine/src/sched/scheduler-do-session.ts:298`), reached through `POST /signin-context` (`engine/src/sched/scheduler-do-routing-identity.ts:41`) from `fireSignInContextCheck` after a passkey login (`engine/src/admin/router-auth-flow.ts:700`), and inside the DO success block for an OIDC or SAML login; only when `getNotifyNewSignInContext` is true (`engine/src/sched/scheduler-do-org-policy.ts:123`) | `coarseSignInPrefix` reduces the address to an IPv4 /24 or IPv6 /48 prefix (`engine/src/admin/sign-in-context.ts:41`); the prefix is absent from the operator's seen-set, which `evaluateSignInContext` (`engine/src/admin/sign-in-context.ts:106`) prunes to `SEEN_CONTEXT_TTL_MS` (90 days, `engine/src/admin/sign-in-context.ts:28`) and caps at `SEEN_CONTEXT_CAP` (10 prefixes, `engine/src/admin/sign-in-context.ts:20`) | notify only: the `sign-in-new-context` alert, which carries no address; the sign-in is never delayed or refused; the raw IP is used in memory to derive the prefix and is never stored |
+| Absent `CF-Connecting-IP` on the sign-in ceremonies and the bearer compare | `authRateLimited` (`engine/src/admin/router-core.ts:675-683`) and `adminTokenRateLimitedViaDO` (`engine/src/admin/router-session.ts:340-341`) | the header is missing or empty | allow, with no throttle bucket. The Cloudflare edge sets `CF-Connecting-IP` on every request it proxies (overwriting any client value), on a custom domain and a `workers.dev` hostname alike, so a real edge request carries it. Its absence means a non-edge or local context (a validator), not a stripped header. Failing closed here would buy zero production security while bucketing every header-less local caller into one shared key. This is the V2.4.1 / V8.1.4 accept decision |
+| Source IP prefix on a proven sign-in (R6, opt-in) | `recordSignInContext` (`engine/src/sched/scheduler-do-session.ts:299`), reached through `POST /signin-context` (`engine/src/sched/scheduler-do-routing-identity.ts:41`) from `fireSignInContextCheck` after a passkey login (`engine/src/admin/router-auth-flow.ts:700`), and inside the DO success block for an OIDC or SAML login; only when `getNotifyNewSignInContext` is true (`engine/src/sched/scheduler-do-org-policy.ts:123`) | `coarseSignInPrefix` reduces the address to an IPv4 /24 or IPv6 /48 prefix (`engine/src/admin/sign-in-context.ts:41`); the prefix is absent from the operator's seen-set, which `evaluateSignInContext` (`engine/src/admin/sign-in-context.ts:148`) prunes to `SEEN_CONTEXT_TTL_MS` (90 days, `engine/src/admin/sign-in-context.ts:28`) and caps at `SEEN_CONTEXT_CAP` (10 prefixes, `engine/src/admin/sign-in-context.ts:20`) | notify only: the `sign-in-new-context` alert, which carries no address; the sign-in is never delayed or refused; the raw IP is used in memory to derive the prefix and is never stored. Deleting a member's role deletes their seen-set. It also deletes every IdP group record that names their address. The scheduler alarm deletes a group record not refreshed for 90 days. |
 
 The step-up gated routes in `STEPUP_SUBS` are: `/restore/approve`, `/keys/install`, `/keys/rotate`,
 `/keys/add-operational`, `/keys/add-config-recovery`, `/keys/break-glass-only`, `/posture/accept`, `/posture/unaccept`,
@@ -592,8 +590,7 @@ The step-up gated routes in `STEPUP_SUBS` are: `/restore/approve`, `/keys/instal
 `/notify/channels/delete`, `/config/restore-approval-policy`, `/config/update-approval-policy`,
 `/attest/session/create`, `/retention-prune/apply`,
 `/retention-prune/approve`, `/support/credentials`, `/sessions/terminate-user`,
-`/sessions/terminate-all`, `/sessions/terminate-others`, `/sessions/terminate` and `/custody/send-share`. The parity gate lists the set from the code and
-fails when this paragraph and the set differ in either direction.
+`/sessions/terminate-all`, `/sessions/terminate-others`, `/sessions/terminate` and `/custody/send-share`. This paragraph lists the whole set.
 
 Adaptive controls applied AT SESSION START: WebAuthn user verification is mandatory (a registration
 or an assertion whose UV flag is clear is rejected as `user_verified`, `engine/src/admin/passkey.ts:273`
@@ -622,8 +619,8 @@ re-authentication. The constants are the ones in §2.1a.
 
 | System | Who mints the session | Lifetime coordination | Termination coordination | Re-authentication conditions |
 |--------|-----------------------|-----------------------|--------------------------|------------------------------|
-| Native SAML SP (`/admin/saml/*`) | The engine, after the assertion consumer verifies the signed assertion (`nativeSessionIssue`, `engine/src/sched/scheduler-do-idp.ts:443`). | `exp = min(now + SESSION_TTL_MS, AuthnStatement/@SessionNotOnOrAfter)`. The bound is read off the signature-verified assertion (`engine/src/admin/saml/assertion.ts:277-278`), threaded through the ACS (`engine/src/sched/scheduler-do-idp-saml.ts:236`), passed to the mint (`engine/src/sched/scheduler-do-idp.ts:552-553`) and applied in `signSession` (`engine/src/admin/session.ts:245`, the minimum at `:254`). A bound that is present but does not parse is read as no bound and counted as `sso-session-cap-dropped` (`engine/src/admin/saml/assertion.ts:283`, `engine/src/admin/saml-signals.ts:64`). An absent bound leaves the 12-hour cap. | Per-email epoch, per-subject not-before, per-connection `idpEpoch` and verify-time connection liveness (`engine/src/sched/scheduler-do-session.ts:450`, `:461`, `:468`, `:489`). Disabling or deleting the connection stamps its `idpEpoch` (`idpConnSetEnabled`, `engine/src/sched/scheduler-do-idp.ts:759`, stamping at `:763`; `idpConnDelete`, `engine/src/sched/scheduler-do-idp.ts:729`, stamping at `:733`). No single logout in either direction. | The 12-hour cap, the SAML bound, the 2-hour idle bound, any revocation axis, `session-fault-upgrade-reauth` after a token-shape change, and step-up for the `STEPUP_SUBS` set on every request (an IdP session gets the 5-minute recency shortcut only when it ends its own sessions). |
-| Native OIDC/OAuth2 RP (`/admin/oidc/*`) | The engine, after the callback verifies the token exchange (`nativeSessionIssue`, `engine/src/sched/scheduler-do-idp.ts:443`). | Not capped at the IdP session or the `id_token` expiry. The OIDC callback passes no bound (`engine/src/sched/scheduler-do-idp.ts:1011`), so the native session runs to the 12-hour cap or the 2-hour idle bound whatever the IdP's own session does. The engine consumes no OIDC session-management or back-channel logout message. | The same four axes as SAML. No single logout in either direction. | The 12-hour cap, the 2-hour idle bound, any revocation axis, `session-fault-upgrade-reauth`, and step-up for the `STEPUP_SUBS` set on every request. |
+| Native SAML SP (`/admin/saml/*`) | The engine, after the assertion consumer verifies the signed assertion (`nativeSessionIssue`, `engine/src/sched/scheduler-do-idp.ts:444`). | `exp = min(now + SESSION_TTL_MS, AuthnStatement/@SessionNotOnOrAfter)`. The bound is read off the signature-verified assertion (`engine/src/admin/saml/assertion.ts:277-278`), threaded through the ACS (`engine/src/sched/scheduler-do-idp-saml.ts:239`), passed to the mint (`engine/src/sched/scheduler-do-idp.ts:553-554`) and applied in `signSession` (`engine/src/admin/session.ts:245`, the minimum at `:254`). A bound that is present but does not parse is read as no bound and counted as `sso-session-cap-dropped` (`engine/src/admin/saml/assertion.ts:283`, `engine/src/admin/saml-signals.ts:64`). An absent bound leaves the 12-hour cap. | Per-email epoch, per-subject not-before, per-connection `idpEpoch` and verify-time connection liveness (`engine/src/sched/scheduler-do-session.ts:451`, `:462`, `:469`, `:490`). Disabling or deleting the connection stamps its `idpEpoch` (`idpConnSetEnabled`, `engine/src/sched/scheduler-do-idp.ts:760`, stamping at `:771`; `idpConnDelete`, `engine/src/sched/scheduler-do-idp.ts:730`, stamping at `:741`). No single logout in either direction. | The 12-hour cap, the SAML bound, the 2-hour idle bound, any revocation axis, `session-fault-upgrade-reauth` after a token-shape change, and step-up for the `STEPUP_SUBS` set on every request (an IdP session gets the 5-minute recency shortcut only when it ends its own sessions). |
+| Native OIDC/OAuth2 RP (`/admin/oidc/*`) | The engine, after the callback verifies the token exchange (`nativeSessionIssue`, `engine/src/sched/scheduler-do-idp.ts:444`). | Not capped at the IdP session or the `id_token` expiry. The OIDC callback passes no bound (`engine/src/sched/scheduler-do-idp.ts:1012`), so the native session runs to the 12-hour cap or the 2-hour idle bound whatever the IdP's own session does. The engine consumes no OIDC session-management or back-channel logout message. | The same four axes as SAML. No single logout in either direction. | The 12-hour cap, the 2-hour idle bound, any revocation axis, `session-fault-upgrade-reauth`, and step-up for the `STEPUP_SUBS` set on every request. |
 | Cloudflare Access in front of the engine | Cloudflare Access; the engine holds no session of its own for an Access caller (§2.2). | Access owns lifetime and inactivity, both operator-configured. The engine enforces the assertion's `exp` and `nbf` on every request (`engine/src/admin/access.ts:288-289`). | Access-side sign-out at `/cdn-cgi/access/logout`; the engine's termination actions do not reach an Access session, and an Access sign-out does not touch a native session. | Whatever the Access application requires, and for the `STEPUP_SUBS` set an assertion issued within `STEPUP_FRESH_MS`; the engine's step-up gate exempts only the `ADMIN_TOKEN` method, bare or exchanged for a session. |
 | Cloudflare Access in front of the control-plane admin portal | Cloudflare Access, with the portal Worker layering its own checks on top. | Access session duration 24 hours; a 30-minute idle timeout in the Worker (`PORTAL_IDLE_MS`). | An idle request is refused and redirected through `/cdn-cgi/access/logout`; a revoke marker covers same-day offboarding. | The Access duration, the idle timeout, and a 5-minute assertion-freshness requirement before the highest-impact actions. |
 
@@ -684,27 +681,27 @@ never stored, logged or shown again (`RecoveryCodeHash`, `engine/src/admin/recov
 `hashOf`, `engine/src/admin/recovery.ts:199-207`). A code is single use: `verifyCode` returns
 exactly one matching unconsumed slot, a consumed slot can never match again
 (`engine/src/admin/recovery.ts:306-350`, the consumed check at `:345`), and the DO marks that
-slot consumed before it mints the session (`engine/src/sched/scheduler-do-recovery.ts:438-439`).
+slot consumed before it mints the session (`engine/src/sched/scheduler-do-recovery.ts:439-440`).
 `verifyCode` walks the whole set in constant time so neither a match position nor a wrong-code
 timing signature leaks (`constantTimeEqual`, `engine/src/admin/recovery.ts:341`).
 
 Presenting a code to `POST /admin/auth/recovery` is fail-closed rate-limited per IP and per
 email before any record is read (`recoveryRateAllow`,
-`engine/src/sched/scheduler-do-recovery.ts:366`), and an unknown email is verified against a
+`engine/src/sched/scheduler-do-recovery.ts:367`), and an unknown email is verified against a
 synthetic dummy record so a known and an unknown email cost the same work
-(`dummyRecoveryRecord`, `engine/src/sched/scheduler-do-recovery.ts:398`). A wrong code, an
+(`dummyRecoveryRecord`, `engine/src/sched/scheduler-do-recovery.ts:399`). A wrong code, an
 unknown email, an exhausted set and a throttle denial all answer the same generic failure
-(`engine/src/sched/scheduler-do-recovery.ts:379`, `:434`); a rejected attempt is audited with
+(`engine/src/sched/scheduler-do-recovery.ts:380`, `:434`); a rejected attempt is audited with
 no actor named, because no identity is verified on a failure
-(`engine/src/sched/scheduler-do-recovery.ts:433`, folded to one row per source and outcome per
-minute), and a successful recovery is audited under the recovered email (`engine/src/sched/scheduler-do-recovery.ts:458-465`).
+(`engine/src/sched/scheduler-do-recovery.ts:434`, folded to one row per source and outcome per
+minute), and a successful recovery is audited under the recovered email (`engine/src/sched/scheduler-do-recovery.ts:459-466`).
 
 **A recovered session carries exactly the identity's existing authority, never a fresh
 grant.** A successful `recoveryRecover` resolves the role through the same `resolveBoundEntry`
 path every other sign-in uses, keyed on `passkeySubject(email)`, and mints a passkey-class
-session at that role (`engine/src/sched/scheduler-do-recovery.ts:445-454`). An email that is no
+session at that role (`engine/src/sched/scheduler-do-recovery.ts:446-455`). An email that is no
 longer on the roster but still holds an unconsumed code signs in to `viewer`, exactly as any
-other unbound identity would (`engine/src/sched/scheduler-do-recovery.ts:445-446`); recovery
+other unbound identity would (`engine/src/sched/scheduler-do-recovery.ts:446-447`); recovery
 grants no authority the roster does not already confer.
 
 **Re-enrolling a passkey after recovery passes the same live roster gate a fresh enrolment
@@ -720,15 +717,15 @@ sign-in and the re-enrolment attempt closes the door exactly as it would for a f
 invite. Regenerating the code set at this point is staged, not immediate: the fresh plaintext
 is shown before the just-spent set is invalidated, and the live set is replaced only once the
 operator confirms the new codes are saved (`generateRecoveryStaged`,
-`engine/src/sched/scheduler-do-recovery.ts:209`; `confirmRecoveryStaged`,
-`engine/src/sched/scheduler-do-recovery.ts:234`; invoked from the enrolment hook,
+`engine/src/sched/scheduler-do-recovery.ts:210`; `confirmRecoveryStaged`,
+`engine/src/sched/scheduler-do-recovery.ts:235`; invoked from the enrolment hook,
 `engine/src/sched/scheduler-do-passkey.ts:594-600`), so a crashed browser mid-ceremony cannot
 strand the operator with zero factors.
 
 **A new invite for a member who enrolled before goes to that member only.** When a member has
 lost every factor, an operator can change their role again, which mints a fresh registration
 invite. For an address that has signed in before or ever held a passkey, the engine marks the
-invite for the member (`setRole`, `engine/src/sched/scheduler-do-rbac-mutations.ts:218`), and
+invite for the member (`setRole`, `engine/src/sched/scheduler-do-rbac-mutations.ts:219`), and
 the role route sends it to the member's own email and removes the token from its response
 (`withholdMemberInvite`, `engine/src/admin/router-sources.ts:413`). With no invite sender
 configured, the response says the link was withheld, and the member re-enrols with a recovery
@@ -764,14 +761,14 @@ attacker must clear and grants no authority the roster does not already confer.
 | V6.3.3 - Multi-factor / phishing-resistant authentication | 1.1, 2.5 | first-party WebAuthn passkeys, user verification mandatory (`passkey.ts:273`, `:348`). |
 | V6.5.x - Recovery / lookup-secret factor | 2.5 | single-use, salted-hash recovery codes (`recovery.ts:60`, `:66-70`). |
 | V6.4.4 - Re-proofing at factor loss | 3a | recovery-code sign-in re-proofs through the same live roster gate a fresh enrolment uses and grants only the identity's existing role; passkey re-enrolment after recovery is refused unless the roster still accounts for the email (`scheduler-do-passkey.ts:288-292`). |
-| V10.3.3 - Identity-provider group/role binding | 1.4 | additive group-to-role mapping, capped below owner, enforced in the scheduler DO (`setGroupRole`, `engine/src/sched/scheduler-do-rbac-mutations.ts:407`, the owner refusal at `:406`; `capGroupRole`, `engine/src/sched/scheduler-do-rbac.ts:389-399`). |
-| V10.5.2 - Stable, unique identity key (iss+sub) | 1.2, 1.4 | authority keys on the immutable subject (`role:sub:<subject>`, `identity.ts:272`); email is display/audit only and a recycled email cannot inherit a role (`engine/src/sched/scheduler-do-rbac-authority.ts:82-140`, `roleForCaller`). |
+| V10.3.3 - Identity-provider group/role binding | 1.4 | additive group-to-role mapping, capped below owner, enforced in the scheduler DO (`setGroupRole`, `engine/src/sched/scheduler-do-rbac-mutations.ts:414`, the owner refusal at `:406`; `capGroupRole`, `engine/src/sched/scheduler-do-rbac.ts:389-399`). |
+| V10.5.2 - Stable, unique identity key (iss+sub) | 1.2, 1.4 | authority keys on the immutable subject (`role:sub:<subject>`, `identity.ts:272`); email is display/audit only and a recycled email cannot inherit a role (`engine/src/sched/scheduler-do-rbac-authority.ts:83-141`, `roleForCaller`). |
 | V7.1.1 - Session lifetime documented, with 800-63B justification | 2.1a | 12-hour absolute lifetime and 2-hour inactivity timeout stated with rationale and compensating controls; the inactivity deviation from NIST SP 800-63B revision 4 (§2.2.3, §2.3.3) is justified in §2.1a. |
 | V7.1.2 - Concurrent session policy documented | 2.5 | unlimited concurrent sessions, no maximum-reached behaviour, count reduced only by a termination action. |
 | V7.1.3 - Federated session systems and coordination documented | 2.7 | the four session-minting systems, their lifetime and termination coordination, and the re-authentication conditions are tabled in §2.7. |
 | V7.2.2 / V7.3.2 / V7.5.1 - Session lifecycle | 2.1, 2.3, 2.5 | Passkey session: server-verified `__Host-` cookie, absolute 12h TTL, expiry checked each request (`session.ts:53`, `:357`). Access session controls remain Access-managed. |
-| V7.6.1 - RP/IdP session lifetime and termination behave as documented | 2.5, 2.7 | SAML sessions are capped at `SessionNotOnOrAfter` (`saml/assertion.ts:277-278`, `session.ts:254`). OIDC sessions carry no IdP bound (`scheduler-do-idp.ts:1011` passes none; the comment at `scheduler-do-idp.ts:454-457` records id_token-exp capping as a recorded, unbuilt follow-up), so an OIDC-federated session runs to the flat 12-hour cap regardless of a shorter upstream bound, with no re-authentication forced when that bound is reached. Both facts are stated on the customer session-management page. Accepted with reason pending the fix: thread the id_token `exp` into `nativeSessionIssue` the way the SAML ACS already does. |
-| V7.4.3 / V7.4.5 - Terminate a user's sessions (admin) | 2.4 | `terminate-user` / `terminate-all` bump the epoch / rotate the key (`engine/src/sched/scheduler-do-session.ts:606-630`, `:265-285`). |
+| V7.6.1 - RP/IdP session lifetime and termination behave as documented | 2.5, 2.7 | SAML sessions are capped at `SessionNotOnOrAfter` (`saml/assertion.ts:277-278`, `session.ts:254`). OIDC sessions carry no IdP bound (`scheduler-do-idp.ts:1012` passes none; the comment at `scheduler-do-idp.ts:455-458` records id_token-exp capping as a recorded, unbuilt follow-up), so an OIDC-federated session runs to the flat 12-hour cap regardless of a shorter upstream bound, with no re-authentication forced when that bound is reached. Both facts are stated on the customer session-management page. Accepted with reason pending the fix: thread the id_token `exp` into `nativeSessionIssue` the way the SAML ACS already does. |
+| V7.4.3 / V7.4.5 - Terminate a user's sessions (admin) | 2.4 | `terminate-user` / `terminate-all` bump the epoch / rotate the key (`engine/src/sched/scheduler-do-session.ts:613-637`, `:266-286`). |
 | V7.5.2 - View and terminate any or all active sessions (self), having authenticated again | 2.4 | `GET /admin/sessions` lists the caller's live sessions by per-session id; `POST /admin/sessions/terminate` ends one and `terminate-others` ends the rest, both step-up gated (`engine/src/admin/router-account-session.ts`, `engine/src/sched/scheduler-do-session.ts`, `STEPUP_SUBS` in `engine/src/admin/router-core.ts`). |
 | V8.1.3 - Documented contextual attributes for security decisions | 2.6 | the attributes evaluated (session age and inactivity, connection identity, request origin, subject continuity, action sensitivity, source IP) and the attributes not evaluated (time of day, location, IP reputation, device) are defined in section 2.6, with a `file:line` for each use. |
 | V8.1.4 - Attributes, thresholds and actions for contextual decisions | 2.6 | the contextual decision table in section 2.6 states, per factor, where it is evaluated, the threshold rendered from the exported constant, and the action taken (allow, deny, step-up challenge, notify). `engine/test/validate-contextual-authz-docs-parity.ts` holds the table to the code. |

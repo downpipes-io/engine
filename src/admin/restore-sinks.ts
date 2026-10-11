@@ -68,8 +68,8 @@ export function bufferedRestoreMaxBytes(env: Env): number {
 }
 
 // bufferedRestoreMaxBytesInvalid reports whether the operator SET the knob and the engine could not use
-// it, so the fall-back to the 32 MiB default is a SILENT override of an explicit instruction ("we set the knob
-// and records still buffer"). It is the exact predicate the resolver falls back on, expressed once so the
+// it, so the fall-back to the 32 MiB default is a SILENT override of an explicit instruction (an operator sets the knob
+// and records still buffer). It is the exact predicate the resolver falls back on, expressed once so the
 // counter and the behaviour cannot drift, and it is deliberately a BOOLEAN over env: the unusable value itself
 // is never carried anywhere. An ABSENT knob is the default, not a fault, and answers false.
 //

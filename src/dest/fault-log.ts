@@ -87,7 +87,7 @@ export const S3_ERROR_CODES = [
   "NoSuchBucket",
   "NoSuchKey",
   "NoSuchUpload",
-  "NotImplemented",
+  "NotImplemented", "ObjectLocked", // ObjectLocked is not an S3 wire code: r2BindingCode() selects it from the native R2 binding's wording
   "ObjectLockConfigurationNotFoundError",
   "OperationAborted",
   "PermanentRedirect",
@@ -112,6 +112,33 @@ export const S3_ERROR_CODES = [
 export type S3ErrorCode = (typeof S3_ERROR_CODES)[number] | "other" | "none";
 
 const S3_ERROR_CODE_SET: ReadonlySet<string> = new Set(S3_ERROR_CODES);
+
+/**
+ * The closed class of object a refused write was aimed at. A bucket lock rule on `_RECOVERY/` refuses the run log
+ * and the recovery markers but not the data, and the class is what tells the two apart without the key.
+ */
+export const DEST_KEY_CLASSES = ["recovery-marker", "runlog", "segment", "manifest", "other"] as const;
+/** One class of object a refused write was aimed at. */
+export type DestKeyClass = (typeof DEST_KEY_CLASSES)[number];
+/** The key classes as a set, for checking a recorded class against the closed list. */
+export const DEST_KEY_CLASS_SET: ReadonlySet<string> = new Set(DEST_KEY_CLASSES);
+
+/**
+ * classifyDestKey reads an object key ONLY to SELECT a member of DEST_KEY_CLASSES and returns the member; the key
+ * never leaves this function. `_RECOVERY/RUNLOG` and its signature are the run log; every other `_RECOVERY/` key is
+ * a recovery marker; `seg/` is a segment; a name holding `manifest` under `run/` is a manifest. A canary prefix in
+ * front of the key does not change the class.
+ *
+ * @param key - the object key the engine was writing (never retained).
+ * @returns the closed key class.
+ */
+export function classifyDestKey(key: string): DestKeyClass {
+  if (/(?:^|\/)_RECOVERY\/RUNLOG(?:\.sig)?$/.test(key)) return "runlog";
+  if (/(?:^|\/)_RECOVERY\//.test(key)) return "recovery-marker";
+  if (/(?:^|\/)seg\//.test(key)) return "segment";
+  if (/(?:^|\/)run\/.*manifest/.test(key)) return "manifest";
+  return "other";
+}
 
 // CODE_RE is deliberately TIGHT (a leading letter, then up to 63 letters/digits, nothing else), matching
 // the s3-worm.ts discipline, so a hostile body cannot even reach the allow-list check with punctuation or
@@ -207,6 +234,11 @@ const AWS_REGION_RE = /^[a-z]{2}(?:-[a-z]+)+-\d{1,2}$/;
 // Location's HOST only, and its capture is then re-gated by AWS_REGION_RE, so nothing but a region token can
 // leave regionHintFromLocation.
 const REGION_ENDPOINT_RE = /(?:^|\.)s3[.-]([a-z]{2}(?:-[a-z]+)+-\d{1,2})\.amazonaws\.com$/;
+
+/** isRegionHint is the closed gate for a region token carried on a pack row: the AWS regional shape only. */
+export function isRegionHint(v: unknown): v is string {
+  return typeof v === "string" && AWS_REGION_RE.test(v);
+}
 
 /**
  * regionHintFromLocation READS a redirect's Location header ONLY to SELECT the region token of an AWS regional
@@ -318,6 +350,8 @@ export interface DestFaultRecord {
   arm: DestClassifierArm;
   requestIdPresent: boolean;
   wormChecksumComplaint: boolean;
+  /** The CLASS of object the engine was writing when the native R2 binding refused (never the key). Absent on a row the key class does not apply to. */
+  keyClass?: DestKeyClass;
   count: number;
 }
 
@@ -494,17 +528,20 @@ export class DestFaultLog {
    *
    * @param op - the closed destination op.
    * @param e - the thrown value. Only its class/arm/status are derived; the message is never retained.
+   * @param s3Code - the closed code the caller read from a non-HTTP carrier (the native R2 binding); "none" when absent.
+   * @param keyClass - the closed class of the object being written, from classifyDestKey; the key itself is never passed.
    */
-  noteThrown(op: DestOp, e: unknown): void {
+  noteThrown(op: DestOp, e: unknown, s3Code: S3ErrorCode = "none", keyClass?: DestKeyClass): void {
     const { fault, arm, status } = classifyDestErrorArm(e);
     this.push({
       op,
       httpStatus: clampStatus(status),
-      s3Code: "none",
+      s3Code,
       fault,
       arm,
       requestIdPresent: false,
       wormChecksumComplaint: false,
+      ...(keyClass !== undefined ? { keyClass } : {}),
     });
   }
 
@@ -547,7 +584,7 @@ export class DestFaultLog {
   // one, dropping (and TALLYING) the oldest shape past the cap so the ring is hard-bounded.
   private push(rec: Omit<DestFaultRecord, "count">): void {
     this.totalCount++;
-    const hit = this.records.find((r) => r.op === rec.op && r.httpStatus === rec.httpStatus && r.s3Code === rec.s3Code && r.fault === rec.fault && r.arm === rec.arm && r.wormChecksumComplaint === rec.wormChecksumComplaint);
+    const hit = this.records.find((r) => r.op === rec.op && r.httpStatus === rec.httpStatus && r.s3Code === rec.s3Code && r.fault === rec.fault && r.arm === rec.arm && r.wormChecksumComplaint === rec.wormChecksumComplaint && r.keyClass === rec.keyClass);
     if (hit) {
       hit.count++;
       // A repeat also refreshes recency: the shape that is still firing leads the snapshot.
@@ -567,4 +604,29 @@ export class DestFaultLog {
 // S3-compatible store (rather than a proxy, a captive portal or an error page).
 function hasRequestId(resp: Response): boolean {
   return resp.headers.get("x-amz-request-id") !== null || resp.headers.get("x-amz-id-2") !== null;
+}
+
+// R2_LOCK_RE, R2_NO_BUCKET_RE and R2_DENIED_RE select a closed code from the native R2 binding's own error
+// wording. The binding has no HTTP status and no S3 <Code>, so the wording is the only discriminator. Each
+// pattern is deliberately narrow: a message that matches none records "none", never a guess. The 10006 code is
+// the vendor's documented NoSuchBucket error number (developers.cloudflare.com/r2/api/error-codes).
+// The lock pattern is anchored on the vendor code "(10069)" together with the word "locked" (measured text: "The object is
+// locked by the bucket policy. (10069)"); the sentence without its code, or the digits inside a longer number, do not match.
+const R2_LOCK_RE = /\blocked\b[^()]*\(10069\)/i;
+const R2_NO_BUCKET_RE = /\b10006\b|specified bucket does not exist/i;
+const R2_DENIED_RE = /\baccess denied\b|\bnot authori[sz]ed\b|\bpermission\b/i;
+
+/**
+ * r2BindingCode reduces a native R2 binding error message to a CLOSED code: ObjectLocked, NoSuchBucket,
+ * AccessDenied or "none". It reads the message ONLY to select a member and returns the member; the message,
+ * the key and the bucket never leave this function.
+ *
+ * @param message - the runtime's error message (never retained).
+ * @returns the closed code.
+ */
+export function r2BindingCode(message: string): S3ErrorCode {
+  if (R2_NO_BUCKET_RE.test(message)) return "NoSuchBucket";
+  if (R2_LOCK_RE.test(message)) return "ObjectLocked";
+  if (R2_DENIED_RE.test(message)) return "AccessDenied";
+  return "none";
 }

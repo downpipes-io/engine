@@ -25,6 +25,11 @@
 //   - CITATIONS. Every `engine/<path>.ts:N` in the sections this gate owns (§2.1a, §2.7, and the four
 //     V7 rows in §2.5) must land on a non-blank line, and where the page writes a symbol beside the
 //     citation (`symbol`, `path:N`) the symbol must be ON that line. A comment mentioning it does not count.
+//   - CONTENT. Every one of those citations, with or without a symbol beside it, must still read the text
+//     docs/security/identity-sessions-and-files-citations.json pinned for it (test/lib/citation-pins.ts).
+//     Before this check, a citation with no symbol beside it passed on any non-blank line, so a code move
+//     that slid it onto different code stayed green. A citation with no pin, and a pin no citation uses,
+//     both fail. Run with `--write-pins` to rewrite the pins file after reviewing the citations.
 //   - The rows and tokens the requirements literally ask for: a §2.5 row for each of V7.1.1, V7.1.2,
 //     V7.1.3 and V7.6.1; "unlimited", "evicts nothing" and "ends every session of the account" on the concurrency row; "SessionNotOnOrAfter" and
 //     "single logout" in §2.7.
@@ -36,8 +41,7 @@
 // the in-repo checks still run and the pages are reported as not graded; --require turns that into a
 // failure, which is the convention CI uses.
 //
-// Run with `node test/validate-docs-session-parity.ts [--require]`.
-//
+// Run with `node test/validate-docs-session-parity.ts [--require]`, or `--write-pins` (see CONTENT above).
 //
 
 import { existsSync, readFileSync } from "node:fs";
@@ -46,12 +50,15 @@ import { fileURLToPath } from "node:url";
 import { reportSiblings } from "../scripts/lib/sibling-lag.mjs";
 import { requireFreshSiblings } from "../scripts/sibling-freshness.mjs";
 import { SESSION_IDLE_MS, SESSION_SLIDE_MS, SESSION_TTL_MS, STEPUP_FRESH_MS, STEPUP_TOKEN_TTL_MS } from "../src/admin/session.ts";
+import { type CitedText, collapse, gradePins, pinsFrom, readPins, writePins } from "./lib/citation-pins.ts";
 import { verdictReached, verdictSkipped } from "./lib/verdict-guard.ts";
 
 const HERE = fileURLToPath(new URL("..", import.meta.url));
 const REQUIRE = process.argv.includes("--require");
 const DOC = "docs/security/identity-sessions-and-files.md";
 const SESSION_SRC = "src/admin/session.ts";
+const PINS = "docs/security/identity-sessions-and-files-citations.json";
+const WRITE_PINS = process.argv.includes("--write-pins");
 
 let failures = 0;
 let checks = 0;
@@ -164,6 +171,7 @@ function fileLines(rel: string): string[] | null {
   return sourceCache.get(rel) ?? null;
 }
 const unresolved: string[] = [];
+const texts: CitedText[] = [];
 for (const m of owned.matchAll(CITE)) {
   let path: string | null;
   let from: number;
@@ -189,9 +197,38 @@ for (const m of owned.matchAll(CITE)) {
     const text = lines[n - 1];
     if (text === undefined || text.trim() === "" || /^[\s{}();,]*$/.test(text)) unresolved.push(`${path}:${n} (blank, past EOF, or lone punctuation)`);
   }
+  if (to <= lines.length) texts.push({ key: `${path}:${from}${to !== from ? `-${to}` : ""}`, found: collapse(lines.slice(from - 1, to)) });
 }
 ok(`every engine citation in the owned sections lands on a real line (${citations} citations)`, citations > 0 && unresolved.length === 0);
 for (const u of unresolved) console.log(`       unresolved: ${u}`);
+
+// ---- CONTENT: every citation still reads the text pinned for it --------------------------------------------
+if (WRITE_PINS) {
+  writePins(resolve(HERE, PINS), pinsFrom(texts));
+  console.log(`  wrote ${Object.keys(pinsFrom(texts)).length} pin(s) to ${PINS}. Review the diff: a wrong citation is now pinned as right.`);
+  verdictSkipped("--write-pins wrote the pins file; it graded nothing");
+  process.exit(0);
+}
+const pins = readPins(resolve(HERE, PINS));
+ok(`${PINS} exists and is a JSON object of strings`, pins !== null);
+const pinProblems = pins === null ? [] : gradePins(pins, texts);
+ok(`every owned citation reads its pinned text, and every pin is used (${texts.length} citations, ${Object.keys(pins ?? {}).length} pins)`, pins !== null && texts.length > 0 && pinProblems.length === 0);
+for (const p of pinProblems) console.log(`       ${p}`);
+
+// CONTROL: the pin check catches a citation slid one line onto different, non-blank code.
+{
+  const sample = texts.find((t) => {
+    const m = /^(.+):(\d+)$/.exec(t.key);
+    const next = m ? fileLines(m[1] as string)?.[Number(m[2])] : undefined;
+    return next !== undefined && next.trim() !== "" && collapse([next]) !== t.found;
+  });
+  ok("CONTROL: a single-line citation exists whose next line is different non-blank code", sample !== undefined);
+  if (sample !== undefined && pins !== null) {
+    const [, path, line] = /^(.+):(\d+)$/.exec(sample.key) as RegExpExecArray;
+    const slid: CitedText = { key: sample.key, found: collapse([(fileLines(path as string) ?? [])[Number(line)] ?? ""]) };
+    ok(`CONTROL: ${sample.key} slid one line down fails its pin`, gradePins({ [sample.key]: pins[sample.key] ?? "" }, [slid]).length > 0);
+  }
+}
 
 // A symbol written beside a citation must be on the cited line: (`symbol`, `path:N`) and `symbol`, `path:N`.
 const SYMBOL_CITE = /`([A-Za-z_][A-Za-z0-9_]*)`,? \(?`(engine\/[A-Za-z0-9_./-]+\.ts):(\d+)/g;

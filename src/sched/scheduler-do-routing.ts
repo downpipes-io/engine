@@ -39,6 +39,7 @@ import {
   type RunHistoryEntry,
   type SchedulerDOCtor,
 } from "./scheduler-do-base.ts";
+import { recordRunlogIndexHeld } from "./runlog-seed.ts";
 import { notePlanSeen } from "./scheduler-do-restore-approval.ts";
 import type { TickReport } from "./types.ts";
 
@@ -576,6 +577,12 @@ export function RoutingMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
         // The acquire body is OPTIONAL: a legacy unkeyed caller sends none (default destination slot), a
         // per-destination caller sends { key }. Tolerate a missing/blank body so both wire shapes work.
         return this.json(await this.acquireRunlogLock(await optionalLockKey(req)));
+      // A RUNLOG append met an index its archive already holds (seal/pipeline.ts). INTERNAL: the run path posts it
+      // through the lock; the cron pass reads it from the recovery status and advances the counter.
+      case "POST /runlog-index-held": {
+        const ok = await recordRunlogIndexHeld(this.state.storage, (await req.json()) as { index?: unknown; downpipeId?: unknown });
+        return ok ? this.json({ ok: true }) : this.jsonStatus({ ok: false, reason: "an index and a downpipe id are required" }, 400);
+      }
       case "POST /runlog-lock/release":
         return this.json(await this.releaseRunlogLock((await req.json()) as { token: string; key?: string }));
       // The cron driver's SINGLE-FLIGHT tick lease: drive() takes it at the top of a scheduled()

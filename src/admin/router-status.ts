@@ -13,7 +13,7 @@ import { bumpAdminCounter } from "./diag-counters.ts";
 import { recordDiagWrite } from "./diag-writer.ts";
 import { runPreflight } from "./preflight.ts";
 import { planRosterReattach } from "./roster-reattach.ts";
-import { callerHeaders, gate, ownerActionGate, ownerActionQueuedResponse, rateLimited, recordAudit } from "./router-core.ts";
+import { callerHeaders, gate, ownerActionGate, ownerActionQueuedResponse, peekObjectBody, rateLimited, recordAudit } from "./router-core.ts";
 import { doURL, type RouterCtx } from "./router-helpers.ts";
 import { enumerateBoundSources } from "./router-sources.ts";
 import { buildStatus, withAuditCapacity } from "./status.ts";
@@ -375,7 +375,8 @@ export async function handleStatus(ctx: RouterCtx): Promise<Response | null> {
       // The body is read BEFORE the gate so a refused attempt records its scope (the
       // role-change deny discipline); a malformed scope is a plain 400 with no entry
       // (nothing meaningful was attempted against a real surface).
-      const body = (await req.json()) as { scope?: string; ttlSeconds?: number };
+      // A body that is not a JSON object names no scope, so it takes the same 400 as an unknown scope.
+      const body = await peekObjectBody<{ scope?: string; ttlSeconds?: number }>(req);
       const scope: IngestScope | null = body.scope === "diagnostics" || body.scope === "audit-feed" || body.scope === "metrics" ? body.scope : null;
       if (scope === null) {
         return new Response(JSON.stringify({ error: 'scope must be "diagnostics", "audit-feed" or "metrics"' }), { status: 400, headers: { "content-type": "application/json" } });
@@ -441,7 +442,7 @@ export async function handleStatus(ctx: RouterCtx): Promise<Response | null> {
       // Owner-exclusive by design, like the mint path above: the bare owner-role test is
       // intentional and this authority is NOT mapped to a custom-role capability, so the
       // gate(caller, cap) form is deliberately not used here.
-      const body = (await req.json()) as { scope?: string };
+      const body = await peekObjectBody<{ scope?: string }>(req);
       const scope: IngestScope | null = body.scope === "diagnostics" || body.scope === "audit-feed" || body.scope === "metrics" ? body.scope : null;
       if (scope === null) {
         return new Response(JSON.stringify({ error: 'scope must be "diagnostics", "audit-feed" or "metrics"' }), { status: 400, headers: { "content-type": "application/json" } });

@@ -5,7 +5,6 @@
 // test that stubs fetch calls dohReply first, so those queries get an answer without taking a scripted reply
 // meant for the target, and without leaving the machine.
 //
-//
 
 // PUBLIC_DNS_ANSWER is the default answer: one public A record (203.0.113.10, TEST-NET-3) and no AAAA, so the
 // screen reads resolved-public and lets the request through.

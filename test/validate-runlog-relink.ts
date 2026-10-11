@@ -15,6 +15,7 @@
 // Run: node test/validate-runlog-relink.ts
 
 import { handleAdmin } from "../src/admin/router.ts";
+import { buildSupportBundle } from "../src/admin/support.ts";
 import { STEPUP_SUBS } from "../src/admin/router-core.ts";
 import { passkeySubject } from "../src/admin/identity.ts";
 import { CSRF_COOKIE_NAME, SESSION_COOKIE_NAME, SESSION_TTL_MS, STEPUP_FRESH_MS, signSession } from "../src/admin/session.ts";
@@ -147,6 +148,15 @@ async function audit(e: Estate): Promise<Array<Record<string, unknown>>> {
 
 
 // The writers read the destination's floor through their lock, as runlogLockVia does from the scheduler DO.
+// refusedRows returns the failed runlog-relinked audit rows' targets (the refusals), oldest first.
+async function refusedRows(e: Estate): Promise<Array<Record<string, unknown>>> {
+  return (await audit(e)).filter((a) => a.action === "runlog-relinked" && a.outcome === "failed").map((a) => (a.target ?? {}) as Record<string, unknown>).reverse();
+}
+// packRunlogEvents returns the support pack's configEvents rows for the RUNLOG actions.
+async function packRunlogEvents(e: Estate): Promise<Array<Record<string, unknown>>> {
+  const pack = await buildSupportBundle(e.env, e.stub);
+  return ((pack.configEvents ?? []) as Array<Record<string, unknown>>).filter((c) => c.action === "runlog-relinked" || c.action === "runlog-handover");
+}
 function lockOf(e: Estate): RunlogLock {
   return {
     acquire: async () => "tok",
@@ -224,6 +234,7 @@ async function main(): Promise<void> {
     ok(`a Viewer is refused even after step-up (got ${vr.status})`, vr.status === 403);
     const wrong = await admin(e.env, "POST", "/runlog/relink", e.cookie, { ...relinkBody(g), anomalyKind: "forked-prev" }, await freshStepUp(e.env, e.key, e.cookie));
     ok(`an anomaly that is not the one shown is refused (got ${wrong.status})`, wrong.status === 409);
+    ok("...and the refusal is audited as relink-refused, changed-since-read", (await refusedRows(e)).some((x) => x.op === "relink-refused" && JSON.stringify(x.reasons) === '["changed-since-read"]' && x.downpipeId === DP), await refusedRows(e));
     const otherBefore = parseRunlog(e.store.get(RUNLOG)!).filter((x) => x.downpipeId === OTHER);
     hookPosts.length = 0;
     const r = await admin(e.env, "POST", "/runlog/relink", e.cookie, relinkBody(g), await freshStepUp(e.env, e.key, e.cookie));
@@ -231,7 +242,7 @@ async function main(): Promise<void> {
     const after = parseRunlog(e.store.get(RUNLOG)!);
     ok("the RUNLOG verifies, DP's chain is linear (first entry has no predecessor)", (await sigVerifies(e.store, e.v)) && after.find((x) => x.runId === R(1))?.prevRunId === null && after.find((x) => x.runId === R(3))?.prevRunId === R(1));
     ok("another downpipe's entries are unchanged", JSON.stringify(after.filter((x) => x.downpipeId === OTHER)) === JSON.stringify(otherBefore));
-    const row = (await audit(e)).find((a) => a.action === "runlog-relinked");
+    const row = (await audit(e)).find((a) => a.action === "runlog-relinked" && a.outcome === "success");
     const t = row?.target as Record<string, unknown> | undefined;
     ok("a runlog-relinked audit row records what was acknowledged", t?.op === "relink" && t.downpipeId === DP && t.state === "dangling-prev" && t.chainEntries === 2 && typeof t.digest === "string", row);
     const alerts = hookPosts.filter((b) => b.includes("runlog-relinked"));
@@ -240,6 +251,10 @@ async function main(): Promise<void> {
     ok(`the stuck case is unblocked: the seal appends (${unblocked})`, unblocked === "ok");
     const again = await admin(e.env, "POST", "/runlog/relink", e.cookie, relinkBody(g), await freshStepUp(e.env, e.key, e.cookie));
     ok(`once only: the same request again is refused (got ${again.status})`, again.status === 409);
+    const ev = await packRunlogEvents(e);
+    ok("the support pack's configEvents carries the relink: runlogOp relink, anomalyKind dangling-prev", ev.some((c) => c.action === "runlog-relinked" && c.runlogOp === "relink" && c.anomalyKind === "dangling-prev"), ev);
+    ok("...and the refused one: runlogOp relink-refused, reasons changed-since-read", ev.some((c) => c.runlogOp === "relink-refused" && JSON.stringify(c.reasons) === '["changed-since-read"]'), ev);
+    ok("the pack rows carry no downpipe id, destination id, digest or index", ev.every((c) => !("downpipeId" in c) && !("destinationIds" in c) && !("digest" in c) && !("indexA" in c) && !JSON.stringify(c).includes(DP)), ev);
   }
 
   console.log("\n-- 2. a RUNLOG that does not verify is never relinked or signed --");
@@ -251,6 +266,8 @@ async function main(): Promise<void> {
     ok("GET says it does not verify and offers no relink", g.body.verifies === false && g.body.canRelink === false && /does not verify/.test(String(g.body.refusal)), g.body);
     const r = await admin(e.env, "POST", "/runlog/relink", e.cookie, relinkBody(g), await freshStepUp(e.env, e.key, e.cookie));
     ok(`POST refuses (got ${r.status}) and nothing is signed`, r.status === 409 && !e.store.has(RUNLOG_SIG));
+    ok("...and the refusal is audited as relink-refused, not-verified", (await refusedRows(e)).some((x) => x.op === "relink-refused" && JSON.stringify(x.reasons) === '["not-verified"]'), await refusedRows(e));
+    ok("...and the pack names it", (await packRunlogEvents(e)).some((c) => c.runlogOp === "relink-refused" && JSON.stringify(c.reasons) === '["not-verified"]'));
   }
 
   console.log("\n-- 3. what a relink cannot clear, or must not touch, is refused --");
@@ -262,6 +279,7 @@ async function main(): Promise<void> {
     const r = await admin(e.env, "POST", "/runlog/relink", e.cookie, relinkBody(g), await freshStepUp(e.env, e.key, e.cookie));
     ok(`...and POST refuses it (got ${r.status})`, r.status === 409);
     ok("...and the refusal names the way out: attach the downpipe to a fresh destination", /fresh destination/.test(String(g.body.refusal)), g.body);
+    ok("...and it is audited as not-cleared, with the anomaly kind", (await refusedRows(e)).some((x) => JSON.stringify(x.reasons) === '["not-cleared"]' && x.state === "duplicate-index"), await refusedRows(e));
 
     const f = await estate();
     await stuck(f, "dangling");
@@ -270,12 +288,14 @@ async function main(): Promise<void> {
     ok("below its floor: GET offers no relink and points to the floor view", gf.body.canRelink === false && /below the last good index/.test(String(gf.body.refusal)), gf.body);
     const rf = await admin(f.env, "POST", "/runlog/relink", f.cookie, relinkBody(gf), await freshStepUp(f.env, f.key, f.cookie));
     ok(`...and POST refuses it (got ${rf.status})`, rf.status === 409);
+    ok("...and it is audited as below-floor", (await refusedRows(f)).some((x) => JSON.stringify(x.reasons) === '["below-floor"]'), await refusedRows(f));
 
     const c = await estate();
     await stuck(c, "clean");
     const gc = await admin(c.env, "GET", `/runlog/chain?destinationId=&downpipeId=${DP}`, c.cookie);
     ok("CONTROL: a clean chain shows no anomaly and offers no relink", gc.body.anomaly === undefined && gc.body.canRelink === false, gc.body);
     ok("CONTROL: and the seal on it appends without any action", (await sealNext(c, 5, R(3))) === "ok");
+    ok("CONTROL: with no relink attempted there is no refusal row and no pack row", (await refusedRows(c)).length === 0 && (await packRunlogEvents(c)).length === 0);
   }
 
   console.log(failures === 0 ? "\nRUNLOG RELINK PASS" : `\n${failures} FAILURE(S)`);
