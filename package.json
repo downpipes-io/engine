@@ -379,7 +379,7 @@
     "@noble/post-quantum": "0.7.1"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.5.14",
+    "@biomejs/biome": "^2.5.15",
     "@cloudflare/vitest-pool-workers": "^0.22.0",
     "@cloudflare/workers-types": "^5.20260928.1",
     "@stryker-mutator/core": "^10.0.0",
