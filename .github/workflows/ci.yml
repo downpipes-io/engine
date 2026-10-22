@@ -72,7 +72,7 @@ jobs:
         with: { persist-credentials: false }
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with: { node-version: "${{ env.NODE_VERSION }}" }
-      - run: npm ci
+      - run: npm ci --no-audit --no-fund
       - name: tsc --noEmit
         run: npm run typecheck
 
@@ -127,7 +127,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with: { node-version: "${{ env.NODE_VERSION }}" }
-      - run: npm ci
+      - run: npm ci --no-audit --no-fund
         working-directory: engine
       - name: cf-config safety guards are load-bearing (curated mutation test)
         # Each guard carrying a safety claim is REMOVED in turn and the gate that should notice is run.
@@ -290,7 +290,7 @@ jobs:
         with: { node-version: "${{ env.NODE_VERSION }}" }
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with: { go-version-file: downpipe/go.mod, cache: false }
-      - run: npm ci
+      - run: npm ci --no-audit --no-fund
         working-directory: engine
       - name: c8 coverage over the validator suite (fails below the .c8rc.json thresholds)
         # REQUIRE_DOWNPIPE=1: this job checks out the sibling downpipe reader deliberately (below),
@@ -316,7 +316,7 @@ jobs:
         with: { persist-credentials: false }
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with: { node-version: "${{ env.NODE_VERSION }}" }
-      - run: npm ci
+      - run: npm ci --no-audit --no-fund
       - name: wrangler bundle (dry-run, no upload)
         run: npx wrangler deploy --dry-run --outdir=dist
 
@@ -354,7 +354,7 @@ jobs:
         with: { persist-credentials: false }
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with: { node-version: "${{ env.NODE_VERSION }}" }
-      - run: npm ci
+      - run: npm ci --no-audit --no-fund
       - name: Two consecutive stamps against one checkout must be byte-identical (npm run validate:stamp-idempotency)
         run: npm run validate:stamp-idempotency
       # Same job, same setup cost: two more real wrangler builds (measured 25s locally). The artefact hash an
@@ -374,7 +374,7 @@ jobs:
         with: { persist-credentials: false }
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with: { node-version: "${{ env.NODE_VERSION }}" }
-      - run: npm ci
+      - run: npm ci --no-audit --no-fund
       # The simplest possible statement of the production rule, kept as its own step. The gate below is a
       # strict superset of it, so the two cannot disagree in a direction that hurts: if this line fails
       # the gate must fail too, and if the gate is ever broken into passing, this line still blocks.
@@ -430,6 +430,12 @@ jobs:
       - name: npm audit (prod deps, high+)
         run: |
           set -uo pipefail
+          # The audits run on npm 11.19.1, pinned exactly and first on PATH for this step only, which asks
+          # the registry's bulk advisory endpoint.
+          NPM11="${RUNNER_TEMP:-/tmp}/npm-11.19.1"
+          npm install --prefix "$NPM11" --no-audit --no-fund npm@11.19.1 >/dev/null || { echo "REFUSED: npm 11.19.1 for the audit could not be installed, so this step checked nothing."; exit 1; }
+          export PATH="$NPM11/node_modules/.bin:$PATH"
+          [ "$(npm --version)" = "11.19.1" ] || { echo "REFUSED: the audit npm is $(npm --version), not 11.19.1."; exit 1; }
           TRANSPORT='audit endpoint returned an error|ECONNRESET|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN|ENOTFOUND|ERR_SOCKET|socket hang up|request to .* failed'
 
           prod=$(node -p "Object.keys(require('./package.json').dependencies||{}).length")
@@ -520,6 +526,12 @@ jobs:
         if: ${{ !cancelled() }}
         run: |
           set -uo pipefail
+          # The audits run on npm 11.19.1, pinned exactly and first on PATH for this step only, which asks
+          # the registry's bulk advisory endpoint.
+          NPM11="${RUNNER_TEMP:-/tmp}/npm-11.19.1"
+          npm install --prefix "$NPM11" --no-audit --no-fund npm@11.19.1 >/dev/null || { echo "REFUSED: npm 11.19.1 for the audit could not be installed, so this step checked nothing."; exit 1; }
+          export PATH="$NPM11/node_modules/.bin:$PATH"
+          [ "$(npm --version)" = "11.19.1" ] || { echo "REFUSED: the audit npm is $(npm --version), not 11.19.1."; exit 1; }
           for attempt in 1 2 3; do
             code=0
             npm run audit:dependencies || code=$?
@@ -542,7 +554,7 @@ jobs:
         with: { persist-credentials: false }
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with: { node-version: "${{ env.NODE_VERSION }}" }
-      - run: npm ci
+      - run: npm ci --no-audit --no-fund
       - name: biome lint (0 errors / 0 warnings / 0 infos required)
         run: npm run lint
 
@@ -639,7 +651,7 @@ jobs:
         with: { persist-credentials: false }
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with: { node-version: "${{ env.NODE_VERSION }}" }
-      - run: npm ci
+      - run: npm ci --no-audit --no-fund
       - name: SchedulerDO concurrency invariants and the first drives in real workerd
         run: npm run test:runtime:a
 
@@ -666,7 +678,7 @@ jobs:
         with: { persist-credentials: false }
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with: { node-version: "${{ env.NODE_VERSION }}" }
-      - run: npm ci
+      - run: npm ci --no-audit --no-fund
       - name: Alert keepalive and denied-apply audit drives in real workerd
         run: npm run test:runtime:b
 
@@ -693,7 +705,7 @@ jobs:
         with: { persist-credentials: false }
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with: { node-version: "${{ env.NODE_VERSION }}" }
-      - run: npm ci
+      - run: npm ci --no-audit --no-fund
       - name: Worker fetch entrypoint in real workerd (vitest-pool-workers)
         run: npm run test:vitest
 
@@ -712,7 +724,7 @@ jobs:
         with: { persist-credentials: false }
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with: { node-version: "${{ env.NODE_VERSION }}" }
-      - run: npm ci
+      - run: npm ci --no-audit --no-fund
       - name: crypto/format property vectors
         run: npm run test:property
 
@@ -755,7 +767,7 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with: { go-version: "1.26.5" }
       - name: npm ci (engine)
-        run: cd engine && npm ci
+        run: cd engine && npm ci --no-audit --no-fund
       - name: Engine writes, Go reader verifies + restores
         run: cd engine && DOWNPIPE_REPO="$GITHUB_WORKSPACE/downpipe" bash scripts/e2e-writer-reader.sh
 
@@ -777,7 +789,7 @@ jobs:
         with: { persist-credentials: false }
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with: { node-version: "${{ env.NODE_VERSION }}" }
-      - run: npm ci
+      - run: npm ci --no-audit --no-fund
       - name: Type-check the test surface (tsconfig.test.json includes test/, src-only typecheck does not)
         # The main tsconfig.json only includes "src", so the bespoke validate-*.ts test scripts were
         # never type-checked and type errors there went undetected. This gate type-checks src + test
@@ -838,7 +850,7 @@ jobs:
         with: { persist-credentials: false }
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with: { node-version: "${{ env.NODE_VERSION }}" }
-      - run: npm ci
+      - run: npm ci --no-audit --no-fund
       - name: TSDoc on public exports in src/crypto, src/format, src/dest
         run: npm run lint:tsdoc
 
