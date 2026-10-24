@@ -114,11 +114,14 @@ link-local cloud-metadata addresses are reachable.
   `src/lib/outbound.ts`), is always permitted and never needs an entry. The list is a positive statement of what the account
   permits, not a substitute for the deny screening: a host on the list still passes the internal-host
   and resolve screens above, and a private host still needs the per-channel opt-in even when it is
-  listed. The SIEM push sinks, the OTLP push and the archive destination endpoint are bounded by the
-  deny screening above only; the allowlist covers the notify-channel surface.
+  listed. The same list bounds the SIEM push sinks (http, S3-drop and syslog-tls) and the OTLP push: a
+  save to a host outside a set list is refused, and a stored target outside it is refused at delivery
+  with the reason `egress-not-allowlisted` and no request issued. The archive destination endpoint is
+  bounded by the deny screening above only.
 
 **Proof it holds.** `test/validate-egress-host-screen.ts`, `test/validate-ssrf-resolve-screen.ts` and
-`test/validate-egress-allowlist.ts`, all in `validate:chain`.
+`test/validate-egress-allowlist.ts` and `test/validate-push-egress-allowlist.ts`, all in
+`validate:chain`.
 
 ---
 
@@ -133,7 +136,7 @@ them up, and it holds the signing key it must use on every run.
   only ever reads the values it was granted (`src/sources/secrets.ts:7-14`). There is no binding that
   enumerates the store.
 - **Wiring metadata.** With the discovery token, a secrets run also reads metadata
-  (`src/sources/secrets-wiring.ts:343`). It lists the names, scopes and comments of every secret in
+  (`src/sources/secrets-wiring.ts:349`). It lists the names, scopes and comments of every secret in
   the store. It reads the settings of every Worker script in the account, and those settings hold
   each script's bindings, plain-text values included, in isolate memory for the read. The reader
   keeps only the entries that match a configured secret and reads no secret value. It reads only
@@ -211,7 +214,7 @@ is a defect in all of it.
   `retention-armed-alone` audit row and raises the `retention-armed-alone` alert (warning).
 - A restore, retention-prune, owner-action or config-change approval is refused with a 429 and a
   Retry-After header when it arrives less than five seconds after the request was raised
-  (`src/admin/approvals.ts:164`), so a
+  (`src/admin/approvals.ts:165`), so a
   scripted maker-and-checker pair cannot drive a dual-control ceremony faster than a person could read
   and act on it.
 

@@ -113,8 +113,8 @@ export function buildAdminStrongAuth(input: PostureInput): CheckDraft {
   };
 }
 
-// dispose-bootstrap-token (high, security): the ADMIN_TOKEN is a ONE-TIME bootstrap credential for the
-// first Owner. Once the bootstrap is complete, leaving the token LIVE means anyone holding the string can
+// dispose-bootstrap-token (high, security): the ADMIN_TOKEN has no expiry or use count; it claims the
+// first Owner and stays valid until retired. Once the bootstrap is complete, leaving the token LIVE means anyone holding it can
 // take admin (it is the unattributable all-or-nothing break-glass). This check FAILS when the bootstrap is
 // consumed AND the token is still EFFECTIVE: it is present (adminTokenPresent) and NOT disabled by either
 // ADMIN_TOKEN_DISABLED (tokenFallbackDisabled) or the in-app retire (breakGlassTokenRetired). It CLEARS the

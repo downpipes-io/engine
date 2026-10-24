@@ -135,15 +135,15 @@ export async function fetchNotifyHistory(scheduler: DurableObjectStub): Promise<
 // never reached me" can be diagnosed: WHETHER any channel is configured at all (no channels => no alert can
 // be delivered), the channel KINDS (email/webhook/..., never the URL/address/secret), and the routing
 // rules (event/severity/scope predicates, what would even fire). Counts + enums + predicates only; a
-// failing fetch yields an empty inventory (honest absence).
+// failing fetch throws, so the pack's section reads "error" and not "no channels".
 export async function fetchNotifyConfig(scheduler: DurableObjectStub): Promise<{ channelCount: number; channelKinds: string[]; disabledChannelCount: number; ruleCount: number; danglingChannelRefs: number; rulesInert?: { count: number; byReason: Record<string, number> }; rules: Array<{ events?: unknown; minSeverity?: string; scope?: string }> }> {
   {
     const [chResp, rlResp] = await Promise.all([
       scheduler.fetch(doURL("/notify/channels"), { method: "GET" }),
       scheduler.fetch(doURL("/notify/rules"), { method: "GET" }),
     ]);
-    const channels = (await chResp.json().catch(() => [])) as Array<{ id?: string; kind?: string; enabled?: boolean }>;
-    const rules = (await rlResp.json().catch(() => [])) as Array<{ events?: unknown; minSeverity?: string; scope?: { kind?: string }; channelIds?: unknown }>;
+    if (!chResp.ok || !rlResp.ok) throw new Error(`notify inventory unreadable: HTTP ${chResp.status}/${rlResp.status}`); const channels = (await chResp.json()) as Array<{ id?: string; kind?: string; enabled?: boolean }>;
+    const rules = (await rlResp.json()) as Array<{ events?: unknown; minSeverity?: string; scope?: { kind?: string }; channelIds?: unknown }>;
     const chArr = Array.isArray(channels) ? channels : [];
     const rlArr = Array.isArray(rules) ? rules : [];
     const channelIdSet = new Set(chArr.map((c) => c.id).filter((id): id is string => typeof id === "string"));
@@ -198,8 +198,8 @@ export async function fetchNotifyHealth(scheduler: DurableObjectStub): Promise<R
       scheduler.fetch(doURL("/notify/health"), { method: "GET" }),
       scheduler.fetch(doURL("/notify/digest-pending"), { method: "GET" }),
     ]);
-    const j = (await hResp.json()) as { passSkips?: unknown; recordSkips?: unknown; parseRejects?: unknown; feedbackFails?: unknown; lastAt?: unknown };
-    const d = (await dResp.json().catch(() => ({}))) as { count?: unknown; oldestAt?: unknown; byPeriod?: Record<string, { count?: unknown; oldestAt?: unknown; dueAt?: unknown }> };
+    if (!hResp.ok || !dResp.ok) throw new Error(`notify health unreadable: HTTP ${hResp.status}/${dResp.status}`); const j = (await hResp.json()) as { passSkips?: unknown; recordSkips?: unknown; parseRejects?: unknown; feedbackFails?: unknown; lastAt?: unknown };
+    const d = (await dResp.json()) as { count?: unknown; oldestAt?: unknown; byPeriod?: Record<string, { count?: unknown; oldestAt?: unknown; dueAt?: unknown }> };
     const out: Record<string, unknown> = {
       passSkips: clampInt(j.passSkips) ?? 0,
       recordSkips: clampInt(j.recordSkips) ?? 0,

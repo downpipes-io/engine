@@ -40,10 +40,10 @@ export const ARTEFACT_SHA384_PLACEHOLDER = "downpipe-artefact-sha384-build-place
  * @returns the lowercase-hex SHA-384 of the bundle built with the placeholder when stamped, otherwise null.
  */
 export async function reportedArtefactSha384(): Promise<string | null> {
-  try {
+  try { // nosemgrep: incident-catch-returns-empty -- an unstamped build reports no digest and never a made up one
     const mod = (await import("./build-stamp.ts")) as { ARTEFACT_SHA384?: unknown };
     return parseArtefactSha384(mod.ARTEFACT_SHA384);
-  } catch {
+  } catch { // site-fault-waiver: src/format/build-id.ts:reportedArtefactSha384:catch:1 -- an unstamped build reports no digest and never a made up one
     return null;
   }
 }

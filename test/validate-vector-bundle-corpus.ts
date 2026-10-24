@@ -75,6 +75,18 @@ const MIN_ARCHIVE_VECTORS = 45;
 const FILES_PER_BUNDLE = 4;
 
 /**
+ * The vectors whose bundle also lists the OPTIONAL signer.pub (SPEC 9.1), five objects instead of four, and
+ * the Go reference's own list of them (conformance_bundle_test.go bundleSignerVectors). Each is re-derived on
+ * every run: its expect.json must still name options.signerFingerprint, the pin that makes the bundled copy
+ * usable. bundled-signer-replaced is also the one whose signer.pub was replaced after the bundle was signed,
+ * so verifyBundle must refuse it on that file alone (Go bundleOverrides: MismatchedFiles signer.pub).
+ */
+const SIGNER_BUNDLE_VECTORS: Record<string, { replaced: boolean }> = {
+  "bundled-signer-pinned": { replaced: false },
+  "bundled-signer-replaced": { replaced: true },
+};
+
+/**
  * The tracked vector directories that carry no archive/ and therefore no recovery bundle, each with the
  * validator that consumes it. Nothing here is taken on trust: the directory and the consumer are both
  * re-derived from the tree on every run, so an entry that has stopped being true fails rather than reading
@@ -156,7 +168,7 @@ function refusalMentions(msg: string | null, ...needles: string[]): boolean {
 
 interface VectorExpect {
   mode?: "positive" | "negative";
-  options?: { checkRecoveryBundle?: boolean } | null;
+  options?: { checkRecoveryBundle?: boolean; signerFingerprint?: string } | null;
   labels?: { recoveryBundleVerified?: boolean };
 }
 
@@ -214,14 +226,20 @@ if (bundleVectors.length < MIN_ARCHIVE_VECTORS) {
 
 console.log("\nEvery archive vector carries a complete bundle:");
 ok(`every vector with an archive/ carries a bundle (${archiveVectors.size} archive vectors, ${bundleVectors.length} bundles)`, archiveVectors.size === bundleVectors.length);
-ok(`the bundle object count is exactly ${FILES_PER_BUNDLE} per bundle (${bundleFileCount} over ${bundleVectors.length})`, bundleFileCount === bundleVectors.length * FILES_PER_BUNDLE);
+const signerBundleCount = bundleVectors.filter((v) => v in SIGNER_BUNDLE_VECTORS).length;
+ok(
+  `the bundle object count is exactly ${FILES_PER_BUNDLE} per bundle, plus signer.pub for the ${signerBundleCount} signer-pin vectors (${bundleFileCount} over ${bundleVectors.length})`,
+  bundleFileCount === bundleVectors.length * FILES_PER_BUNDLE + signerBundleCount,
+);
 const EXPECTED_NAMES = ["FORMAT.md", "RECOVER.md", "SHA384SUMS", "SHA384SUMS.sig"];
+const SIGNER_NAME = "signer.pub";
+const expectedNamesFor = (v: string): string[] => (v in SIGNER_BUNDLE_VECTORS ? [...EXPECTED_NAMES, SIGNER_NAME] : EXPECTED_NAMES);
 const incomplete = bundleVectors.filter((v) => {
   const names = (bundleFilesByVector.get(v) ?? []).slice().sort();
-  return names.join(",") !== EXPECTED_NAMES.slice().sort().join(",");
+  return names.join(",") !== expectedNamesFor(v).slice().sort().join(",");
 });
 for (const v of incomplete) console.log(`       incomplete: ${v} has ${(bundleFilesByVector.get(v) ?? []).join(" ")}`);
-ok(`every bundle holds exactly ${EXPECTED_NAMES.join(", ")} (${incomplete.length} incomplete)`, incomplete.length === 0);
+ok(`every bundle holds exactly ${EXPECTED_NAMES.join(", ")}, and signer.pub for the signer-pin vectors (${incomplete.length} incomplete)`, incomplete.length === 0);
 
 // ARM 2: verification, one vector at a time, through verifyBundle against the vector's own signer.
 
@@ -243,8 +261,19 @@ for (const v of bundleVectors) {
     continue;
   }
   const declared = expect.labels?.recoveryBundleVerified;
-  const shouldVerify = declared !== false;
+  const signerVector = SIGNER_BUNDLE_VECTORS[v];
+  if (signerVector !== undefined) {
+    ok(`${v}: a signer-pin vector still names options.signerFingerprint`, typeof expect.options?.signerFingerprint === "string" && expect.options.signerFingerprint !== "");
+  }
   const verifier = await loadVerifier(vectorDir);
+  if (signerVector?.replaced === true) {
+    // The signer.pub was replaced after the bundle was signed: the bundle must fail, on that file alone.
+    mustFail++;
+    const rmsg = await refusalMessage(() => verifyBundle(dirStore(join(vectorDir, "archive")), verifier));
+    ok(`${v}: the committed bundle does NOT verify, because its signer.pub no longer matches its signed SHA-384${rmsg === null ? "" : ` ("${rmsg}")`}`, refusalMentions(rmsg, "signer.pub", "SHA-384"));
+    continue;
+  }
+  const shouldVerify = declared !== false;
   const msg = await refusalMessage(() => verifyBundle(dirStore(join(vectorDir, "archive")), verifier));
   if (shouldVerify) {
     mustVerify++;
@@ -299,7 +328,7 @@ console.log("\nControls (a real corpus bundle, tampered in memory, must be refus
 const controlVector = bundleVectors.find((v) => {
   const p = join(ROOT, "test/vectors", v, "expect.json");
   if (!existsSync(p)) return false;
-  return (JSON.parse(readFileSync(p, "utf8")) as VectorExpect).labels?.recoveryBundleVerified !== false;
+  return !SIGNER_BUNDLE_VECTORS[v]?.replaced && (JSON.parse(readFileSync(p, "utf8")) as VectorExpect).labels?.recoveryBundleVerified !== false;
 });
 if (controlVector === undefined) cannotCheck("no vector in the corpus is expected to verify, so there is no clean bundle to base the tamper controls on.");
 
@@ -356,7 +385,7 @@ if (otherVector !== undefined) {
 // cannot be a pattern loose enough to match whatever it was pointed at.
 const bogus = tracked.filter((f) => /^test\/vectors\/[^/]+\/archive\/_RECOVERY\/downpipe\/9\.9\.9\/[^/]+$/.test(f));
 ok(`CONTROL: the enumeration is the prefix and not the glob (a version that does not exist matches ${bogus.length} files)`, bogus.length === 0);
-ok("CONTROL: the real prefix matched only markdown, sums and signature names", [...bundleFilesByVector.values()].every((v) => v.every((n) => EXPECTED_NAMES.includes(n))));
+ok("CONTROL: the real prefix matched only markdown, sums, signature and signer.pub names", [...bundleFilesByVector.values()].every((v) => v.every((n) => EXPECTED_NAMES.includes(n) || n === SIGNER_NAME)));
 
 console.log(
   failures === 0

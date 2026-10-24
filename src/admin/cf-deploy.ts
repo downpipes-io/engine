@@ -31,10 +31,11 @@
 //   GET    /accounts/{a}/workers/workers/{name}/versions/{id}?include=modules -> result.modules[].content_base64
 
 import type { ArtefactMeta, DeployDriver, LiveVersionShare } from "./update-apply.ts";
+import { DeployRefusal } from "./update-types.ts";
 import { hexEncode } from "../crypto/bytes.ts";
 import { sha384 } from "../crypto/primitives.ts";
 import { DEPLOYED_ARTEFACT_SHA384_BINDING } from "../format/build-id.ts";
-import { CF_API_BASE as CF_API } from "../lib/outbound.ts";
+import { CF_API_BASE as CF_API } from "../lib/outbound.ts"; import { readJsonOrNull } from "../util/json-body.ts";
 
 // The base URL lives in src/lib/outbound.ts (the one place vendor hosts are enumerated, V13.2.5).
 
@@ -108,7 +109,7 @@ async function readSettings(
   const url = `${CF_API}/accounts/${accountId}/workers/scripts/${encodeURIComponent(scriptName)}/settings`;
 
   const resp = await fetchImpl(url, { method: "GET", headers: auth, redirect: "manual" });
-  const body = (await resp.json().catch(() => null)) as {
+  const body = (await readJsonOrNull(resp)) as {
     success?: boolean;
     result?: { bindings?: unknown; compatibility_date?: unknown; compatibility_flags?: unknown };
     errors?: Array<{ code?: number; message?: string }>;
@@ -197,7 +198,7 @@ export function makeCfDeployDriver(opts: {
   async function readLiveSlices(): Promise<LiveVersionShare[]> {
     const url = `${CF_API}/accounts/${A}/workers/scripts/${S}/deployments`;
     const resp = await fetchImpl(url, { method: "GET", headers: auth, redirect: "manual" });
-    const body = (await resp.json().catch(() => null)) as {
+    const body = (await readJsonOrNull(resp)) as {
       success?: boolean;
       result?: { deployments?: Array<{ id?: unknown; versions?: Array<{ version_id?: unknown; percentage?: unknown }> }> };
       errors?: Array<{ code?: number; message?: string }>;
@@ -313,7 +314,7 @@ export function makeCfDeployDriver(opts: {
 
       const url = `${CF_API}/accounts/${A}/workers/scripts/${S}/versions`;
       const resp = await fetchImpl(url, { method: "POST", headers: auth, body: form, redirect: "manual" });
-      const body = (await resp.json().catch(() => null)) as {
+      const body = (await readJsonOrNull(resp)) as {
         success?: boolean;
         result?: { id?: unknown };
         errors?: Array<{ code?: number; message?: string }>;
@@ -341,7 +342,7 @@ export function makeCfDeployDriver(opts: {
     async fetchVersionModule(versionId: string, mainModule: string): Promise<Uint8Array> {
       const url = `${CF_API}/accounts/${A}/workers/workers/${S}/versions/${versionId}?include=modules`;
       const resp = await fetchImpl(url, { headers: auth, redirect: "manual" });
-      const body = (await resp.json().catch(() => null)) as {
+      const body = (await readJsonOrNull(resp)) as {
         success?: boolean;
         result?: Record<string, unknown>;
         errors?: Array<{ code?: number; message?: string }>;
@@ -379,13 +380,13 @@ export function makeCfDeployDriver(opts: {
           versions: [{ version_id: versionId, percentage: 100 }],
         }),
       });
-      const body = (await resp.json().catch(() => null)) as {
+      const body = (await readJsonOrNull(resp)) as {
         success?: boolean;
         errors?: Array<{ code?: number; message?: string }>;
       } | null;
       if (!resp.ok || body?.success !== true) {
-        const { why } = cfErr(body, resp.status);
-        throw new Error(`could not make version ${versionId} the live deployment (Cloudflare: ${why}); the previously-live version is still serving (Cloudflare deploys are atomic, so nothing was half-applied). The token needs Workers Scripts: Edit on account ${accountId}.`);
+        const { why, codes } = cfErr(body, resp.status);
+        throw new DeployRefusal(`could not make version ${versionId} the live deployment (Cloudflare: ${why}); the previously-live version is still serving (Cloudflare deploys are atomic, so nothing was half-applied). The token needs Workers Scripts: Edit on account ${accountId}.`, codes);
       }
     },
 
@@ -415,7 +416,7 @@ export function makeCfDeployDriver(opts: {
           ],
         }),
       });
-      const body = (await resp.json().catch(() => null)) as {
+      const body = (await readJsonOrNull(resp)) as {
         success?: boolean;
         errors?: Array<{ code?: number; message?: string }>;
       } | null;

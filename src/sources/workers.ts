@@ -53,7 +53,7 @@ import {
   type SourceFaultReason,
 } from "./source-fault-ledger.ts";
 import type { CrawlEvent, Meter, ResumableSource, Selector, SourceAdapter, SourceRecord } from "./types.ts";
-import { CF_API_BASE } from "../lib/outbound.ts";
+import { CF_API_BASE } from "../lib/outbound.ts"; import { readJsonOrNull } from "../util/json-body.ts";
 
 // AspectCounter is the shared per-crawl tally the per-aspect fail-open updates. lastFault holds the most
 // recent absorbed throw (never stored, never logged: only its CLOSED status class is read) so the
@@ -199,7 +199,7 @@ function buildRawFetcher(
       await pacer?.take();
       const resp = await fetchImpl(`${CF_API_BASE}${path}`, { method: "GET", headers: auth, redirect: "manual" });
       if (!resp.ok) {
-        const b = (await resp.clone().json().catch(() => null)) as { errors?: Array<{ message?: string }> } | null;
+        const b = (await readJsonOrNull(resp.clone())) as { errors?: Array<{ message?: string }> } | null;
         const why = (b?.errors ?? []).map((e) => e.message).filter(Boolean).join("; ") || `HTTP ${resp.status}`;
         throw failFor(path, resp.status, why, resp.headers);
       }
@@ -223,7 +223,7 @@ export function makeWorkersCfApi(token: string, fetchImpl: typeof fetch = fetch,
     withRetry(async () => {
       await pacer?.take();
       const resp = await fetchImpl(`${CF_API_BASE}${path}`, { method: "GET", headers: auth, redirect: "manual" });
-      const b = (await resp.json().catch(() => null)) as
+      const b = (await readJsonOrNull(resp)) as
         | { success?: boolean; result?: unknown; result_info?: CfResultInfo; errors?: Array<{ message?: string }> }
         | null;
       if (!resp.ok || b?.success !== true) {

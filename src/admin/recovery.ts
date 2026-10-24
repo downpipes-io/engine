@@ -1,6 +1,6 @@
 // Recovery codes: the normal-app account-recovery break-glass for an Owner (or any enrolled user) who
 // loses their passkey. This is the ONGOING break-glass for admin SIGN-IN, distinct from the ADMIN_TOKEN
-// (a one-time bootstrap credential, then disposed) and distinct from the backup BREAK-GLASS KEY (which is
+// (a bootstrap credential, valid until it is disabled or retired) and distinct from the backup BREAK-GLASS KEY (which is
 // for offline DATA recovery, never admin sign-in). A user signs in with a recovery code at the sign-in
 // screen, gets a normal signed session for their resolved role, and is then prompted to enrol a fresh
 // passkey and regenerate codes.
@@ -21,7 +21,7 @@
 //  - Verification recomputes the HMAC over the presented code + the stored salt and compares in CONSTANT
 //    TIME against EVERY unconsumed code's hash (constantTimeEqual over the raw MAC bytes), so neither a
 //    match position nor a prefix of any stored hash leaks through timing, and a mismatch is indistinguishable
-//    from "email has no codes" at this layer (the DO adds the per-IP/per-email rate limit + the generic
+//    from "email has no codes" at this layer (the DO adds the per-IP / per-email-and-source rate limit + the generic
 //    response, so there is no oracle on which part failed).
 //  - Each code is SINGLE USE: a successful verify marks exactly that code consumed, so the same code fails
 //    the second time. Regenerating replaces the whole set (all prior codes invalid at once).

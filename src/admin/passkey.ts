@@ -162,12 +162,17 @@ export interface BootstrapInvite {
   readonly email: string; // the deploy-time-pinned owner email this invite enrols (never a client claim)
   readonly createdAt: number; // epoch ms
   readonly expiresAt: number; // epoch ms (createdAt + BOOTSTRAP_INVITE_TTL_MS)
+  readonly sentAt?: number; // epoch ms of the latest send of this link; absent reads as createdAt
 }
 
 // BOOTSTRAP_INVITE_TTL_MS bounds the first-Owner link (24 hours): a first-run link should be redeemed the
-// same day, and a re-send is one click on the sign-in screen (which also replaces the single slot), so it
-// is deliberately much shorter than the 7-day teammate invite for a strictly stronger grant (Owner).
+// same day, and a re-send is one click on the sign-in screen (which sends the same link again while it is
+// valid), so it is deliberately much shorter than the 7-day teammate invite for a strictly stronger grant (Owner).
 export const BOOTSTRAP_INVITE_TTL_MS = 24 * 60 * 60 * 1000;
+
+// BOOTSTRAP_RESEND_COOLDOWN_MS is the shortest gap between two sends of the first-Owner link. The send route
+// is reachable without a session, so the gap bounds how often the owner mailbox can be mailed.
+export const BOOTSTRAP_RESEND_COOLDOWN_MS = 60 * 1000;
 
 // CHALLENGE_BYTES is the challenge length (32 random bytes). The WebAuthn spec requires at least 16
 // bytes of entropy; 32 is the conventional, comfortable margin and matches the engine's other 32-byte

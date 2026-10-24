@@ -2,6 +2,7 @@ import { accountPacer } from "../cf-pace.ts";
 import { doURL } from "../do-url.ts";
 import type { Env } from "../env.d.ts";
 import type { DiscoveryScopeConfig } from "../sched/config-validate.ts";
+import { engineScopeAccount } from "../sched/engine-scope-account.ts";
 import { type DownpipeState, RESERVED_BINDINGS } from "../sched/scheduler-do.ts";
 import { ArtifactsSource } from "../sources/artifacts.ts";
 import { type MediaContentOpts, makeByteFetcher } from "../sources/byte-fetch.ts";
@@ -155,7 +156,7 @@ export function buildAdapter(env: Env, state: DownpipeState, cfConfigToken?: str
     if (!cfConfigToken) return new SecretsSource(bound);
     const envAccount = typeof env.CF_ACCOUNT_ID === "string" ? env.CF_ACCOUNT_ID.trim() : "";
     const accountIds = [s.accountId ?? "", envAccount].filter((a) => a !== "");
-    return new SecretsSource(bound, { api: makeWorkersCfApi(cfConfigToken, chaosSourceFetch(env, "secrets"), accountPacer(env)), accountIds, scope: () => readDiscoveryScope(env) });
+    return new SecretsSource(bound, { api: makeWorkersCfApi(cfConfigToken, chaosSourceFetch(env, "secrets"), accountPacer(env)), accountIds, scope: () => readDiscoveryScope(env), engineAccount: () => engineScopeAccount(env, env.SCHEDULER.get(env.SCHEDULER.idFromName("account-scheduler"))) });
   }
   if (s.type === "cf-config") {
     // The cf-config source reads the Cloudflare REST API with the engine's read-only discovery

@@ -415,7 +415,7 @@ async function main(): Promise<void> {
     // the forwarded redirectBinding takes its non-null arm. recordName scopes to one record so the plan still
     // resolves. The plan hash differs from the base, so this is its own (rejected-after) record.
     {
-      const selectorReq = { runId: RUN_ID, reason: "all selectors", target: { binding: `KV_${NS}` }, include: ["a"], exclude: ["b"], maxRecords: 5, recordName: "a", cfConfig: { token: "edit-tok", accountId: "acct-1", zoneId: "zone" } };
+      const selectorReq = { runId: RUN_ID, reason: "all selectors", target: { binding: `KV_${NS}` }, include: ["a"], exclude: ["b"], maxRecords: 5, recordName: "a", cfConfig: { token: "edit-tok", accountId: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1", zoneId: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb1" } };
       const r = await call(OPERATOR, "POST", "/admin/restore/request", selectorReq);
       ok("a request with every optional selector is created (200)", r.status === 200 && ((await r.json()) as RestoreApproval).status === "requested");
       const selectorHash = await restorePlanHash(selectorReq);

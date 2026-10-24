@@ -253,7 +253,7 @@ export function RoutingConfigMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
         return this.json({ attendedCadenceDays: await this.getAttendedCadenceDays() });
       }
       case "POST /config/egress-allowlist": {
-        // The operator-configured outbound egress allowlist (ASVS V13.2.4). Owner-only, re-resolved inside
+        // The egress allowlist (ASVS V13.2.4), honoured by notification channels, the audit-log push, the OTLP push and the S3-drop and syslog sinks. Owner-only, re-resolved inside
         // setEgressAllowlist exactly as the attended-cadence toggle is: it applies immediately (no
         // dual-control arm). This route also serves the notify-channel delivery path's own read of the
         // CURRENT list (the router's channel-delivery code calls GET /config/egress-allowlist internally,
@@ -281,7 +281,7 @@ export function RoutingConfigMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
         await this.enforceChangeControl(typeof ecBody.actionKind === "string" ? ecBody.actionKind : "", ecCaller);
         return this.json({ ok: true });
       }
-      // BREAK-GLASS TOKEN RETIRE (in-app disposal of the one-time bootstrap ADMIN_TOKEN). GET reports the
+      // BREAK-GLASS TOKEN RETIRE (in-app disposal of the bootstrap ADMIN_TOKEN, valid until it is disabled or retired). GET reports the
       // durable breakGlassTokenRetired latch (read by the router for auth.ts wiring AND GET /admin/status);
       // it is reached by the router's own scheduler.fetch on the bare-token path (and the status read), not
       // a public route. POST sets it true: OWNER-ONLY and re-resolved from the DO's own tables (defence in

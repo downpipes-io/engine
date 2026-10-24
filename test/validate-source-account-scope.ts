@@ -12,9 +12,8 @@
 //  (2) DEFENSIVE re-check (router-discovery.ts POST /downpipes/cf-config/rediscover): the TOCTOU where a
 //      downpipe created while its account was in scope keeps working until the Owner narrows `selected`,
 //      at which point rediscover refuses instead of probing.
-//  (3) Regressions: an env-only (IaC) deployment with no console-set discovery config still accepts any
-//      well-formed accountId (no Owner-curated list exists to check against), and a single-account token
-//      (auto-selected, the common case) still works unchanged.
+//  (3) An env-only (IaC) deployment with no console-set discovery config allows only the engine's own
+//      account, and a single-account token (auto-selected, the common case) still works unchanged.
 //  (4) The pure accountInDiscoveryScope predicate directly (unit-level), and the run path's actual
 //      data-capture chokepoint, seal/runstate-helpers.ts's cfConfigToken, which THROWS (fails the run
 //      loud) rather than silently sealing an out-of-scope account.
@@ -121,14 +120,20 @@ async function main(): Promise<void> {
   }
 
   // ===========================================================================================
-  // (3a) REGRESSION: an env-only (IaC) deployment -- no console-set discovery config at all -- must
-  //      keep accepting any well-formed accountId (there is no Owner-curated list to check against).
+  // (3a) An env-only (IaC) deployment -- no console-set discovery config at all -- allows only the engine's
+  //      own account: a foreign account is refused (the lower-role confused deputy), the verified engine
+  //      account is accepted.
   // ===========================================================================================
   {
-    const { call, accEnv } = await mk(undefined);
+    const { call, accEnv, s } = await mk(undefined);
     (accEnv as unknown as { DISCOVERY_API_TOKEN: string }).DISCOVERY_API_TOKEN = "env-fallback-token-1234567890";
-    const r = await call(OWNER, "POST", "/admin/downpipes", createBody("dp-env-only", ACCT_C));
-    ok("regression: env-only discovery (no console config) accepts any well-formed accountId (200)", r.status === 200);
+    const foreign = await call(OWNER, "POST", "/admin/downpipes", createBody("dp-env-foreign", ACCT_C));
+    ok("env-only discovery, engine account unknown: a foreign accountId is refused (400)", foreign.status === 400);
+    await s.storage.put("engineAccountVerified", { accountId: ACCT_A, verifiedAt: 1, via: "attach" });
+    const stillForeign = await call(OWNER, "POST", "/admin/downpipes", createBody("dp-env-foreign2", ACCT_C));
+    ok("env-only discovery, engine account known: a foreign accountId is still refused (400)", stillForeign.status === 400);
+    const own = await call(OWNER, "POST", "/admin/downpipes", createBody("dp-env-own", ACCT_A));
+    ok("negative control: env-only discovery accepts the verified engine account (200)", own.status === 200);
   }
 
   // ===========================================================================================
@@ -144,11 +149,12 @@ async function main(): Promise<void> {
   // (4a) The pure predicate directly (unit-level): every branch of accountInDiscoveryScope.
   // ===========================================================================================
   {
-    ok("predicate: a null config (env/IaC-only) is a no-op -- always in scope", accountInDiscoveryScope(ACCT_C, null));
-    ok("predicate: in accountsSeen, selected EMPTY (fresh multi-account token, no choice made yet) -> in scope", accountInDiscoveryScope(ACCT_B, { accountsSeen: [{ id: ACCT_A }, { id: ACCT_B }], selected: [] }));
-    ok("predicate: in accountsSeen AND in a non-empty selected -> in scope", accountInDiscoveryScope(ACCT_A, { accountsSeen: [{ id: ACCT_A }, { id: ACCT_B }], selected: [ACCT_A] }));
-    ok("predicate: in accountsSeen but selected is non-empty and excludes it -> OUT of scope", !accountInDiscoveryScope(ACCT_B, { accountsSeen: [{ id: ACCT_A }, { id: ACCT_B }], selected: [ACCT_A] }));
-    ok("predicate: never in accountsSeen at all -> OUT of scope even with an empty selected", !accountInDiscoveryScope(ACCT_C, { accountsSeen: [{ id: ACCT_A }], selected: [] }));
+    ok("predicate: a null config with the engine account known allows only that account", accountInDiscoveryScope(ACCT_C, null, ACCT_C) && !accountInDiscoveryScope(ACCT_A, null, ACCT_C));
+    ok("predicate: a null config with an unknown engine account allows no account", !accountInDiscoveryScope(ACCT_C, null, null));
+    ok("predicate: in accountsSeen, selected EMPTY (fresh multi-account token, no choice made yet) -> in scope", accountInDiscoveryScope(ACCT_B, { accountsSeen: [{ id: ACCT_A }, { id: ACCT_B }], selected: [] }, null));
+    ok("predicate: in accountsSeen AND in a non-empty selected -> in scope", accountInDiscoveryScope(ACCT_A, { accountsSeen: [{ id: ACCT_A }, { id: ACCT_B }], selected: [ACCT_A] }, null));
+    ok("predicate: in accountsSeen but selected is non-empty and excludes it -> OUT of scope", !accountInDiscoveryScope(ACCT_B, { accountsSeen: [{ id: ACCT_A }, { id: ACCT_B }], selected: [ACCT_A] }, null));
+    ok("predicate: never in accountsSeen at all -> OUT of scope even with an empty selected", !accountInDiscoveryScope(ACCT_C, { accountsSeen: [{ id: ACCT_A }], selected: [] }, null));
     // AN EMPTY accountsSeen IS A CONFIG, NOT AN ABSENT ONE, and it is the vector every case above was
     // missing: all five use a non-empty accountsSeen, so widening the null-config no-op to
     // `cfg === null || cfg.accountsSeen.length === 0` passed the whole file. That is the shape of a
@@ -157,8 +163,8 @@ async function main(): Promise<void> {
     // router-sources-discovery.ts, where a token that can list nothing yields accounts: []). Under the
     // widened rule that config waves through ANY account id the shared token can reach, which is the
     // confused deputy this predicate exists to stop.
-    ok("predicate: a config that saw ZERO accounts is still a config -> OUT of scope, not a no-op", !accountInDiscoveryScope(ACCT_C, { accountsSeen: [], selected: [] }));
-    ok("predicate: a zero-account config does not wave through a selected id either", !accountInDiscoveryScope(ACCT_A, { accountsSeen: [], selected: [ACCT_A] }));
+    ok("predicate: a config that saw ZERO accounts is still a config -> OUT of scope, not a no-op", !accountInDiscoveryScope(ACCT_C, { accountsSeen: [], selected: [] }, null));
+    ok("predicate: a zero-account config does not wave through a selected id either", !accountInDiscoveryScope(ACCT_A, { accountsSeen: [], selected: [ACCT_A] }, null));
   }
 
   // ===========================================================================================

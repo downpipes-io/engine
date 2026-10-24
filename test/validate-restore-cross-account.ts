@@ -30,9 +30,9 @@ const RUN_TWOFOREIGN = "01ARZ3NDEKTSV4RRFFQ69G5CA4"; // ONE restore, TWO legs, T
 const RUN_ZONE = "01ARZ3NDEKTSV4RRFFQ69G5CA5"; // a cf-config crawl WITH its zone identity record (zoneA)
 const RUN_ZONE_OLD = "01ARZ3NDEKTSV4RRFFQ69G5CA6"; // a cf-config crawl captured before the identity record existed
 const NS = "ns_cax";
-const ORIGIN = "acct-origin"; // the account the archives were captured from (their signed rec.account)
-const OTHER = "acct-different"; // a different account a cross-account restore targets
-const OTHER2 = "acct-different-2"; // a THIRD, distinct account -- so a two-leg restore can target two DIFFERENT foreign accounts
+const ORIGIN = "cccccccccccccccccccccccccccccc01"; // the account the archives were captured from (their signed rec.account)
+const OTHER = "cccccccccccccccccccccccccccccc02"; // a different account a cross-account restore targets
+const OTHER2 = "cccccccccccccccccccccccccccccc03"; // a THIRD, distinct account -- so a two-leg restore can target two DIFFERENT foreign accounts
 
 function rand(n: number): Uint8Array {
   return crypto.getRandomValues(new Uint8Array(n));
@@ -150,7 +150,7 @@ async function main(): Promise<void> {
     [`KV_${NS}`]: kv as unknown as KVNamespace,
   } as unknown as Env);
 
-  const cfCtx = (accountId: string, confirmDifferentAccountId?: string) => ({ token: "edit-token", accountId, ...(confirmDifferentAccountId !== undefined ? { confirmDifferentAccountId } : {}) });
+  const cfCtx = (accountId: string, confirmDifferentAccountId?: string) => ({ token: "edit-token", accountId, zoneId: "dddddddddddddddddddddddddddddd0c", confirmDifferentZoneId: "dddddddddddddddddddddddddddddd0c", ...(confirmDifferentAccountId !== undefined ? { confirmDifferentAccountId } : {}) });
   const mediaCtx = (accountId: string, confirmDifferentAccountId?: string) => ({ token: "edit-token", accountId, ...(confirmDifferentAccountId !== undefined ? { confirmDifferentAccountId } : {}) });
 
   // ---------------- cf-config leg ----------------
@@ -359,14 +359,14 @@ async function main(): Promise<void> {
     console.log("\n-- cf-config cross-ZONE guard --");
     const enc = (o: unknown) => new TextEncoder().encode(JSON.stringify(o));
 
-    ok("originZoneFrom reads the zoneId out of an identity record", originZoneFrom(enc({ v: 1, accountId: "acct", zoneId: "zoneA" })) === "zoneA");
+    ok("originZoneFrom reads the zoneId out of an identity record", originZoneFrom(enc({ v: 1, accountId: "acct", zoneId: "dddddddddddddddddddddddddddddd0a" })) === "dddddddddddddddddddddddddddddd0a");
     ok("originZoneFrom returns null for an account-only archive (no zoneId)", originZoneFrom(enc({ v: 1, accountId: "acct" })) === null);
     ok("originZoneFrom returns null on unparseable bytes rather than throwing", originZoneFrom(new TextEncoder().encode("not json")) === null);
     ok("originZoneFrom returns null when there is no identity record at all", originZoneFrom(null) === null);
 
-    ok("SAME zone does not warn", crossZoneWarning(req("zoneA"), "zoneA", [zoneSurface]) === null);
-    const w = crossZoneWarning(req("zoneB"), "zoneA", [zoneSurface]);
-    ok("a DIFFERENT zone warns", w !== null && w.originZone === "zoneA" && w.targetZone === "zoneB");
+    ok("SAME zone does not warn", crossZoneWarning(req("dddddddddddddddddddddddddddddd0a"), "dddddddddddddddddddddddddddddd0a", [zoneSurface]) === null);
+    const w = crossZoneWarning(req("dddddddddddddddddddddddddddddd0b"), "dddddddddddddddddddddddddddddd0a", [zoneSurface]);
+    ok("a DIFFERENT zone warns", w !== null && w.originZone === "dddddddddddddddddddddddddddddd0a" && w.targetZone === "dddddddddddddddddddddddddddddd0b");
     ok("the warning NAMES the zone-scoped surfaces, not just a count", w !== null && w.zoneSurfaces.join(",") === "dns");
 
     // The unverifiable case must warn, not pass. An archive whose origin cannot be read is exactly the case
@@ -376,20 +376,20 @@ async function main(): Promise<void> {
   // account-only crawl) rather than that the zones differ. The record is read from the whole run, so a
   // selector-limited restore no longer produces a null (the end-to-end section below). Refusing a null would
   // break ordinary same-zone restores to guard against a mismatch there is no evidence of.
-  const unverifiable = crossZoneWarning(req("zoneB"), null, [zoneSurface]);
+  const unverifiable = crossZoneWarning(req("dddddddddddddddddddddddddddddd0b"), null, [zoneSurface]);
   ok("an UNVERIFIABLE origin still WARNS, so the operator sees the zone could not be checked", unverifiable !== null);
-  ok("an unverifiable origin is distinguishable from a proven mismatch, which is what the apply gates on", unverifiable !== null && unverifiable.originZone === null && w !== null && w.originZone === "zoneA");
+  ok("an unverifiable origin is distinguishable from a proven mismatch, which is what the apply gates on", unverifiable !== null && unverifiable.originZone === null && w !== null && w.originZone === "dddddddddddddddddddddddddddddd0a");
 
     // Account-scoped surfaces ignore zoneId entirely, so warning about them would train the operator to
     // click past the warning that matters.
-    ok("an account-scoped surface alone does NOT warn even across zones", crossZoneWarning(req("zoneB"), "zoneA", [acctSurface]) === null);
-    ok("no cf-config zone in the request does not warn", crossZoneWarning(req(), "zoneA", [zoneSurface]) === null);
-    ok("an empty config plan does not warn", crossZoneWarning(req("zoneB"), "zoneA", []) === null);
+    ok("an account-scoped surface alone does NOT warn even across zones", crossZoneWarning(req("dddddddddddddddddddddddddddddd0b"), "dddddddddddddddddddddddddddddd0a", [acctSurface]) === null);
+    ok("no cf-config zone in the request does not warn", crossZoneWarning(req(), "dddddddddddddddddddddddddddddd0a", [zoneSurface]) === null);
+    ok("an empty config plan does not warn", crossZoneWarning(req("dddddddddddddddddddddddddddddd0b"), "dddddddddddddddddddddddddddddd0a", []) === null);
 
     // Type-to-confirm: a bare boolean or the WRONG zone must not clear it.
-    ok("confirmation requires the EXACT target zone", w !== null && crossZoneConfirmed(w, req("zoneB", "zoneB")));
-    ok("echoing the ORIGIN zone does not confirm", w !== null && !crossZoneConfirmed(w, req("zoneB", "zoneA")));
-    ok("no confirmation does not confirm", w !== null && !crossZoneConfirmed(w, req("zoneB")));
+    ok("confirmation requires the EXACT target zone", w !== null && crossZoneConfirmed(w, req("dddddddddddddddddddddddddddddd0b", "dddddddddddddddddddddddddddddd0b")));
+    ok("echoing the ORIGIN zone does not confirm", w !== null && !crossZoneConfirmed(w, req("dddddddddddddddddddddddddddddd0b", "dddddddddddddddddddddddddddddd0a")));
+    ok("no confirmation does not confirm", w !== null && !crossZoneConfirmed(w, req("dddddddddddddddddddddddddddddd0b")));
   }
 
   // ---- the ZONE guard, end to end, with the identity record OUTSIDE the restore's scope ----------------------
@@ -398,7 +398,7 @@ async function main(): Promise<void> {
   // an unconfirmed write into a different zone through with a warning. It now reads it from the whole run.
   console.log("\n-- cf-config cross-ZONE guard, identity record outside the restore's scope --");
   {
-    const identity = utf8(JSON.stringify({ v: 1, accountId: ORIGIN, zoneId: "zoneA", zoneName: "a.example" }));
+    const identity = utf8(JSON.stringify({ v: 1, accountId: ORIGIN, zoneId: "dddddddddddddddddddddddddddddd0a", zoneName: "a.example" }));
     const zoneR2 = await seal(RUN_ZONE, "dp_cax_zone", [
       { sourceType: "cf-config", name: "_cf-config-identity", value: identity, account: ORIGIN },
       { sourceType: "cf-config", name: "dns", value: dnsSnapshot, account: ORIGIN },
@@ -407,32 +407,32 @@ async function main(): Promise<void> {
     const zoneCtx = (zoneId: string, confirmDifferentZoneId?: string) => ({ token: "edit-token", accountId: ORIGIN, zoneId, ...(confirmDifferentZoneId !== undefined ? { confirmDifferentZoneId } : {}) });
     {
       const cf = makeCfDouble();
-      const dry = (await runRestore(envFor(zoneR2, new MockKV()), { runId: RUN_ZONE, include: ["dns"], cfConfig: zoneCtx("zoneB") }, null, { cfApiFactory: () => cf.api })) as RestorePlan;
+      const dry = (await runRestore(envFor(zoneR2, new MockKV()), { runId: RUN_ZONE, include: ["dns"], cfConfig: zoneCtx("dddddddddddddddddddddddddddddd0b") }, null, { cfApiFactory: () => cf.api })) as RestorePlan;
       ok(`FLOOR: the selector leaves the identity record out of scope (skipped: ${(dry.skipped ?? []).map((x) => x.name).join(",")})`, (dry.skipped ?? []).some((x) => x.name === "_cf-config-identity"));
-      ok("the dry run still names the archive's origin zone (zoneA), not an unverifiable one", dry.crossZoneWarning?.originZone === "zoneA" && dry.crossZoneWarning.targetZone === "zoneB");
+      ok("the dry run still names the archive's origin zone (zoneA), not an unverifiable one", dry.crossZoneWarning?.originZone === "dddddddddddddddddddddddddddddd0a" && dry.crossZoneWarning.targetZone === "dddddddddddddddddddddddddddddd0b");
     }
     {
       const cf = makeCfDouble();
-      const res = (await runRestore(envFor(zoneR2, new MockKV()), { runId: RUN_ZONE, confirm: true, include: ["dns"], cfConfig: zoneCtx("zoneB") }, null, { cfApiFactory: () => cf.api })) as RestoreResult;
+      const res = (await runRestore(envFor(zoneR2, new MockKV()), { runId: RUN_ZONE, confirm: true, include: ["dns"], cfConfig: zoneCtx("dddddddddddddddddddddddddddddd0b") }, null, { cfApiFactory: () => cf.api })) as RestoreResult;
       // THE ASSERTION THE OLD PLAN FAILED: the apply wrote the DNS surface into zoneB with no confirmation.
       ok(`an unconfirmed write into a different zone is REFUSED although the identity record is out of scope (${res.reason ?? "ok"})`, res.ok === false && res.recordsRestored === 0);
       ok("the refused apply wrote NOTHING to Cloudflare", cf.sent.length === 0);
     }
     {
       const cf = makeCfDouble();
-      const res = (await runRestore(envFor(zoneR2, new MockKV()), { runId: RUN_ZONE, confirm: true, include: ["dns"], cfConfig: zoneCtx("zoneB", "zoneB") }, null, { cfApiFactory: () => cf.api })) as RestoreResult;
+      const res = (await runRestore(envFor(zoneR2, new MockKV()), { runId: RUN_ZONE, confirm: true, include: ["dns"], cfConfig: zoneCtx("dddddddddddddddddddddddddddddd0b", "dddddddddddddddddddddddddddddd0b") }, null, { cfApiFactory: () => cf.api })) as RestoreResult;
       ok("echoing the target zone id confirms it, and the apply writes", res.ok === true && cf.sent.length === 1);
     }
     {
       const cf = makeCfDouble();
-      const res = (await runRestore(envFor(zoneR2, new MockKV()), { runId: RUN_ZONE, confirm: true, include: ["dns"], cfConfig: zoneCtx("zoneA") }, null, { cfApiFactory: () => cf.api })) as RestoreResult;
+      const res = (await runRestore(envFor(zoneR2, new MockKV()), { runId: RUN_ZONE, confirm: true, include: ["dns"], cfConfig: zoneCtx("dddddddddddddddddddddddddddddd0a") }, null, { cfApiFactory: () => cf.api })) as RestoreResult;
       ok("CONTROL: a same-zone selector-limited restore needs no confirmation", res.ok === true && cf.sent.length === 1);
     }
     {
       // The documented null-origin decision is unchanged: an archive with no identity record at all warns in
       // the dry run and does not refuse (restore-apply.ts, the comment above the zone refusal).
       const cf = makeCfDouble();
-      const res = (await runRestore(envFor(oldR2, new MockKV()), { runId: RUN_ZONE_OLD, confirm: true, cfConfig: zoneCtx("zoneB") }, null, { cfApiFactory: () => cf.api })) as RestoreResult;
+      const res = (await runRestore(envFor(oldR2, new MockKV()), { runId: RUN_ZONE_OLD, confirm: true, cfConfig: zoneCtx("dddddddddddddddddddddddddddddd0b") }, null, { cfApiFactory: () => cf.api })) as RestoreResult;
       ok("CONTROL: an archive captured before the identity record existed still proceeds (warn, not refuse)", res.ok === true && cf.sent.length === 1);
     }
   }

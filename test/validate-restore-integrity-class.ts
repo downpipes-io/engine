@@ -30,7 +30,7 @@ import { mlkemKeygen, mldsaKeygen } from "../src/crypto/pq.ts";
 import { buildArchive, buildSignedRoot, type RecipientEntry, type Signer } from "../src/format/writer.ts";
 import { loadSigner, loadIdentity, verifierFrom } from "../src/keys-env.ts";
 import { openRun, type ObjectStore } from "../src/format/reader.ts";
-import { RunIntegrityError, isIntegrityFailure } from "../src/format/integrity-error.ts";
+import { RunIntegrityError, isIntegrityFailure, usageError } from "../src/format/integrity-error.ts";
 import {
   classifyRestoreFailure,
   isReplicaFallbackReason,
@@ -39,6 +39,9 @@ import {
   REASON_INTEGRITY,
   REASON_OBJECT_MISSING,
   REASON_DESTINATION_ACCESS,
+  REASON_USAGE,
+  coarseRestoreTestReasonCode,
+  worseRestoreReason,
 } from "../src/restore-reasons.ts";
 import { runRestore } from "../src/admin/restore.ts";
 import { b64urlEncode, concat, utf8 } from "../src/crypto/bytes.ts";
@@ -363,6 +366,19 @@ async function main(): Promise<void> {
     ok("the bare destination-access reason remains replica-fallback-eligible", isReplicaFallbackReason(REASON_DESTINATION_ACCESS) === true);
     // A non-availability integrity reason that happens to contain parentheses is NOT eligible (no accidental widening).
     ok("an integrity reason is NOT made fallback-eligible by the prefix change", isReplicaFallbackReason("integrity check failed (whatever)") === false);
+  }
+
+  // A refused operator input (RunIntegrityError category "usage") has its own reason. It is never labelled
+  // as tampering or corruption, and a replica cannot remedy it, so it is not in the fallback set.
+  {
+    const usageErr = usageError("pinned fingerprint is not complete");
+    ok("usage: a typed usage failure classifies to REASON_USAGE", classifyRestoreFailure(usageErr) === REASON_USAGE);
+    ok("usage: REASON_USAGE is not REASON_INTEGRITY", classifyRestoreFailure(usageErr) !== REASON_INTEGRITY);
+    ok("usage: REASON_USAGE is NOT replica-fallback-eligible", isReplicaFallbackReason(classifyRestoreFailure(usageErr)) === false);
+    ok("usage: it maps to the existing coarse code 'other'", coarseRestoreTestReasonCode(REASON_USAGE) === "other");
+    ok("usage: it does not displace a finding seen earlier", worseRestoreReason(REASON_INTEGRITY, REASON_USAGE) === REASON_INTEGRITY);
+    ok("usage: a finding displaces it", worseRestoreReason(REASON_USAGE, REASON_INTEGRITY) === REASON_INTEGRITY);
+    ok("usage: it beats an availability fault", worseRestoreReason(REASON_OBJECT_MISSING, REASON_USAGE) === REASON_USAGE);
   }
 
   verdictReached(failures);

@@ -21,8 +21,14 @@ import { settleFailedRekey, withRunlogHandover } from "../src/admin/router-keys.
 import { routeRetentionArmedAloneAlert } from "../src/admin/router-notify.ts";
 import { openContext } from "../src/admin/router-runlog.ts";
 import { withholdMemberInvite } from "../src/admin/router-sources.ts";
+import { ingestPullRateLimited } from "../src/admin/support-ingest.ts";
+import { fetchRecoveryStatus } from "../src/admin/support-sections-recovery.ts";
+import { fetchStatusBaseline } from "../src/admin/support-sections-runs.ts";
 import type { SiteFaultId } from "../src/admin/site-fault-legend.ts";
 import { peekSiteFaults, SITE_FAULTS_KEY, type SiteFaults } from "../src/admin/site-faults.ts";
+import { drive } from "../src/cron/drive.ts";
+import { loadPassKeys } from "../src/cron/retention-pass.ts";
+import { reconcileAndDue } from "../src/cron/seal-loop-pass.ts";
 import { b64urlEncode, concat, hexEncode, utf8 } from "../src/crypto/bytes.ts";
 import { sha384 } from "../src/crypto/primitives.ts";
 import { hybridSign } from "../src/crypto/sign.ts";
@@ -143,6 +149,106 @@ function memberInviteBody(): void {
   ok("control, a JSON body with no member invite: null and nothing recorded", withholdMemberInvite(JSON.stringify({ email: "a@example.com", role: "viewer" }), true) === null && countOf(id) === c0);
   ok("a body that is not JSON: still null, so the route forwards it unchanged", withholdMemberInvite("not json", true) === null);
   ok("a body that is not JSON: one row recorded", countOf(id) === c0 + 1);
+}
+
+// failingOn answers every DO path with an empty object, except the paths named, which reject as a faulting DO would.
+function failingOn(...paths: string[]): DurableObjectStub {
+  return {
+    async fetch(input: RequestInfo | URL): Promise<Response> {
+      const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url);
+      if (paths.includes(url.pathname)) throw new Error("planted");
+      return Response.json({});
+    },
+  } as unknown as DurableObjectStub;
+}
+
+async function packReadsThatReturnEmpty(): Promise<void> {
+  console.log("support.recovery-refusals-read (support-sections-recovery.ts fetchRecoveryRefusals):");
+  const rid = "support.recovery-refusals-read";
+  const r0 = countOf(rid);
+  // The refusal read comes first inside fetchRecoveryStatus, so its row lands before the recovery-status read
+  // that follows it, whatever that read does with this double.
+  const settle = async (stub: DurableObjectStub): Promise<void> => {
+    try {
+      await fetchRecoveryStatus(stub, {} as Env);
+    } catch {
+      /* the status read after the refusal read is not under test */
+    }
+  };
+  await settle(failingOn());
+  ok("control, a readable refusal record: nothing recorded", countOf(rid) === r0);
+  await settle(failingOn("/recovery-refusals"));
+  ok("a refusal record that cannot be read: one row recorded", countOf(rid) === r0 + 1);
+
+  console.log("support.status-baseline-read (support-sections-runs.ts fetchStatusBaseline):");
+  const bid = "support.status-baseline-read";
+  const b0 = countOf(bid);
+  const okBaseline = await fetchStatusBaseline(failingOn());
+  ok("control, a readable baseline: nothing recorded", countOf(bid) === b0 && Object.keys(okBaseline).length === 0);
+  const failedBaseline = await fetchStatusBaseline(failingOn("/status-baseline"));
+  ok("a baseline that cannot be read: still {}", Object.keys(failedBaseline).length === 0);
+  ok("a baseline that cannot be read: one row recorded", countOf(bid) === b0 + 1);
+
+  console.log("support.ingest-pull-limiter (support-ingest.ts ingestPullRateLimited):");
+  const lid = "support.ingest-pull-limiter";
+  const l0 = countOf(lid);
+  const admitted = await ingestPullRateLimited({ fetch: async () => Response.json({ allowed: true }) } as unknown as DurableObjectStub, "client-1");
+  ok("control, a limiter that answers allow: admitted and nothing recorded", admitted === null && countOf(lid) === l0);
+  const refused = await ingestPullRateLimited({ fetch: async () => Response.json({ allowed: false, retryAfterMs: 5000 }) } as unknown as DurableObjectStub, "client-1");
+  ok("control, a limiter that answers deny: 429 and nothing recorded", refused?.status === 429 && countOf(lid) === l0);
+  // A JSON 500 parses, so the status decides: the refusal and baseline reads record a row for it too.
+  const http500 = { fetch: async () => new Response(JSON.stringify({ error: "internal error" }), { status: 500 }) } as unknown as DurableObjectStub;
+  const rBefore = countOf(rid);
+  try {
+    await fetchRecoveryStatus(http500, {} as Env);
+  } catch {
+    /* the status read after the refusal read is not under test */
+  }
+  ok("a JSON 500 on the refusal record: one row recorded", countOf(rid) === rBefore + 1);
+  const bBefore = countOf(bid);
+  await fetchStatusBaseline(http500);
+  ok("a JSON 500 on the baseline: one row recorded", countOf(bid) === bBefore + 1);
+  const open = await ingestPullRateLimited(failingOn("/rate-check"), "client-1");
+  ok("a limiter that cannot answer: still admitted (fails open)", open === null);
+  ok("a limiter that cannot answer: one row recorded", countOf(lid) === l0 + 1);
+}
+
+async function cronSkips(): Promise<void> {
+  console.log("cron.seal-reconcile (seal-loop-pass.ts reconcileAndDue):");
+  const sid = "cron.seal-reconcile";
+  const s0 = countOf(sid);
+  const due = await reconcileAndDue({ fetch: async () => Response.json({ due: [] }) } as unknown as DurableObjectStub);
+  ok("control, a scheduler that answers: an empty due set (not null) and nothing recorded", Array.isArray(due) && due.length === 0 && countOf(sid) === s0);
+  const skipped = await reconcileAndDue(failingOn("/tick"));
+  ok("a scheduler that cannot be reached: still null, so the tick is skipped", skipped === null);
+  ok("a scheduler that cannot be reached: one row recorded", countOf(sid) === s0 + 1);
+
+  console.log("cron.retention-keys (retention-pass.ts loadPassKeys):");
+  const kid = "cron.retention-keys";
+  const k0 = countOf(kid);
+  const keys = await loadPassKeys({} as Env, "not-a-key");
+  ok("keys that cannot be loaded: still null, so the pass is skipped", keys === null);
+  ok("keys that cannot be loaded: one row recorded", countOf(kid) === k0 + 1);
+
+  console.log("cron.engine-account-record (drive.ts drive):");
+  const aid = "cron.engine-account-record";
+  // The lease is granted; the scheduler then refuses the engine-account write (when failWrite) and every later call.
+  const driveEnv = (failWrite: boolean): Env => {
+    const stub = {
+      async fetch(input: RequestInfo | URL): Promise<Response> {
+        const path = new URL(typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url).pathname;
+        if (path === "/tick-lease/acquire") return Response.json({ acquired: true, token: "t" });
+        if (path === "/sources/engine-account-verified" && !failWrite) return Response.json({ accountId: "a".repeat(32) });
+        throw new Error("planted");
+      },
+    };
+    return { CF_ACCOUNT_ID: "a".repeat(32), SCHEDULER: { idFromName: () => ({}), get: () => stub } } as unknown as Env;
+  };
+  const a0 = countOf(aid);
+  await drive(driveEnv(false));
+  ok("control, a scheduler that takes the engine account: nothing recorded", countOf(aid) === a0);
+  await drive(driveEnv(true));
+  ok("a scheduler that refuses the engine account: the tick still runs and one row is recorded", countOf(aid) === a0 + 1);
 }
 
 async function planHash(): Promise<void> {
@@ -399,6 +505,8 @@ async function main(): Promise<void> {
   await disarmAlertBody();
   await retentionAlert();
   memberInviteBody();
+  await packReadsThatReturnEmpty();
+  await cronSkips();
   await planHash();
   await pruneWidenCheck();
   await runlogPrecheck();

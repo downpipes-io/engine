@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
-  "_comment": "StrykerJS mutation-testing config (guardrails B7-3). GATING via the scheduled .github/workflows/mutation.yml (weekly + on demand): a run below thresholds.break fails. Project standard: break 90, high 95. Measured score 79.95% on 2026-06-22 (294 killed + 9 timeout of 379; 76 survived), which is BELOW the 90 break, so the gate fails until the surviving crypto/format mutants are killed to raise the score to the standard. Scoped tightly to the crypto and format byte/serialisation modules where mutation testing earns its cost. The command runner re-uses the existing fast/deterministic suites as the mutation oracle (the property tests plus the targeted crypto/format validators), so no extra test wiring is needed. Run with: npm run test:mutation",
+  "_comment": "StrykerJS mutation-testing config (guardrails B7-3). Scoped tightly to the crypto and format byte/serialisation modules where mutation testing earns its cost. The command runner re-uses the existing fast/deterministic suites as the mutation oracle (the property tests plus the targeted crypto/format validators), so no extra test wiring is needed. Run with: npm run test:mutation",
   "packageManager": "npm",
   "testRunner": "command",
   "commandRunner": {

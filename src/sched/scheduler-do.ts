@@ -44,7 +44,7 @@ import {
 } from "./downpipe-precondition.ts";
 import { log } from "../log.ts";
 import { isApiDiscoverySourceType } from "../sources/types.ts";
-import { accountInDiscoveryScope, BULK_DOWNPIPES_MAX, BULK_DOWNPIPES_MAX_GATED, validateConfig } from "./config-validate.ts";
+import { accountInDiscoveryScope, ENV_ONLY_SCOPE_REFUSAL, BULK_DOWNPIPES_MAX, BULK_DOWNPIPES_MAX_GATED, validateConfig } from "./config-validate.ts";
 import { allDestinationIds, nextReplAnchors, primaryDestinationId, RETENTION_ARMED_ALONE_HEADER, retentionWidensPrune } from "./destinations.ts";
 import { embeddedConfigId } from "./roster-hygiene.ts";
 import { classifyAuthzGate, classifyConfigReject, classifyConfigSurface, recordAuthzRefusal, recordConfigRejection, recordRecentError } from "./sched-fault-ledger.ts";
@@ -433,14 +433,14 @@ export class SchedulerDO extends SchedulerDOAssembled {
     // composable custom role -- keys.ceremony can never enter a custom role) could point a
     // cf-config/workers/stream/images/artifacts source at ANY account the shared discovery token can
     // reach and use rediscover/trigger to probe or seal it. A null discovery config (env/IaC-only
-    // DISCOVERY_API_TOKEN) is a no-op here (accountInDiscoveryScope), matching resolveDiscoveryToken's
-    // own documented fallback. Re-checked defensively at rediscover, the scheduled discovery pass and the
+    // DISCOVERY_API_TOKEN) allows only the engine's own verified account (accountInDiscoveryScope). Re-checked defensively at rediscover, the scheduled discovery pass and the
     // run path's token resolution, since `selected` can narrow AFTER this downpipe was created.
     // A secrets source reads its wiring metadata with the same token, so its accountId is checked too.
     if ((isApiDiscoverySourceType(resolved.source.type) || resolved.source.type === "secrets") && resolved.source.accountId !== undefined) {
       const discoveryCfg = await this.getDiscoveryConfig();
-      if (!accountInDiscoveryScope(resolved.source.accountId, discoveryCfg)) {
-        throw new Error(`accountId "${resolved.source.accountId}" is not one of the discovery-selected Cloudflare accounts; select it under Sources first`);
+      const engineAccount = (await this.getVerifiedEngineAccount())?.accountId ?? null;
+      if (!accountInDiscoveryScope(resolved.source.accountId, discoveryCfg, engineAccount)) {
+        throw new Error(discoveryCfg === null ? `accountId "${resolved.source.accountId}" is outside the discovery scope: ${ENV_ONLY_SCOPE_REFUSAL}` : `accountId "${resolved.source.accountId}" is not one of the discovery-selected Cloudflare accounts; select it under Sources first`);
       }
     }
     // Every destination the downpipe PINS (primary + replicas) must reference a LIVE one, reject a

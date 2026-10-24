@@ -332,7 +332,7 @@ const CASES = [
     id: "degraded-read-lockout-preflight",
     expect: "keep",
     signal: "bumpAdminCounter",
-    site: "router-ops.ts:348",
+    site: "router-ops.ts:351",
     path: "/policy/require-access",
     method: "POST",
     body: {},

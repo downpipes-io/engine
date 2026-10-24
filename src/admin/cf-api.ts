@@ -8,7 +8,7 @@
 
 import type { AttachSource, LiveBinding } from "./attach-plan.ts";
 import type { AttachRefusalCause } from "./discovery-health.ts";
-import { CF_API_BASE as CF_API } from "../lib/outbound.ts";
+import { CF_API_BASE as CF_API } from "../lib/outbound.ts"; import { readJsonOrNull } from "../util/json-body.ts";
 
 // The base URL lives in src/lib/outbound.ts, the one place vendor hosts are enumerated.
 
@@ -128,7 +128,7 @@ async function diagnoseRead(token: string, accountId: string, scriptName: string
   const auth = { authorization: `Bearer ${token}` };
   try {
     const resp = await fetchImpl(`${CF_API}/accounts/${accountId}/workers/scripts`, { method: "GET", headers: auth, redirect: "manual" });
-    const body = (await resp.json().catch(() => null)) as { success?: boolean; result?: Array<{ id?: unknown }>; errors?: Array<{ code?: number; message?: string }> } | null;
+    const body = (await readJsonOrNull(resp)) as { success?: boolean; result?: Array<{ id?: unknown }>; errors?: Array<{ code?: number; message?: string }> } | null;
     if (resp.ok && body?.success === true && Array.isArray(body.result)) {
       const names = body.result.map((s) => (typeof s.id === "string" ? s.id : "")).filter((n) => n !== "");
       if (!names.includes(scriptName)) {
@@ -167,7 +167,7 @@ export async function readDeployedBindings(token: string, accountId: string, scr
   const url = `${CF_API}/accounts/${accountId}/workers/scripts/${encodeURIComponent(scriptName)}/settings`;
 
   const resp = await fetchImpl(url, { method: "GET", headers: auth, redirect: "manual" });
-  const body = (await resp.json().catch(() => null)) as { success?: boolean; result?: { bindings?: unknown }; errors?: Array<{ code?: number; message?: string }> } | null;
+  const body = (await readJsonOrNull(resp)) as { success?: boolean; result?: { bindings?: unknown }; errors?: Array<{ code?: number; message?: string }> } | null;
   if (!resp.ok || body?.success !== true) {
     const { why } = cfErr(body, resp.status);
     // Tag both arms with the bounded fault, so the attach-refusal record can name a Cloudflare edge outage
@@ -201,8 +201,8 @@ export async function readDeployedBindings(token: string, accountId: string, scr
 export async function checkTokenWindow(token: string, accountId: string, fetchImpl: typeof fetch): Promise<{ problem: string | null; cause?: AttachRefusalCause; tokenId?: string; expiresOn?: string }> {
   try {
     const r = await fetchImpl(`${CF_API}/accounts/${encodeURIComponent(accountId)}/tokens/verify`, { method: "GET", headers: { authorization: `Bearer ${token}` }, redirect: "manual" });
-    const b = (await r.json().catch(() => null)) as { success?: boolean; result?: { id?: string; status?: string; not_before?: string; expires_on?: string }; messages?: Array<{ code?: number; message?: string }>; errors?: Array<{ code?: number; message?: string }> } | null;
-    if (b == null) return { problem: null };
+    const b = (await readJsonOrNull(r)) as { success?: boolean; result?: { id?: string; status?: string; not_before?: string; expires_on?: string }; messages?: Array<{ code?: number; message?: string }>; errors?: Array<{ code?: number; message?: string }> } | null;
+    if (b == null) return { problem: null, cause: "window-unreadable" }; // not JSON (an edge error page): unchecked, as when the verify call throws
     // Capture the redaction-safe window facts for the credential lifecycle registry from the SAME verify
     // call (no second request): the PUBLIC token id and its expires_on. Present only for an ACCOUNT-OWNED
     // token (a user-owned token returns nothing usable here); the token VALUE is NEVER captured.
@@ -247,7 +247,7 @@ export async function readTokenExpiry(token: string, accountId: string, fetchImp
     try {
       const r = await fetchImpl(url, { method: "GET", headers: auth, redirect: "manual" });
       if (!r.ok) continue;
-      const b = (await r.json().catch(() => null)) as { success?: boolean; result?: { id?: unknown; expires_on?: unknown } } | null;
+      const b = (await readJsonOrNull(r)) as { success?: boolean; result?: { id?: unknown; expires_on?: unknown } } | null;
       if (b?.success !== true) continue;
       const facts: { tokenId?: string; expiresOn?: string } = {};
       if (typeof b.result?.id === "string") facts.tokenId = b.result.id;
@@ -332,7 +332,7 @@ export async function auditToken(token: string, caps: Capability[], fetchImpl: t
   return Promise.all(caps.map(async (cap) => {
     try {
       const r = await fetchImpl(`${CF_API}${cap.path}`, { method: "GET", headers: auth, redirect: "manual" });
-      const b = (await r.json().catch(() => null)) as { success?: boolean; errors?: Array<{ code?: number; message?: string }> } | null;
+      const b = (await readJsonOrNull(r)) as { success?: boolean; errors?: Array<{ code?: number; message?: string }> } | null;
       if (r.ok && b?.success === true) return { cap, outcome: "allowed" as CapProbeOutcome };
       if (r.status === 401 || r.status === 403) return { cap, outcome: "refused" as CapProbeOutcome };
       // Cloudflare's verdict on the TOKEN, which arrives on a 400 and not a 401. Checked BEFORE the residual
@@ -366,7 +366,7 @@ export async function putSecret(token: string, accountId: string, scriptName: st
     headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
     body: JSON.stringify({ name, text: value, type: SECRET_TEXT }),
   });
-  const body = (await resp.json().catch(() => null)) as { success?: boolean; errors?: Array<{ code?: number; message?: string }> } | null;
+  const body = (await readJsonOrNull(resp)) as { success?: boolean; errors?: Array<{ code?: number; message?: string }> } | null;
   if (!resp.ok || body?.success !== true) {
     const { why } = cfErr(body, resp.status);
     // Tag the throw with the bounded fault (status class + Cloudflare's own numeric codes + the body class)
@@ -394,7 +394,7 @@ export async function deleteSecret(token: string, accountId: string, scriptName:
   });
   // 404 means the secret is already gone, which is the desired end state: treat it as success.
   if (resp.status === 404) return;
-  const body = (await resp.json().catch(() => null)) as { success?: boolean; errors?: Array<{ code?: number; message?: string }> } | null;
+  const body = (await readJsonOrNull(resp)) as { success?: boolean; errors?: Array<{ code?: number; message?: string }> } | null;
   if (!resp.ok || body?.success !== true) {
     const { why } = cfErr(body, resp.status);
     // The same bounded tag on the removal path. A break-glass-only switch that dies after deleting

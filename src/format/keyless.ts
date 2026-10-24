@@ -1,7 +1,7 @@
 import { b64urlDecode } from "../crypto/bytes.ts";
 import { type HybridVerifier, hybridVerify } from "../crypto/sign.ts";
 import { log } from "../log.ts";
-import { destAccessReason, REASON_FORMAT_UNSUPPORTED, REASON_OBJECT_MISSING } from "../restore-reasons.ts";
+import { destAccessReason, REASON_FORMAT_UNSUPPORTED, REASON_OBJECT_MISSING, REASON_USAGE } from "../restore-reasons.ts";
 import { validateCanonicalCounts } from "./canonnum.ts";
 import { checkRunlogFreshness } from "./freshness.ts";
 import { integrityCategoryOf } from "./integrity-error.ts";
@@ -91,6 +91,10 @@ function coarseKeylessReason(e: unknown, runID: string, ctx: string): string {
   // run and the same label and could only refuse again. Reading the category the gate already set removes
   // the coincidence entirely.
   if (integrityCategoryOf(e) === "format-unsupported") reason = REASON_FORMAT_UNSUPPORTED;
+  // A usage fault is an input the operator corrects (a pin that is not a complete signer fingerprint, or a
+  // destination with no bundled signer.pub to check it against). Its own wording says "has no signer.pub",
+  // which the `is missing` and integrity nets below must never read as a missing object or tampering.
+  else if (integrityCategoryOf(e) === "usage") reason = REASON_USAGE;
   else
   // A COLD-storage-class object (a bucket lifecycle rule silently moved the archive to GLACIER/DEEP_ARCHIVE)
   // reads back as a distinct `thaw-needed` fault (s3-read-ops get() classifies the S3 InvalidObjectState code).

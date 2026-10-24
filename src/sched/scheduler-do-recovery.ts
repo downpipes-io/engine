@@ -1,5 +1,5 @@
 // RecoveryMixin implements the recovery-codes subsystem: the admin sign-in break-glass of
-// generate/regenerate/verify single-use recovery codes with a per-IP and per-email rate limiter. It
+// generate/regenerate/verify single-use recovery codes with a per-IP and a per-email-and-source rate limiter. It
 // layers onto a base whose `this` is SchedulerDOSurface, so recovery mints a session via
 // `this.sessionSigningKey` and consults the role table through `this`. Storage keys live under the
 // `recovery:` and `recovery-rate:` prefixes; verification is constant-time and each code is single-use.
@@ -15,7 +15,7 @@ import { b64urlDecode, b64urlEncode } from "../crypto/bytes.ts";
 import { log } from "../log.ts";
 import { auditFoldNow, auditFoldsFor, recoveryFoldSource, saveAuditFolds } from "./audit-fold.ts";
 import { recordAdminRefusal, recordAuthzRefusal, recordCeremonyFault } from "./sched-fault-ledger.ts";
-import { PASSKEY_CHALLENGE_PREFIX, PASSKEY_CRED_PREFIX, PASSKEY_INVITE_PREFIX, PASSKEY_LOGIN_CHALLENGE_CAP, PASSKEY_SESSION_KEY_KEY, PASSKEY_WITNESS_SINCE_KEY, type RateWindow, RECOVERY_PREFIX, RECOVERY_RATE_MAX_PER_EMAIL, RECOVERY_RATE_MAX_PER_IP, RECOVERY_RATE_PREFIX, RECOVERY_RATE_WINDOW_MS, RECOVERY_SIGNING_KEY_KEY, RECOVERY_STAGED_PREFIX, type SchedulerDOCtor } from "./scheduler-do-base.ts";
+import { PASSKEY_CHALLENGE_PREFIX, PASSKEY_CRED_PREFIX, PASSKEY_INVITE_PREFIX, PASSKEY_LOGIN_CHALLENGE_CAP, PASSKEY_SESSION_KEY_KEY, PASSKEY_WITNESS_SINCE_KEY, type RateWindow, RECOVERY_EMAIL_MAX_LENGTH, RECOVERY_PREFIX, RECOVERY_RATE_MAX_PER_EMAIL, RECOVERY_RATE_MAX_PER_IP, RECOVERY_RATE_PREFIX, RECOVERY_RATE_WINDOW_MS, RECOVERY_SIGNING_KEY_KEY, RECOVERY_STAGED_PREFIX, type SchedulerDOCtor } from "./scheduler-do-base.ts";
 import { nowMillisISO } from "./scheduler-helpers.ts";
 
 export function RecoveryMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
@@ -338,7 +338,7 @@ export function RecoveryMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
 
     // recoveryRecover is the actual recovery: verify a presented code for an email, mark it consumed, and mint
     // a NORMAL signed session for that email's resolved role. It is the highest-value route in the engine, so:
-    //  - HARD rate-limited per IP AND per email, FAIL CLOSED (a limiter hiccup denies, never admits), so an
+    //  - HARD rate-limited per IP AND per email and source, FAIL CLOSED (a limiter hiccup denies, never admits), so an
     //    oracle/brute-force gains nothing by knocking the limiter over. Both buckets must pass.
     //  - GENERIC on failure: a wrong code, an unknown email, an exhausted set, and a rate-limit denial all
     //    return the SAME { ok:false } shape (the router maps it to one generic 401), so there is no oracle on
@@ -355,15 +355,18 @@ export function RecoveryMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
       | { ok: true; email: string; token: string; role: Role; remaining: number; enrolPasskey: boolean }
       | { ok: false; alert: "recovery-code-used" | "recovery-code-abuse" | null }
     > {
-      const email = this.normaliseEmail(body.email);
+      // One address is one bucket (normaliseEmail trims and lower-cases); an over-long one takes `_invalid` below.
+      const normalised = this.normaliseEmail(body.email);
+      const email = normalised !== null && normalised.length <= RECOVERY_EMAIL_MAX_LENGTH ? normalised : null;
       const ip = typeof body.ip === "string" && body.ip.length > 0 ? body.ip : null;
       // RATE LIMIT FIRST (fail closed), BEFORE any record read or compare, so a flood never even reaches the
-      // crypto. Both the per-email and the per-IP bucket are checked; either over-cap (or a limiter error)
-      // denies. We count the throttled attempt into the folded audit row and signal abuse so repeated failures
+      // crypto. Both the per-email-and-source and the per-IP bucket are checked; either over-cap (or a limiter
+      // error) denies. We count the throttled attempt into the folded audit row and signal abuse so repeated failures
       // are loud. A malformed email still consumes a per-IP token (so spraying random emails from one host is
       // still throttled).
-      const emailKey = email ? `email:${email}` : "email:_invalid";
-      const ipKey = ip ? `ip:${ipSourceGroup(ip)}` : null;
+      const group = ip ? ipSourceGroup(ip) : "none";
+      const emailKey = email ? `email:${email}:${group}` : `email:_invalid:${group}`;
+      const ipKey = `ip:${group}`;
       const rateOk = await this.recoveryRateAllow(emailKey, ipKey);
       if (!rateOk) {
         // NO ACTOR ON A THROTTLED ATTEMPT. This attempt is refused before a single byte has been compared
@@ -374,7 +377,7 @@ export function RecoveryMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
         await this.appendRecoveryFailureAudit(ip, "denied");
         // Repeated/over-cap attempts are the abuse signal (the router fires recovery-code-abuse).
         // Record the bounded auth-signal so that a recovery sign-in being refused is diagnosable (the hard
-        // per-IP/per-email fail-closed limiter denying, or a limiter outage failing closed) -
+        // per-IP / per-email-and-source fail-closed limiter denying, or a limiter outage failing closed) -
         // recovery-ratelimited. Best-effort; never blocks the deny.
         await this.recordAuthSignal("recovery-ratelimited");
         return { ok: false, alert: "recovery-code-abuse" };
@@ -511,15 +514,25 @@ export function RecoveryMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
       return { remaining, low: remaining <= RECOVERY_CODES_LOW_THRESHOLD };
     }
 
-    // recoveryRateAllow checks the two hard recovery buckets (per email, per IP) and returns whether the
+    // recoveryRateAllow checks the two hard recovery buckets (per email and source group, per IP) and returns whether the
     // attempt is admitted. It FAILS CLOSED: if rateCheck throws (the limiter's own store is unavailable), the
     // attempt is DENIED, the opposite of the fail-open per-caller limiter (rateLimited), because a guessing attack must never
-    // benefit from an unavailable limiter on this high-value route. Both buckets must pass; a null IP key
-    // (no source IP, e.g. a local request) skips the IP bucket but still enforces the per-email one.
+    // benefit from an unavailable limiter on this high-value route. Both buckets must pass. Every request with no
+    // source IP (a local request) shares the one `ip:none` bucket, so IP-less requests stay bounded like any source,
+    // and its email key carries the source group "none".
     async recoveryRateAllow(emailKey: string, ipKey: string | null): Promise<boolean> {
       try {
+        // A NEW email row is written only after its source group passes the per-IP bucket, so one source adds at most
+        // RECOVERY_RATE_MAX_PER_IP email rows per window. A fresh bucket always admits: no verdict changes.
+        const ipDenied = async (k: string): Promise<boolean> => {
+          if ((await this.recoveryRateCheck(k, RECOVERY_RATE_MAX_PER_IP)).allowed) return false;
+          await recordCeremonyFault(this.state.storage, "recovery-denied-ip-bucket");
+          return true;
+        };
+        const ipFirst = ipKey !== null && !(await this.recoveryRateRowLive(emailKey));
+        if (ipFirst && ipKey !== null && (await ipDenied(ipKey))) return false;
         const emailVerdict = await this.recoveryRateCheck(emailKey, RECOVERY_RATE_MAX_PER_EMAIL);
-        // The three ways this route denies -- the per-EMAIL bucket (this one account is being sprayed), the
+        // The three ways this route denies -- the per-EMAIL-and-source bucket (this account is being sprayed from one source), the
         // per-IP bucket (a whole office behind one NAT locking itself out) and the limiter's own store failing
         // CLOSED (nothing is wrong with the codes at all) -- are recorded under distinct fault names here so
         // they are diagnosable from the pack. The caller's verdict, the audit row and the generic client
@@ -529,19 +542,19 @@ export function RecoveryMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
           await recordCeremonyFault(this.state.storage, "recovery-denied-email-bucket");
           return false;
         }
-        if (ipKey !== null) {
-          const ipVerdict = await this.recoveryRateCheck(ipKey, RECOVERY_RATE_MAX_PER_IP);
-          if (!ipVerdict.allowed) {
-            await recordCeremonyFault(this.state.storage, "recovery-denied-ip-bucket");
-            return false;
-          }
-        }
+        if (ipKey !== null && !ipFirst && (await ipDenied(ipKey))) return false;
         return true;
       } catch (e) {
         log("error", `recovery rate-check unavailable, failing closed (attempt denied): ${(e as Error).message}`);
         await recordCeremonyFault(this.state.storage, "recovery-limiter-unavailable");
         return false;
       }
+    }
+
+    // recoveryRateRowLive reports whether a bucket has an unexpired window; it throws on a storage fault.
+    async recoveryRateRowLive(key: string): Promise<boolean> {
+      const cur = await this.state.storage.get<RateWindow>(`${RECOVERY_RATE_PREFIX}${key}`);
+      return cur !== undefined && Date.now() - cur.windowStart < RECOVERY_RATE_WINDOW_MS;
     }
 
     // recoveryRateCheck is a fixed-window counter in a SEPARATE `recovery-rate:` namespace (so it never

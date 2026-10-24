@@ -297,7 +297,7 @@ export function RbacAuthorityMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
       // An ABSENT/empty param is the legitimate "this caller has no groups" (a passkey caller always, an
       // Access caller with no group claims): it is not a fault and is never recorded.
       if (raw === null || raw.length === 0) return [];
-      try {
+      try { // nosemgrep: incident-catch-returns-empty -- the fault is counted as rbac-groups-param-unparseable
         const v = JSON.parse(raw) as unknown;
         // A param that PARSED but is not an array is corrupt (a router/DO version skew, a tampered
         // param). It coerces to [] and every group->role mapping in the account silently stops resolving:

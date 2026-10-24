@@ -820,15 +820,13 @@ async function testPerturbedGates({ rsa, certPem }: Keys): Promise<void> {
     const r = await verifySamlResponse(resp, baseConn([certPem]), baseCtx());
     ok("10b a wrong SubjectConfirmationData @Recipient (signed) is rejected (per-assertion bearer gate)", r.ok === false);
   }
-  // 10c. Wrong SCD @InResponseTo: signed with an InResponseTo that is not the request we sent -> reject. (Omit
-  //      the Response-level InResponseTo so the assertion-level binding is the gate.) An absent Response-level
-  //      InResponseTo is refused by the envelope's IdP-initiated gate unless the connection allows IdP-initiated
-  //      SSO, so the connection allows it here: the envelope then passes and only the SCD binding can refuse. A
-  //      PRESENT SCD InResponseTo is still bound to the request under allowIdpInitiated. The reason pins the gate.
+  // 10c. Wrong SCD @InResponseTo: signed with an InResponseTo that is not the request we sent -> reject. The
+  //      Response-level InResponseTo is the request we sent, so the envelope passes and only the SCD binding
+  //      can refuse. The reason pins the gate.
   {
     const signed = await signAssertion(buildAssertion({ inResponseTo: "_a_different_request_id" }), ASSERTION_ID, rsa.privateKey);
-    const resp = encodeResponse(buildResponse([signed], { inResponseTo: null }));
-    const r = await verifySamlResponse(resp, baseConn([certPem], { allowIdpInitiated: true }), baseCtx());
+    const resp = encodeResponse(buildResponse([signed]));
+    const r = await verifySamlResponse(resp, baseConn([certPem], { allowIdpInitiated: false }), baseCtx());
     ok("10c a wrong SubjectConfirmationData @InResponseTo (signed) is rejected (anti-injection binding)", r.ok === false && /\[saml-bearer:inresponseto\]/.test(r.reason));
   }
   // 10d. ABSENT InResponseTo everywhere (Response + SCD) with allowIdpInitiated=false -> reject (IdP-initiated

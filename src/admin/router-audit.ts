@@ -81,7 +81,7 @@ const DENIED_BODY_CAP = 64 * 1024;
 // readDeniedBody reads at most DENIED_BODY_CAP bytes and returns the body as a plain object, or {} for any body
 // it cannot use. It never throws: the refusal must reach the caller whatever the body holds.
 async function readDeniedBody(req: Request): Promise<Record<string, unknown>> {
-  try {
+  try { // nosemgrep: incident-catch-returns-empty -- a body that cannot be read has no fields and the refusal it rides on is unchanged
     if (req.body === null) return {};
     const reader = req.body.getReader();
     const chunks: Uint8Array[] = [];
@@ -104,7 +104,7 @@ async function readDeniedBody(req: Request): Promise<Record<string, unknown>> {
     }
     const parsed: unknown = JSON.parse(new TextDecoder().decode(bytes));
     return parsed !== null && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
-  } catch {
+  } catch { // site-fault-waiver: src/admin/router-audit.ts:readDeniedBody:catch:1 -- a body that cannot be read has no fields and the refusal it rides on is unchanged
     return {};
   }
 }

@@ -1,9 +1,10 @@
 import { b64urlDecode, b64urlEncode, concat, constantTimeEqual, hexDecode, hexEncode, utf8 } from "../crypto/bytes.ts";
-import { LABEL_SIGNER_PUBLIC } from "../crypto/keys.ts";
+import { LABEL_SIGNER_PUBLIC, parseVerifier } from "../crypto/keys.ts";
 import { sha384 } from "../crypto/primitives.ts";
 import { type HybridVerifier, hybridSign, hybridVerify } from "../crypto/sign.ts";
-import { integrityError } from "./integrity-error.ts";
+import { integrityError, usageError } from "./integrity-error.ts";
 import { noteFailStage, noteFetchFault } from "./integrity-fault-ledger.ts";
+import { signerFingerprint } from "./writer-root.ts";
 import { VERSION } from "./version.ts";
 
 // The recovery bundle (SPEC 9), ported from the Go reference: a versioned FORMAT.md pointer
@@ -168,23 +169,115 @@ export async function verifyBundle(store: ObjectStoreReader, verifier: HybridVer
   const sumsText = new TextDecoder().decode(sumsBytes);
   const lines = sumsText.split("\n").filter((l) => l.replace(/\r$/, "") !== "");
   if (lines.length > MAX_BUNDLE_SUM_LINES) {
-    throw new Error(`recovery bundle SHA384SUMS lists more than ${MAX_BUNDLE_SUM_LINES} files`);
+    throw integrityError(`recovery bundle SHA384SUMS lists more than ${MAX_BUNDLE_SUM_LINES} files`);
   }
   for (const rawLine of lines) {
     const line = rawLine.replace(/\r$/, "");
     const sep = line.indexOf("  ");
-    if (sep < 0) throw new Error(`malformed SHA384SUMS line: ${JSON.stringify(line)}`);
+    if (sep < 0) throw integrityError(`malformed SHA384SUMS line: ${JSON.stringify(line)}`);
     const expectedHex = line.slice(0, sep);
     const name = line.slice(sep + 2);
     if (!BUNDLE_NAME_RE.test(name)) {
-      throw new Error(`recovery bundle SHA384SUMS has an invalid file name: ${JSON.stringify(name)}`);
+      throw integrityError(`recovery bundle SHA384SUMS has an invalid file name: ${JSON.stringify(name)}`);
     }
     const data = await store.get(`${BUNDLE_PREFIX}${name}`);
     const actualHex = await sha384HexLocal(data);
     if (!constantTimeEqual(hexDecode(actualHex), hexDecode(expectedHex))) {
-      throw new Error(`recovery bundle file ${name} does not match its signed SHA-384`);
+      noteFailStage("recovery-bundle");
+      throw integrityError(`recovery bundle file ${name} does not match its signed SHA-384`);
     }
   }
+}
+
+/** The scheme tag of a hybrid signer fingerprint (SPEC 11.4). */
+const SIGNER_FINGERPRINT_PREFIX = "edmldsa1:";
+
+/**
+ * Normalises a signer fingerprint copied from a recovery sheet, mirroring the Go reference
+ * ParseSignerFingerprint (signerpin.go:50-62): surrounding whitespace and upper-case hex are accepted, and
+ * anything that is not the scheme tag and 96 hex digits (a SHA-384) is a usage error, so a truncated copy is
+ * reported as such and not as a mismatch.
+ *
+ * @param s - the fingerprint as typed.
+ * @returns the normalised "edmldsa1:" fingerprint, lower case.
+ * @throws RunIntegrityError of category "usage" when s is not a complete signer fingerprint.
+ */
+export function parseSignerFingerprint(s: string): string {
+  const v = s.trim();
+  if (!v.toLowerCase().startsWith(SIGNER_FINGERPRINT_PREFIX)) {
+    throw usageError(`usage: the signer fingerprint is not a signer fingerprint: it must start with ${SIGNER_FINGERPRINT_PREFIX}, as the signer line on the recovery sheet does`);
+  }
+  const digest = v.slice(SIGNER_FINGERPRINT_PREFIX.length).toLowerCase();
+  if (!/^[0-9a-f]{96}$/.test(digest)) {
+    throw usageError(`usage: the signer fingerprint is not a complete signer fingerprint: after ${SIGNER_FINGERPRINT_PREFIX} it must be 96 hexadecimal characters. Copy the whole signer line from the recovery sheet`);
+  }
+  return SIGNER_FINGERPRINT_PREFIX + digest;
+}
+
+/** The bound on the bundled signer.pub a reader parses; the real file is one line of about 3.5 KiB. */
+const MAX_BUNDLED_SIGNER_BYTES = 16 << 10;
+
+// A store read that failed because the object is not there (a directory store's ENOENT, or the engine
+// destination adapter's "is missing"), as against a destination that could not be read.
+function isObjectAbsent(e: unknown): boolean {
+  const code = (e as { code?: unknown } | null)?.code;
+  if (code === "ENOENT") return true;
+  const msg = e instanceof Error ? e.message.toLowerCase() : "";
+  return msg.includes("is missing") || msg.includes("no such file");
+}
+
+// The refusal for a bucket copy that fails the pin: the bucket offered a signer the operator did not pin.
+function bundledSignerRefused(why: string): Error {
+  noteFailStage("recovery-bundle");
+  return integrityError(
+    `refusing the signer public key in the recovery bundle: ${why}. Either the bucket copy was altered, or the signer was rotated after the recovery sheet was printed. Nothing was read with it. Use the signer.pub file from the recovery kit`,
+  );
+}
+
+/**
+ * Resolves the signer public key from the recovery bundle under an operator-pinned fingerprint (SPEC 9.1),
+ * mirroring the Go reference BundledSigner (internal/format/signerpin.go). The bucket copy is never a trust
+ * anchor: it is used only when its fingerprint, recomputed here, equals the fingerprint from the offline
+ * recovery sheet.
+ *
+ * @param store - the read side of the destination holding the bundle objects.
+ * @param pinText - the "edmldsa1:" fingerprint from the recovery sheet, as typed.
+ * @returns the bundled signer, as a verifier whose fingerprint equals pin.
+ * @throws RunIntegrityError of category "usage" when pinText is not a complete signer fingerprint or the
+ *   destination holds no signer.pub (the Go reference's exit 6 class); RunIntegrityError of category "integrity"
+ *   when the copy is oversize, malformed or does not match the pin (exit 2 class); the store's own error when
+ *   the destination could not be read.
+ */
+export async function bundledSigner(store: ObjectStoreReader, pinText: string): Promise<HybridVerifier> {
+  const pin = parseSignerFingerprint(pinText);
+  const key = `${BUNDLE_PREFIX}${BUNDLE_SIGNER_NAME}`;
+  let raw: Uint8Array;
+  try {
+    raw = await store.get(key);
+  } catch (e) {
+    if (isObjectAbsent(e)) {
+      noteFailStage("recovery-bundle");
+      throw usageError(
+        `usage: the destination has no ${BUNDLE_SIGNER_NAME}, so the signer fingerprint has nothing to check. Pass the signer.pub from the recovery kit`,
+      );
+    }
+    noteFetchFault("recovery-bundle", e);
+    throw e;
+  }
+  if (raw.length > MAX_BUNDLED_SIGNER_BYTES) throw bundledSignerRefused(`it is ${raw.length} bytes, larger than any signer public-key file`);
+  const fields = new TextDecoder().decode(raw).trim().split(/\s+/);
+  if (fields.length !== 2 || fields[0] !== LABEL_SIGNER_PUBLIC) throw bundledSignerRefused(`it is not a ${LABEL_SIGNER_PUBLIC} file`);
+  let verifier: HybridVerifier;
+  try {
+    verifier = parseVerifier(b64urlDecode(fields[1]!));
+  } catch {
+    throw bundledSignerRefused("it does not parse as a signer public key");
+  }
+  const got = await signerFingerprint(verifier);
+  if (!constantTimeEqual(utf8(got), utf8(pin))) {
+    throw bundledSignerRefused(`its fingerprint is ${got}, and the recovery sheet pins ${pin}`);
+  }
+  return verifier;
 }
 
 /**

@@ -7,11 +7,15 @@
 // queued as a pending approval, and the DO NEVER sees the plaintext secret when a wrap key is configured.
 
 import { isAllowedWebhookUrl } from "../notify.ts";
+import { readEgressAllowlist } from "../notify/push-egress.ts";
 import { isForbiddenPushHeaderName, isValidPushHeaderValue } from "../sched/scheduler-do-limits.ts";
 import { loadConfigWrapKey, maybeWrapConfigSecret, OTLP_PUSH_SECRET_AAD, type WrappedSecret } from "./config-secret.ts";
 import { recordAdminRefusal } from "./diag-admin.ts";
 import { callerHeaders, gate, jsonError, rateLimited } from "./router-core.ts";
+import { callerCan } from "./identity.ts";
+import { redactPushViewQuery } from "./router-push.ts";
 import { doURL, type RouterCtx } from "./router-helpers.ts";
+import { noteSiteFault } from "./site-faults.ts";
 
 // fireInBackground mirrors the identical helper in router-identity.ts: it schedules background work via
 // waitUntil when a runtime is available, or fires it without awaiting otherwise.
@@ -42,14 +46,14 @@ interface ValidatedOtlpPushShape {
 // console can toggle `enabled` or edit the endpoint without resupplying a write-only secret; it is present in
 // the result ONLY when the operator supplied a non-empty one, and the DO enforces that a FIRST-ever create
 // still carries the secret.
-function validateOtlpPushSetShape(body: {
+function validateOtlpPushSetShape(egressAllowlist: readonly string[], body: {
   endpoint?: unknown;
   authHeaderName?: unknown;
   authHeaderValue?: unknown;
   enabled?: unknown;
 }): ValidatedOtlpPushShape | { ok: false; response: Response } {
   if (typeof body.enabled !== "boolean") return { ok: false, response: jsonError("enabled must be a boolean", 400) };
-  const v = isAllowedWebhookUrl(typeof body.endpoint === "string" ? body.endpoint.trim() : "");
+  const v = isAllowedWebhookUrl(typeof body.endpoint === "string" ? body.endpoint.trim() : "", { egressAllowlist });
   if (!v.ok) return { ok: false, response: jsonError(`OTLP push destination endpoint invalid: ${v.reason}`, 400) };
   const authHeaderNameRaw = typeof body.authHeaderName === "string" ? body.authHeaderName.trim() : "";
   const authHeaderName = authHeaderNameRaw === "" ? "Authorization" : authHeaderNameRaw;
@@ -88,7 +92,10 @@ export async function handleOtlpPush(ctx: RouterCtx): Promise<Response | null> {
     case "GET /otlp-push": {
       const denied = gate(caller, "posture.read");
       if (denied) return denied;
-      return scheduler.fetch(doURL("/otlp-push"), { method: "GET" });
+      const reply = await scheduler.fetch(doURL("/otlp-push"), { method: "GET" });
+      // The Owner capability sees the full endpoint; every other reader sees the scheme and host only
+      // (a vendor intake can take its feed credential in the path, the query or the fragment).
+      return callerCan(caller, "keys.ceremony") ? reply : redactPushViewQuery(reply);
     }
 
     // POST /otlp-push sets or replaces the OTLP push destination. Owner-exclusive (keys.ceremony) +
@@ -103,7 +110,14 @@ export async function handleOtlpPush(ctx: RouterCtx): Promise<Response | null> {
       const limited = await rateLimited(scheduler, caller);
       if (limited) return limited;
       const body = (await req.json()) as { endpoint?: unknown; authHeaderName?: unknown; authHeaderValue?: unknown; enabled?: unknown };
-      const validated = validateOtlpPushSetShape(body);
+      let egressAllowlist: string[];
+      try {
+        egressAllowlist = await readEgressAllowlist(scheduler);
+      } catch (e) {
+        noteSiteFault("admin.otlp-push-egress-allowlist-read", e);
+        return jsonError("the egress allowlist could not be read; try again", 503);
+      }
+      const validated = validateOtlpPushSetShape(egressAllowlist, body);
       if (!validated.ok) {
         // Record the refusal, as for SIEM push, so a rejected attempt does not go unlogged.
         fireInBackground(runtime, recordAdminRefusal(scheduler, "otlp-config", "validation"));

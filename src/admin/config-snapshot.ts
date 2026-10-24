@@ -251,10 +251,10 @@ function sortedStrings(list: readonly string[]): string[] {
 // the at-rest scrub, so what a reviewer sees before the change applies is exactly what the config history
 // shows them after it, computed by one piece of code.
 export function webhookHost(url: string): string | null {
-  try {
+  try { // nosemgrep: incident-catch-returns-empty -- a url that does not parse has no host and null shows no host
     const u = new URL(url);
     return u.port ? `${u.hostname}:${u.port}` : u.hostname;
-  } catch {
+  } catch { // site-fault-waiver: src/admin/config-snapshot.ts:webhookHost:catch:1 -- a url that does not parse has no host and null shows no host
     return null;
   }
 }

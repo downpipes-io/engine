@@ -267,7 +267,7 @@ async function main(): Promise<void> {
         fetch: async (input: string | URL, init?: RequestInit): Promise<Response> => {
           const url = new URL(typeof input === "string" ? input : input.toString());
           const json = (v: unknown): Response => new Response(JSON.stringify(v), { status: 200 });
-          if (url.pathname === "/push-config") return json({ record: state.record });
+          if (url.pathname === "/push-config") return json({ record: state.record, egressAllowlist: [] }); // the DO answers the list with every record
           if (url.pathname === "/push") return json({ present: state.record !== null, lastPushedSeq: state.lastPushedSeq, trail: [] });
           if (url.pathname === "/audit/export") {
             const afterSeq = Number(url.searchParams.get("afterSeq") ?? "0");

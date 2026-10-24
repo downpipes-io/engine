@@ -70,10 +70,10 @@ composed capability set includes that row's capability.
 
 | Field / resource group | Read cap | Write cap | Read holders | Write holders | Step-up on write | Evidence |
 |---|---|---|---|---|---|---|
-| Downpipe configuration | `downpipe.read` | `downpipe.write` | all six roles | operator, approver, owner | no | `router.ts:591`; `router-pipelines.ts:43` |
-| Downpipe deletion | - | `downpipe.delete` | - | operator, approver, owner | no | `router-pipelines.ts:100` |
-| Manual run trigger | - | `run.trigger` | - | operator, approver, owner | no | `router-pipelines.ts:150` |
-| Restore drill (recovery test) | - | `drill.run` | - | operator, restore-operator, approver, owner | yes, `/attest/session/create` (starting an attended session) | `router-ops.ts:132` |
+| Downpipe configuration | `downpipe.read` | `downpipe.write` | all six roles | operator, approver, owner | no | `router.ts:599`; `router-pipelines.ts:44` |
+| Downpipe deletion | - | `downpipe.delete` | - | operator, approver, owner | no | `router-pipelines.ts:106` |
+| Manual run trigger | - | `run.trigger` | - | operator, approver, owner | no | `router-pipelines.ts:156` |
+| Restore drill (recovery test) | - | `drill.run` | - | operator, restore-operator, approver, owner | yes, `/attest/session/create` (starting an attended session) | `router-ops.ts:133` |
 | Restore dry-run preview | `restore.dryrun` | - | all six roles | - | n/a | `router-restore.ts:594` |
 | Restorability proof (blind restore test / keyless attest) | `restore.verify` | - | all six roles | - | n/a | `router-restore.ts:641,913` |
 | Restore request | - | `restore.request` | - | operator, restore-operator, approver, owner | no | `router-restore.ts:723` |
@@ -83,11 +83,11 @@ composed capability set includes that row's capability.
 | Member / role table (grant/revoke, another member's sign-in factors and sessions) | - | `roles.write` | - | access-admin, owner | yes: `/roles`, `/roles/delete`, `/signin-factors/revoke`, `/passkey/credentials/delete` (another member's credential; a caller revokes their own without it), `/sessions/terminate-user`, `/sessions/terminate-all` (the DO also requires the owner role) | `router-rbac.ts:43` |
 | Account governance policy (IdP group-to-role mappings, custom roles, control-plane export/import) | - | `access.policy` | - | access-admin, owner | yes: `/group-roles`, `/group-roles/delete`, `/custom-roles`, `/custom-roles/delete` | `router-rbac.ts:187`; `router-identity.ts:391` |
 | Audit log | `audit.read` | none (append-only; entries come from the DO's `appendAudit`; the only route whose sole effect is an entry is `POST /audit/intent`, which takes one of two closed intent actions: `key-ceremony-intent` needs `keys.ceremony` (Owner only), and `access-policy-change-intent` needs `roles.write` (Owner and Access admin); no route edits or deletes an entry) | all six roles | - | n/a | `router-rbac.ts:310`; `docs/security/data-classification.md` s2.11 |
-| Trust roots and egress targets (key ceremony, the attended RUNLOG re-sign, floor reset and chain relink, destinations, IdP connections, SIEM/OTLP push targets, break-glass retirement, custody-share email, the sign-in-context notify policy, the restore and update approval policies) | - | `keys.ceremony` (**owner-reserved**; never composable into a custom role) | - | owner only | yes: `/keys/*`, `/runlog/resign` (the attended RUNLOG re-sign), `/runlog/floor/reset` (the attended floor reset), `/runlog/relink` (the attended chain relink), `/destination*`, `/push*`, `/otlp-push*`, `/idp/connections*`, `/policy/retire-break-glass-token`, `/custody/send-share`, `/config/signin-context-policy` | `router-keys.ts:419`; `router-destinations.ts:328`; `router-identity.ts:843`; `router-push.ts:232` |
-| Notification rules and channels | - | `notify.config` | - | operator, approver, owner | yes: `/notify/rules`, `/notify/rules/delete`, `/notify/channels`, `/notify/channels/delete` | `router-ops.ts:155` |
-| Expiry / licence-lapse policy | - | `expiry.config` | - | operator, approver, owner | no | `router-ops.ts:381` |
-| Scheduled restore-test policy | - | `scheduledtest.config` | - | operator, approver, owner | no | `router-pipelines.ts:40` (DO re-check; every built-in role that holds `downpipe.write` also holds this, so the only caller who can hold one without the other is a composable custom role) |
-| Reports (SLA / compliance projections) | `reports.read` | - | all six roles | - | n/a | `router.ts:582` |
+| Trust roots and egress targets (key ceremony, the attended RUNLOG re-sign, floor reset and chain relink, destinations, IdP connections, SIEM/OTLP push targets, break-glass retirement, custody-share email, the sign-in-context notify policy, the restore and update approval policies) | - | `keys.ceremony` (**owner-reserved**; never composable into a custom role) | - | owner only | yes: `/keys/*`, `/runlog/resign` (the attended RUNLOG re-sign), `/runlog/floor/reset` (the attended floor reset), `/runlog/relink` (the attended chain relink), `/destination*`, `/push*`, `/otlp-push*`, `/idp/connections*`, `/policy/retire-break-glass-token`, `/custody/send-share`, `/config/signin-context-policy` | `router-keys.ts:419`; `router-destinations.ts:328`; `router-identity.ts:843`; `router-push.ts:266` |
+| Notification rules and channels | - | `notify.config` | - | operator, approver, owner | yes: `/notify/rules`, `/notify/rules/delete`, `/notify/channels`, `/notify/channels/delete` | `router-ops.ts:156` |
+| Expiry / licence-lapse policy | - | `expiry.config` | - | operator, approver, owner | no | `router-ops.ts:384` |
+| Scheduled restore-test policy | - | `scheduledtest.config` | - | operator, approver, owner | no | `router-pipelines.ts:41` (DO re-check; every built-in role that holds `downpipe.write` also holds this, so the only caller who can hold one without the other is a composable custom role) |
+| Reports (SLA / compliance projections) | `reports.read` | - | all six roles | - | n/a | `router.ts:583` |
 | Security posture (checks and scores) | `posture.read` | - | all six roles | - | n/a | `router-status.ts:256` |
 | Security posture (risk-accept a failing check) | - | `posture.riskaccept` (**owner-reserved**) | - | owner only | yes: `/posture/accept`, `/posture/unaccept` | `router-config-version.ts:57` |
 

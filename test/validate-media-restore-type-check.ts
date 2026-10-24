@@ -30,7 +30,7 @@ import { verdictReached } from "./lib/verdict-guard.ts";
 
 const RUN_ID = "01BX5ZZKBKACTAV9WEVGEMMVT1";
 const DP_ID = "dp_media_typecheck";
-const ACCT = "acct-media-tc";
+const ACCT = "ffffffffffffffffffffffffffffff01";
 
 let failures = 0;
 function ok(label: string, cond: boolean): void {

@@ -6,7 +6,7 @@
 import { type SealErrorClass, sealErrorClassOf } from "../admin/diag-records.ts";
 import { recordDiagWrite } from "../admin/diag-writer.ts";
 import { doURL, schedulerStub } from "../admin/router.ts";
-import type { Env } from "../env.d.ts";
+import type { Env } from "../env.d.ts"; import { noteSiteFault } from "../admin/site-faults.ts";
 import { log } from "../log.ts";
 import type { DownpipeState } from "../sched/scheduler-do.ts";
 import { type budgetFromEnv, FINALISE_RESERVE } from "../seal/budget.ts";
@@ -78,14 +78,14 @@ export const DRIVE_PER_DOWNPIPE_RESERVE = FINALISE_RESERVE * 3;
 // relevant downpipe's OWN destination (its pinned one, else the default), so different downpipes can
 // write to different buckets and a per-downpipe resolution fault fails only that downpipe, not the tick.
 export async function reconcileAndDue(scheduler: ReturnType<typeof schedulerStub>): Promise<DownpipeState[] | null> {
-  try {
+  try { // nosemgrep: incident-catch-returns-empty -- the fault is recorded as a site fault
     await scheduler.fetch(doURL("/tick"), { method: "POST" });
     const dueResp = await scheduler.fetch(doURL("/due"), { method: "GET" });
     const { due } = (await dueResp.json()) as { due: DownpipeState[] };
     return due;
   } catch (e) {
     log("error", `scheduler reconciliation unavailable, skipping this tick: ${(e as Error).message}`);
-    return null;
+    noteSiteFault("cron.seal-reconcile", e); return null;
   }
 }
 

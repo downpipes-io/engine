@@ -13,6 +13,7 @@ import { type D1FaultEvidence, d1FaultEvidence, drainMetadataShed, sanitiseMetad
 import { putOptionsFromRecord, ReadbackNotSupportedError } from "../dest/restore-sink.ts";
 import { log } from "../log.ts";
 import { destAccessReason } from "../restore-reasons.ts";
+import { cfRequireId, cfWriteIds } from "../sources/cf-config-core.ts";
 import { cfSkipCounts } from "../sources/cf-config-fault.ts";
 import type { CfApi } from "../sources/cf-config-surfaces.ts";
 import { coarseCfReason, decodeConfigSnapshot } from "./restore-cfconfig.ts";
@@ -493,7 +494,7 @@ export async function runApply(env: Env, body: RestoreRequest, run: Run, state: 
     try {
       const snapshot = decodeConfigSnapshot(await run.restoreRecord(rec));
       const api = cfApiFactory(body.cfConfig!.token);
-      const ids = { accountId: body.cfConfig!.accountId, ...(body.cfConfig!.zoneId ? { zoneId: body.cfConfig!.zoneId } : {}) };
+      const ids = cfWriteIds(body.cfConfig!, surface.scope);
       const res = await surface.write!(api, ids, snapshot, { dryRun: false });
       // Carry the CLOSED skip-class counts, not just the integer. Without them a restore that skipped
       // 20 of 200 records leaves no durable trace of WHY any of them skipped.
@@ -568,9 +569,10 @@ export async function runApply(env: Env, body: RestoreRequest, run: Run, state: 
       // record's captured type; otherwise returns the sniffed content type (undefined when unrecognised).
       const contentType = validateMediaBytesType(type, bytes);
       const uploader = mediaUploaderFactory(body.mediaRestore!.token);
+      const mediaAccount = cfRequireId("mediaRestore.accountId", body.mediaRestore!.accountId);
       const res = type === "images"
-        ? await uploader.uploadImage(body.mediaRestore!.accountId, id, bytes, contentType)
-        : await uploader.uploadStreamVideo(body.mediaRestore!.accountId, id, bytes, contentType);
+        ? await uploader.uploadImage(mediaAccount, id, bytes, contentType)
+        : await uploader.uploadStreamVideo(mediaAccount, id, bytes, contentType);
       // The receipt records the media re-upload's proof: expectedSha384 is the signed plaintext hash; for an
       // image verifiedSha384 is the live /blob readback hash, for a transcoded video it is null (no byte proof
       // possible, only the uid resolution that res.verified carries). via distinguishes the two.

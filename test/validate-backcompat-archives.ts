@@ -251,6 +251,12 @@ async function main(): Promise<void> {
     gate: "backcompat-archives",
     consequence: "it would grade this engine against an older fixture set than the one that ships",
     exit: (code: number) => {
+      // Exit 1 is a finding (a release-tag pin behind a newer release tag), not a refusal.
+      if (code === 1) {
+        console.log("FAIL downpipe pin bump owed: the pinned release tag is older than the newest one (see above)");
+        verdictReached(1);
+        process.exit(1);
+      }
       verdictSkipped(`REFUSED, exit ${code}: the downpipe checkout is behind its own origin/main, so nothing was concluded`);
       process.exit(code);
     },

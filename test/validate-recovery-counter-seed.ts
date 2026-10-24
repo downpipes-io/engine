@@ -474,6 +474,21 @@ async function seedOutcomeCells(): Promise<void> {
     okd("L: an unusable signer counts a runlog.advance-signer row", bad === null && ((await siteRow(rig, "runlog.advance-signer"))?.count ?? 0) === sig0 + 1);
   }
 
+  // ---- L2: with no signer the counter still moves past the refused index, and the move is recorded -----------
+  console.log("\nL2 -- with no signer the counter moves past the refused index and the pack records the move");
+  {
+    const d = await survivingBucket();
+    const rig = makeRig();
+    await addDownpipe(rig, DP);
+    await doCall(rig, "POST", "/runlog-index-held", { index: 4, downpipeId: DP });
+    await advanceAfterIndexHeld(envFor(rig, d, noFaults(), null), rig.stub, { index: 4, downpipeId: DP });
+    const counter = await rig.storage.get<number>("runlogCounter");
+    okd("L2: with no signer the counter moves to the refused index 4", counter === 4, counter);
+    const faults = (await fetchIntegrityFaults(rig.stub)) as Record<string, { runlogAnomalies?: Array<{ kind: string; indexA?: number; indexB?: number; archiveId?: string }> }>;
+    const row = faults[DP]?.runlogAnomalies?.find((r) => r.kind === "counter-advanced-after-recovery");
+    okd("L2: the pack names counter-advanced-after-recovery to 4, with no archive named", row !== undefined && row.indexB === 4 && row.archiveId === undefined, faults);
+  }
+
   // ---- M: the refused run reads as an integrity refusal naming index-held --------------------------------------
   console.log("\nM -- the refused run is an integrity refusal naming index-held, in the console's run record and the pack");
   {

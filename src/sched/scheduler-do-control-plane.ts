@@ -91,10 +91,10 @@ function projectExportedIdpConnection(c: IdpConnection): ExportedIdpConnection {
 // export descriptor -- the same discipline the config snapshot uses. It drops the scheme, path, query and any
 // userinfo, because a webhook URL's secret typically lives in the path or query (a Slack/Teams/generic token).
 function notifyUrlHost(url: string): string | null {
-  try {
+  try { // nosemgrep: incident-catch-returns-empty -- a url that does not parse has no host to show
     const u = new URL(url);
     return u.port ? `${u.hostname}:${u.port}` : u.hostname;
-  } catch {
+  } catch { // site-fault-waiver: src/sched/scheduler-do-control-plane.ts:notifyUrlHost:catch:1 -- a url that does not parse has no host to show
     return null;
   }
 }
@@ -450,7 +450,7 @@ export function ControlPlaneMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
     }
 
     // applyResumeDiscovery restores the NON-SECRET discovery selection; the read-only API token is never
-    // exported, so it is stored empty (an API-source run then fails LOUDLY until the operator re-sets it).
+    // exported, so it is stored empty (an API-source run then fails LOUDLY until re-set). It runs BEFORE applyResumeDownpipes: addDownpipe's account scope check reads it.
     async applyResumeDiscovery(exp: ControlPlaneExport): Promise<void> {
       if (exp.discovery === null) return;
       await this.state.storage.put(DISCOVERY_KEY, {
@@ -570,10 +570,10 @@ export function ControlPlaneMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
         );
       }
       return await this.blockConcurrencyWhile(async () => {
+        await this.applyResumeDiscovery(exp);
         const dpCount = await this.applyResumeDownpipes(exp, false);
         const destN = await this.applyResumeDestinations(exp);
         const roleCount = await this.applyAuthorityRoles(exp);
-        await this.applyResumeDiscovery(exp);
         await this.armAuthorityOrgPolicy(exp);
         await this.writeReconcileBridge(caller);
         // The staged auto-heal record (if any) has now been superseded by this explicit reconcile.
@@ -701,9 +701,9 @@ export function ControlPlaneMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
         const definition: ControlPlaneExport = crossAccount
           ? { ...exp, downpipes: exp.downpipes.map((d) => ({ ...(d as DownpipeConfig), enabled: false })) }
           : exp;
+        await this.applyResumeDiscovery(exp);
         const dpCount = await this.applyResumeDownpipes(definition, false);
         const destN = await this.applyResumeDestinations(exp);
-        await this.applyResumeDiscovery(exp);
         // NO AUTHORITY: roles, group/custom roles, IdP connections and the export's org policy are NOT applied.
         // The bridge event ties the new audit chain back to the pre-wipe head (the operator's own bootstrap
         // remains untouched; there is no bootstrap re-arm and no org-policy import that could weaken a gate).
@@ -764,9 +764,9 @@ export function ControlPlaneMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
         return { ok: false, reason: "staged export version mismatch" };
       }
       return await this.blockConcurrencyWhile(async () => {
+        await this.applyResumeDiscovery(staged.export);
         const dpCount = await this.applyResumeDownpipes(staged.export, true);
         const destN = await this.applyResumeDestinations(staged.export);
-        await this.applyResumeDiscovery(staged.export);
         // Resume-apply diagnostics. The tolerant apply SKIPS a malformed downpipe so one bad
         // config never blocks the fleet; record how many were expected vs how many were skipped, and the
         // GENERATION this export applied (a signed-but-stale rollback after a wipe is then visible next to
@@ -828,9 +828,9 @@ export function ControlPlaneMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
       const exp = rec.staged.export;
       return await this.blockConcurrencyWhile(async () => {
         // Ensure the resume slice is in place (idempotent) so a confirm before the cron resumed still works.
+        await this.applyResumeDiscovery(exp);
         await this.applyResumeDownpipes(exp, true);
         await this.applyResumeDestinations(exp);
-        await this.applyResumeDiscovery(exp);
         const roleCount = await this.applyAuthorityRoles(exp);
         await this.armAuthorityOrgPolicy(exp);
         await this.writeReconcileBridge(caller);

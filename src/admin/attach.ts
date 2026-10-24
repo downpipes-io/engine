@@ -80,7 +80,7 @@ import {
 // capability pre-flight and the token window check); asAttachRefusal above tags the two that throw from inside a
 // called phase (the prove-before-write planner and the settings PATCH). The vocabulary lives in the leaf.
 import { ATTACH_CAPABILITY_KEYS, type AttachCapabilityKey, AttachRefusal, AttachRefusalError, type AttachTaggableClass } from "./discovery-health.ts";
-import { CF_API_BASE as CF_API } from "../lib/outbound.ts";
+import { CF_API_BASE as CF_API } from "../lib/outbound.ts"; import { readJsonOrNull } from "../util/json-body.ts";
 
 // The base URL lives in src/lib/outbound.ts (the one place vendor hosts are enumerated).
 
@@ -333,7 +333,7 @@ async function patchSettings(
   const patchResp = await fetchImpl(settings, { method: "PATCH", headers: auth, body: form, redirect: "manual" });
   // From here on Cloudflare HAS ANSWERED. Whatever it said, the request completed and the atomicity guarantee is
   // usable: a non-2xx or success:false means the write did not apply. That is what AnsweredWriteRefusal marks.
-  const patchBody = (await patchResp.json().catch(() => null)) as { success?: boolean; errors?: Array<{ code?: number; message?: string }> } | null;
+  const patchBody = (await readJsonOrNull(patchResp)) as { success?: boolean; errors?: Array<{ code?: number; message?: string }> } | null;
   if (!patchResp.ok || patchBody?.success !== true) {
     const why = patchBody?.errors?.map((e) => e.message).filter(Boolean).join("; ") || `HTTP ${patchResp.status}`;
     throw new AnsweredWriteRefusal(`the change did not land (Cloudflare: ${why}); nothing was changed (settings updates are atomic). Use the wrangler deploy path instead.`);
@@ -679,9 +679,9 @@ async function putConfigRecipient(token: string, accountId: string, scriptName: 
 // what that means: an install keeps the lone private, and the targeted add refuses (heldPrivateUnparsedFault).
 function derivePublicFromHeldPrivate(privB64: string): string | null {
   let identity: HybridRecipientPrivate;
-  try {
+  try { // nosemgrep: incident-catch-returns-empty -- a held private that does not parse has no public to derive and the callers refuse or keep it
     identity = loadIdentity(privB64);
-  } catch {
+  } catch { // site-fault-waiver: src/admin/attach.ts:derivePublicFromHeldPrivate:catch:1 -- a held private that does not parse has no public to derive and the callers refuse or keep it
     return null;
   }
   return b64urlEncode(concat(x25519PublicFromScalar(identity.x25519Scalar), mlkemKeygen(identity.mlkemSeed).encapKey));

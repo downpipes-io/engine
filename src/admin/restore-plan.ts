@@ -3,6 +3,7 @@ import type { Env } from "../env.d.ts";
 import type { ShardRecord } from "../format/manifest.ts";
 import type { Run } from "../format/reader.ts";
 import { log } from "../log.ts";
+import { cfWriteIds } from "../sources/cf-config-core.ts";
 import { CF_CONFIG_COVERAGE_ID, CF_CONFIG_IDENTITY_ID, type CfApi, type CfConfigSurface, surfaceById } from "../sources/cf-config-surfaces.ts";
 import { d1DatabaseNameFromRecordName, d1TableIndexFromRowRecordName } from "../sources/d1.ts";
 import { d1DependencyWarnings } from "../sources/d1-fk.ts";
@@ -428,7 +429,7 @@ export async function runDryRun(body: RestoreRequest, run: Run, state: RestorePl
     try {
       const snapshot = decodeConfigSnapshot(await run.restoreRecord(rec));
       const api = cfApiFactory(body.cfConfig!.token);
-      const ids = { accountId: body.cfConfig!.accountId, ...(body.cfConfig!.zoneId ? { zoneId: body.cfConfig!.zoneId } : {}) };
+      const ids = cfWriteIds(body.cfConfig!, surface.scope);
       const res = await surface.write!(api, ids, snapshot, { dryRun: true });
       configChanges.push({ surface: rec.name, summary: summariseDiff(res), willApply: res.changes.some((c) => c.action !== "remove") });
     } catch (e) {

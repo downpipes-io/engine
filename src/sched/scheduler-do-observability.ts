@@ -21,7 +21,8 @@ import { type RetentionPassRecord, sanitiseRetentionPassRecord } from "../cron/r
 import { ruleSelects } from "../notify.ts";
 import { type ReconcileSignal, sanitiseReconcileSignal } from "../seal/reconcile.ts";
 import { type SealFault, sanitiseSealFault } from "../seal/seal-faults.ts";
-import { foldSealFaultSpan, SEAL_FAULT_SPANS_KEY, type SealFaultSpans } from "../seal/seal-fault-spans.ts";
+import { SEAL_FAULT_SPANS_KEY, type SealFaultSpans } from "../seal/seal-fault-spans.ts";
+import { SEAL_FAULT_KEY, storeSealFault } from "./seal-fault-store.ts";
 import { allDestinationIds, assessRedundancy, type DestinationRedundancyGap, latestSuccessfulRun, primaryDestinationId } from "./destinations.ts";
 import { recordCapTruncation, recordDrillDrop, recordPostureInputFault, recordStorageAnomaly, recordVocabDrop } from "./sched-fault-ledger.ts";
 import { AuthError, BEACON_ATTEMPT_RING_CAP, BEACON_STATE_KEY, type BeaconAttempt, type BeaconAttemptState, type DestReplState, type DownpipeState, DRIVE_BUDGET_YIELD_KEY, type DriveBudgetYieldState, FLEET_DRILL_ACTIVE_KEY, FLEET_DRILL_FAILED_SAMPLE, FLEET_DRILL_INFLIGHT_TIMEOUT_MS, FLEET_DRILL_LAST_KEY, FLEET_DRILL_MAX, type FleetDrillCampaign, type FleetDrillProgress, PASSKEY_USER_PREFIX, REASON_MAX_LEN, type RestoreProvenMethod, type SchedulerDOCtor } from "./scheduler-do-base.ts";
@@ -37,17 +38,9 @@ import { parseReleaseSignerPinSlice } from "../admin/update-signer-pin.ts";
 const RECONCILE_SIGNAL_KEY = "signal:reconcile";
 const RECONCILE_SIGNAL_MAX = 32;
 
-// The seal-fault observation ring (support-pack seal-integrity modes shard-list-truncated /
-// shard-truncation-stalekeys / lease-lost-abandon / orphan-root-worm-leak / signer-rotation-strands-runs)
-// lives under ONE key as a newest-last SealFault[] bounded to the freshest SEAL_FAULT_MAX. Like the
-// reconcile signal it is pure diagnostic REFERENCE data (a closed kind + the customer's own ids + ints /
-// a boolean), structurally distinct from every dp:/hist:/repl:/signal:reconcile key and never read by any
-// seal / restore path. Bounded so a pathological run of faults cannot grow it unbounded.
-const SEAL_FAULT_KEY = "signal:seal-faults";
 // RETENTION_PASS_KEY holds the LATEST retention-prune pass record. A single slot, not a ring: the
 // pass is a cron tick and each record supersedes the last, so one key answers "what did retention do last tick".
 const RETENTION_PASS_KEY = "signal:retention-pass";
-const SEAL_FAULT_MAX = 64;
 
 export function ObservabilityMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
   return class extends Base {
@@ -388,21 +381,15 @@ export function ObservabilityMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
     // the allowlist, so naming the fields here as well only risks the two drifting apart and silently dropping
     // retention prune evidence (deferClass / skipped / unparseableTime / superseded / partial).
     async recordSealFault(body: Record<string, unknown>): Promise<{ ok: true }> {
-      const fault = sanitiseSealFault(body, Date.now());
-      if (fault === null) {
+      const sanitised = sanitiseSealFault(body, Date.now());
+      if (sanitised === null) {
         // The seal DO is a SEPARATE Worker script, so a version skew between them can leave it emitting
         // fault kinds this DO's closed set does not hold. The ring then stays EMPTY while the seal path faults
         // on every run, which reads in the pack as a healthy fleet. Count the drop, never the kind token.
         await recordVocabDrop(this.state.storage, "seal-fault");
         return { ok: true }; // out-of-vocabulary kind: ignore, never persist
       }
-      const ring = (await this.state.storage.get<SealFault[]>(SEAL_FAULT_KEY)) ?? [];
-      ring.push(fault);
-      // Keep only the freshest SEAL_FAULT_MAX (drop the oldest head): the ring is newest-last.
-      const bounded = ring.length > SEAL_FAULT_MAX ? ring.slice(ring.length - SEAL_FAULT_MAX) : ring;
-      await this.state.storage.put(SEAL_FAULT_KEY, bounded);
-      // The ring forgets the START of a fault within a day; the span beside it keeps first and last seen per reason.
-      await this.state.storage.put(SEAL_FAULT_SPANS_KEY, foldSealFaultSpan(await this.state.storage.get<SealFaultSpans>(SEAL_FAULT_SPANS_KEY), fault));
+      await storeSealFault(this.state.storage, sanitised);
       return { ok: true };
     }
 

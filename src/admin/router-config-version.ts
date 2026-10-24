@@ -269,7 +269,7 @@ export async function handleConfigVersion(ctx: RouterCtx): Promise<Response | nu
       return scheduler.fetch(doURL("/config/attended-cadence"), { method: "GET", headers: callerHeaders(caller) });
     }
     case "POST /config/egress-allowlist": {
-      // The operator-configured outbound egress allowlist (ASVS V13.2.4). Owner-only via the owner-exclusive
+      // The egress allowlist (ASVS V13.2.4), honoured by notification channels, the audit-log push, the OTLP push and the S3-drop and syslog sinks. Owner-only via the owner-exclusive
       // keys.ceremony capability, the same gate the attended-cadence toggle uses; the DO re-resolves owner in
       // setEgressAllowlist. It applies immediately (no dual-control arm; see the DO method's own comment for
       // why) and is audited as config-policy-change, carrying only the resulting host count.

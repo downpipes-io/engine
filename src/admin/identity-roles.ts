@@ -36,9 +36,9 @@ export function isHumanActorMethod(method: AuthMethod | "engine" | undefined | n
 
 // isCookieBorneMethod is true for the three methods that authenticate via the engine's OWN ambient session
 // cookie (passkey | oidc | saml). They are exactly the methods that need the strict-Origin CSRF guard on a
-// mutating request (an ambient cookie a foreign page could ride); "access" and "token" present an EXPLICIT
-// header a foreign page cannot set on a credentialed cross-origin request, so they are exempt. Keeping this
-// in one place means every CSRF site widens together when a new cookie-borne method is added.
+// mutating request (an ambient cookie a foreign page could ride). The router checks an "access" request only
+// when it carries an Origin header, and never checks the bare "token" bearer. Keeping this in one place
+// means every CSRF site widens together when a new cookie-borne method is added.
 export function isCookieBorneMethod(method: AuthMethod): boolean {
   return method === "passkey" || method === "oidc" || method === "saml";
 }

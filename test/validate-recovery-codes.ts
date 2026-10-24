@@ -265,21 +265,21 @@ async function testGenericFailureRateLimit(): Promise<void> {
     const unknownEmail = await recoverViaRouter(env, "nobody@acme.example", "ZZZZZ-ZZZZZ", "203.0.113.61");
     ok("ratelimit: an unknown email is the SAME generic 401 (no oracle)", unknownEmail.status === 401 && unknownEmail.body === "unauthorised");
 
-    // HARD per-email rate limit: hammer one email from varied IPs; after the per-email cap (5/window) the
+    // HARD per-email-and-source rate limit: hammer one email from ONE source; after the cap (5/window) the
     // attempts are throttled (the DO fails closed). We already spent some; keep going until we see throttling.
     let sawThrottle = false;
     for (let i = 0; i < 12; i++) {
-      const r = await recoverViaRouter(env, USER, "ZZZZZ-ZZZZZ", `198.51.100.${i}`);
-      // A throttled attempt is still a 401 to the client (generic), but the DO's per-email bucket is now over
+      const r = await recoverViaRouter(env, USER, "ZZZZZ-ZZZZZ", "198.51.100.10");
+      // A throttled attempt is still a 401 to the client (generic), but the DO's per-email-and-source bucket is now over
       // cap; we detect it by asserting it audited a denied (rate-limited) attempt below. Here we just drive.
       void r;
     }
-    // The audit trail must show denied (rate-limited) recovery attempts: the per-email bucket tripped.
+    // The audit trail must show denied (rate-limited) recovery attempts: the per-email-and-source bucket tripped.
     const audits = [...(await storage.list<{ action?: string; outcome?: string }>({ prefix: "audit:" })).values()];
     const recoveryAttempts = audits.filter((e) => e.action === "recovery-code-used");
     ok("ratelimit: failed recovery attempts are audited", recoveryAttempts.some((e) => e.outcome === "failed"));
     sawThrottle = recoveryAttempts.some((e) => e.outcome === "denied");
-    ok("ratelimit: the per-email hard limit trips (denied/rate-limited attempts audited)", sawThrottle);
+    ok("ratelimit: the per-email-and-source hard limit trips (denied/rate-limited attempts audited)", sawThrottle);
     // P2: the fail-closed deny also recorded the bounded recovery-ratelimited auth-signal for the support pack.
     const authSig = (await storage.get<Record<string, { count: number; lastAt: string }>>("authsignals:agg")) ?? {};
     ok("ratelimit: the deny recorded the recovery-ratelimited auth-signal (P2, break-glass sign-in refused)", (authSig["recovery-ratelimited"]?.count ?? 0) > 0);

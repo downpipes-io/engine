@@ -55,12 +55,14 @@ async function main(): Promise<void> {
   const authEnv = (): Env => ({ ...sched.env, CONSOLE_ORIGIN: ORIGIN }) as unknown as Env;
 
   // Spend a recovery code exactly as the sign-in screen does: an unauthenticated POST to the production
-  // route, no cookie, no bearer.
+  // route, no cookie, no bearer. Each spend carries its own source address, as production traffic does, so the
+  // per-source recovery bucket never throttles a spend this test means to grade.
+  let spendSource = 0;
   const spendCode = async (email: string, code: string): Promise<Response> =>
     handleAdmin(
       new Request("https://engine.example/admin/auth/recovery", {
         method: "POST",
-        headers: { "content-type": "application/json", origin: ORIGIN },
+        headers: { "content-type": "application/json", origin: ORIGIN, "cf-connecting-ip": `192.0.2.${++spendSource}` },
         body: JSON.stringify({ email, code }),
       }),
       authEnv(),

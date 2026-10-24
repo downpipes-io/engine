@@ -11,7 +11,8 @@
 
 import { SchedulerDO } from "../src/sched/scheduler-do.ts";
 import type { DownpipeState, FleetDrillProgress } from "../src/sched/scheduler-do.ts";
-import type { SealFault } from "../src/seal/seal-faults.ts";
+import { sanitiseSealFault, type SealFault } from "../src/seal/seal-faults.ts";
+import { ENGINE_VERSION } from "../src/format/version.ts";
 import type { FleetDrillCampaign } from "../src/sched/scheduler-do-base.ts";
 import { encodeCaller, CALLER_HEADER, type Caller } from "../src/admin/identity.ts";
 import { FLEET_DRILL_ACTIVE_KEY, FLEET_DRILL_LAST_KEY, FLEET_DRILL_INFLIGHT_TIMEOUT_MS, FLEET_DRILL_FAILED_SAMPLE } from "../src/sched/scheduler-do-limits.ts";
@@ -916,6 +917,16 @@ async function main(): Promise<void> {
     for (let i = 0; i < 80; i++) await dobj2.recordSealFault({ kind: "lease-lost-abandon", at: AT + i, runId: `r${i}` });
     const ring = (await dobj2.sealFaults()).faults;
     ok("the ring is bounded to the freshest 64 (oldest dropped, newest first)", ring.length === 64 && ring[0]!.runId === "r79" && ring[63]!.runId === "r16");
+
+    // The writing engine version rides on each ring row and each span; a version in the posted body is ignored.
+    const { dobj: dobjV } = makeScheduler();
+    const posted = { kind: "lease-lost-abandon", at: AT, downpipeId: "dp1", runId: "01V", engineVersion: "9.9.9" };
+    await dobjV.recordSealFault(posted);
+    const stamped = (await dobjV.sealFaults()).faults[0]! as SealFault & { engineVersion?: string };
+    ok("a ring row carries the running engine version, not one the body names", stamped.engineVersion === ENGINE_VERSION);
+    const { engineVersion: _ev, ...unstamped } = stamped;
+    ok("control: nothing else on the row changed", JSON.stringify(unstamped) === JSON.stringify(sanitiseSealFault(posted, AT)));
+    ok("the span carries the running engine version as lastEngineVersion", ((await dobjV.sealFaults()).spans?.spans[0] as { lastEngineVersion?: string } | undefined)?.lastEngineVersion === ENGINE_VERSION);
 
     // Route round-trip: POST /seal-fault records; GET /seal-faults reads back (exercises the HTTP dispatch).
     const { dobj: dobj3 } = makeScheduler();

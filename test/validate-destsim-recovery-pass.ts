@@ -33,7 +33,7 @@ async function drive(recoveries: NotifyEmission[], deliver: boolean): Promise<{ 
     let body: unknown;
     if (typeof init?.body === "string") { try { body = JSON.parse(init.body); } catch { body = init.body; } }
     if (path === "/reconcile-alerts") return new Response(JSON.stringify({ alerts: [], pendingTransitionIds: [], successes: [], recoveries, pendingRecoveryIds: recoveries.map((r) => r.downpipeId) }), { headers: { "content-type": "application/json" } });
-    if (path === "/notify/resolve") return new Response(JSON.stringify({ now: [CHANNEL], digestedCount: 0, emission: body }), { headers: { "content-type": "application/json" } });
+    if (path === "/notify/resolve") return new Response(JSON.stringify({ now: [CHANNEL], digestedCount: 0, emission: body, egressAllowlist: [] }), { headers: { "content-type": "application/json" } });
     if (path === "/notify/record") return new Response(JSON.stringify({ ok: true }), { headers: { "content-type": "application/json" } });
     if (path === "/recovery-delivered") { report = body as typeof report; return new Response(JSON.stringify({ cleared: 0, owed: 0 }), { headers: { "content-type": "application/json" } }); }
     if (path === "/notify/health-bump") return new Response(JSON.stringify({ ok: true }), { headers: { "content-type": "application/json" } });

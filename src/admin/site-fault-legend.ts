@@ -213,6 +213,60 @@ export const SITE_FAULT_LEGEND = {
     fixClass: "engine-defect",
     undermines: ["siteFaults"],
   },
+  "source.d1-primary-key-read": {
+    subsystem: "sources",
+    what: "D1 refused the lookup of a WITHOUT ROWID table's primary key. The table was read in one page instead of by key, so it cannot resume part way and a large table may run out of memory.",
+    fixClass: "slow-path-fallback",
+  },
+  "support.recovery-refusals-read": {
+    subsystem: "support-pack",
+    what: "The pack could not read the record of refused manual recoveries. The recovery section then shows no refusals, which may be false.",
+    fixClass: "storage-health",
+    undermines: ["recovery"],
+  },
+  "support.status-baseline-read": {
+    subsystem: "support-pack",
+    what: "The pack could not read the deploy baseline marker. The pack then carries no deployBaseline, which can hide a baseline reset or a same-version redeploy.",
+    fixClass: "storage-health",
+    undermines: ["deployBaseline"],
+  },
+  "support.ingest-pull-limiter": {
+    subsystem: "rate-limit",
+    what: "The scheduler could not answer the rate check for an audit-feed pull. The pull was admitted without a limit check.",
+    fixClass: "transient-platform",
+  },
+  "cron.seal-reconcile": {
+    subsystem: "scheduling",
+    what: "The seal loop could not reach the scheduler to find the downpipes that are due. The tick sealed nothing, and the next tick tries again.",
+    fixClass: "transient-platform",
+  },
+  "cron.retention-keys": {
+    subsystem: "retention",
+    what: "The retention pass could not load its signer or recipient keys. The pass was skipped, so no archive was pruned and the retention evidence is not current.",
+    fixClass: "engine-defect",
+    undermines: [],
+  },
+  "admin.push-egress-allowlist-read": {
+    subsystem: "audit-log-push",
+    what: "The scheduler could not answer the read of the egress allowlist while a push destination was being saved. The save was refused with a retry message, so the stored destination is unchanged.",
+    fixClass: "transient-platform",
+  },
+  "admin.otlp-push-egress-allowlist-read": {
+    subsystem: "otlp-push",
+    what: "The scheduler could not answer the read of the egress allowlist while an OTLP push destination was being saved. The save was refused with a retry message, so the stored destination is unchanged.",
+    fixClass: "transient-platform",
+  },
+  "notify.push-egress-url-parse": {
+    subsystem: "audit-log-push",
+    what: "A stored push target did not parse as a URL when the egress allowlist was checked. The target was refused and nothing was sent to it, so the push stays blocked until the destination is saved again.",
+    fixClass: "engine-defect",
+    undermines: [],
+  },
+  "cron.engine-account-record": {
+    subsystem: "discovery-scope",
+    what: "The tick could not hand CF_ACCOUNT_ID to the scheduler. The scheduler keeps any engine account it already holds. With none held, an env-only discovery token puts no account in scope until a later tick or write records one.",
+    fixClass: "transient-platform",
+  },
 } as const satisfies Record<string, SiteFaultLegendEntry>;
 
 export type SiteFaultId = keyof typeof SITE_FAULT_LEGEND;

@@ -1,0 +1,8 @@
+{
+  "mode": "negative",
+  "exitCode": 2,
+  "phase": "signer",
+  "options": {
+    "signerFingerprint": "edmldsa1:a10e8c5c232ccba0573634cff129606c958c5d1f73a52aae36c4a7f1f2e5d9aa43de004c8a24fad18a26e311568bdd9f"
+  }
+}

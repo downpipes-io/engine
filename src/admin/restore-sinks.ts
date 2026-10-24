@@ -179,9 +179,9 @@ export const OVERWRITE_SAMPLE_CAP = 20;
 // onExisting "skip", whose window MAX_IN_ACCOUNT_SKIP_RESTORE_RECORDS bounds at 160.
 export async function probeTargetExists(sink: RestoreSink, name: string, runId: string): Promise<boolean | null> {
   if (typeof sink.exists !== "function") return null;
-  try {
+  try { // nosemgrep: incident-catch-returns-empty -- the failed existence check is logged with an error id and null reads as unknown
     return await sink.exists(name);
-  } catch (e) {
+  } catch (e) { // site-fault-waiver: src/admin/restore-sinks.ts:probeTargetExists:catch:1 -- the failed existence check is logged with an error id and null reads as unknown
     log("error", `restore ${runId} record ${name} [err:${errId(e)} target-exists-check-failed]`);
     return null;
   }

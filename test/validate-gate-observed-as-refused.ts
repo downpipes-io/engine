@@ -362,7 +362,6 @@ async function main(): Promise<void> {
         headers: {
           "cf-access-jwt-assertion": assertion,
           "content-type": "application/json",
-          origin: "https://engine.example",
         },
         ...(method === "GET" ? {} : { body: JSON.stringify(body ?? {}) }),
       }),

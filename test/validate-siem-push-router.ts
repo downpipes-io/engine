@@ -474,7 +474,7 @@ async function main(): Promise<void> {
       const inbox = await call(env, "GET", "/admin/owner-actions", { jwt: await tokenFor(O2) });
       const pending = (inbox.json as unknown as Array<{ id: string; kind: string; params: Record<string, unknown> }>).find((a) => a.id === pendingId);
       ok("the pending action is visible to owner2 (an owner reviewer)", pending !== undefined && pending.kind === "push-dest-set");
-      ok("the QUEUED listing's params carry the non-secret fields (endpoint/format/header name)", pending?.params.endpoint === "https://siem.example.com/ingest" && pending?.params.format === "datadog" && pending?.params.authHeaderName === "DD-API-KEY");
+      ok("the QUEUED listing's params carry the non-secret fields (format/header name) and the endpoint as scheme and host only", pending?.params.endpoint === "https://siem.example.com" && pending?.params.endpointRedacted === true && pending?.params.format === "datadog" && pending?.params.authHeaderName === "DD-API-KEY");
       ok("the QUEUED listing NEVER carries the secret (redactOwnerActionParamsForListing strips authHeaderValue)", !("authHeaderValue" in (pending?.params ?? {})) && !JSON.stringify(pending?.params ?? {}).includes(SECRET));
 
       // Self-approval is refused (maker != checker), at the DO (defence in depth).

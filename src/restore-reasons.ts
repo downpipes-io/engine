@@ -58,6 +58,19 @@ export const REASON_FRESHNESS_UNVERIFIABLE = "freshness check could not run";
 // integrity failure. Terminal, then, but terminal for a reason the customer can act on.
 export const REASON_FORMAT_UNSUPPORTED = "archive format version not supported by this engine build";
 
+// REASON_USAGE is the classifier reason for a read refused on the operator's INPUT before any archive byte
+// is judged: a pinned signer fingerprint that is not complete, or a destination that carries no bundled
+// signer.pub for the pin to check against. It is the "usage" category of RunIntegrityError. Nothing about
+// the archive is in question: no signature, hash or chain check ran, and nothing was written. The only true
+// statement is that the input can be corrected and the read tried again.
+//
+// IT IS NOT IN THE REPLICA-FALLBACK SET. A 3-2-1 replica holds the SAME bytes and the same lack of a bundled
+// signer.pub, and the pin the operator supplied is the same pin, so a walk could only refuse again. The
+// fault is the input, not a destination. Like REASON_FORMAT_UNSUPPORTED it is terminal without being a
+// finding, and worseRestoreReason treats it the same way. It is kept apart from REASON_INTEGRITY so the
+// console never tells an operator holding a typo that the archive may be corrupt or tampered with.
+export const REASON_USAGE = "restore input cannot be used; correct the pinned fingerprint or use a destination with a bundled signer.pub, then retry";
+
 // REASON_OBJECT_MISSING is the classifier reason for an object that is absent from the bucket (a 404 or an
 // "is missing" producer error). It is one of the AVAILABILITY reasons another bucket in the 3-2-1 set could
 // remedy, so the replica fallback retries the next candidate on it (see isReplicaFallbackReason).
@@ -195,12 +208,20 @@ export function isReplicaFallbackReason(reason: string | undefined): boolean {
 // real tamper would report a wrong-build message over a damaged archive, which is the same class of harm
 // this reason was minted to stop, pointing the other way. It still beats an availability fault, because it
 // is terminal and a replica cannot clear it.
+//
+// REASON_USAGE is the second explicit exception, for the same reason: it is terminal without being a
+// finding. A refused operator input means no check over any byte ran, so it must not displace a reason that
+// genuinely failed a check, and it still beats an availability fault because a replica cannot clear it.
+function isTerminalNonFinding(reason: string): boolean {
+  return reason === REASON_FORMAT_UNSUPPORTED || reason === REASON_USAGE;
+}
 export function worseRestoreReason(current: string | null | undefined, candidate: string): string {
   if (current === null || current === undefined) return candidate;
-  // A genuine finding outranks a version refusal in both directions. Checked before the general rule, which
-  // would otherwise read both as the same non-fallback class and keep whichever was seen first.
-  if (candidate === REASON_FORMAT_UNSUPPORTED && current !== REASON_FORMAT_UNSUPPORTED && !isReplicaFallbackReason(current)) return current;
-  if (current === REASON_FORMAT_UNSUPPORTED && candidate !== REASON_FORMAT_UNSUPPORTED && !isReplicaFallbackReason(candidate)) return candidate;
+  // A genuine finding outranks a version refusal or a refused input in both directions. Checked before the
+  // general rule, which would otherwise read both as the same non-fallback class and keep whichever was
+  // seen first.
+  if (isTerminalNonFinding(candidate) && !isTerminalNonFinding(current) && !isReplicaFallbackReason(current)) return current;
+  if (isTerminalNonFinding(current) && !isTerminalNonFinding(candidate) && !isReplicaFallbackReason(candidate)) return candidate;
   // A finding beats an availability fault. Same class, first-seen keeps the window.
   return isReplicaFallbackReason(current) && !isReplicaFallbackReason(candidate) ? candidate : current;
 }
@@ -237,6 +258,14 @@ export function coarseRestoreTestReasonCode(reason: string | undefined): Restore
   // support pack's auto-diagnosis able to tell a wrong-build refusal from a tamper. THE CONSOLE OWES a
   // phrase for this code in screens/sources-downpipes/helpers.ts restoreTestReasonPhrase.
   if (reason === REASON_FORMAT_UNSUPPORTED) return "format-unsupported";
+  // A refused operator input maps to the EXISTING code "other" and mints none. RESTORE_TEST_REASON_CODES is
+  // mirrored by the console: validate-restore-reason-vocabulary.ts parses the list out of this file and
+  // fails when restoreTestReasonPhrase lacks a case, so a new member forces a console change. "other" is the
+  // closest code that does not mislead: its phrase says the check failed for a reason the engine did not
+  // classify, and accuses neither the archive (as "integrity" does) nor the network (as "recovery-check" is
+  // used for). "not-configured" was rejected because the support pack reads it as missing engine
+  // configuration, which is a different remedy. The fine reason string keeps the split for the operator.
+  if (reason === REASON_USAGE) return "other";
   if (reason === REASON_OBJECT_MISSING) return "object-missing";
   if (reason === REASON_DESTINATION_ACCESS || reason.startsWith(`${REASON_DESTINATION_ACCESS} (`)) return "dest-access";
   if (reason === REASON_ORIGIN_REMOVED) return "origin-removed";
@@ -283,6 +312,9 @@ export function classifyRestoreFailure(e: unknown): string {
   // so an untyped throw that merely mentions the field lands on the strict answer rather than earning the
   // softer one by wording. Only checkFormatVersion's own well-formed-but-unimplemented branch is typed.
   if (cat === "format-unsupported") return REASON_FORMAT_UNSUPPORTED;
+  // The usage category is named here, before the integrity line, so a refused operator input is never
+  // labelled as tampering or corruption. Typed route only, for the same fail-closed ground as above.
+  if (cat === "usage") return REASON_USAGE;
   if (cat === "integrity" || isIntegrityFailure(e)) return REASON_INTEGRITY;
   const m = (e as Error)?.message ?? "";
   // Defence in depth: an integrity/completeness/structural/signature failure that is (for any reason) not a

@@ -19,7 +19,7 @@
 
 // WINDOW_DAYS is how far back the storage sample looks: storage analytics report a daily figure, so the
 // most recent day is the current size. One day back covers the boundary while analytics settle.
-import { CF_GRAPHQL_URL as CF_GRAPHQL } from "../lib/outbound.ts";
+import { CF_GRAPHQL_URL as CF_GRAPHQL } from "../lib/outbound.ts"; import { readJsonOrNull } from "../util/json-body.ts";
 
 const WINDOW_DAYS = 1;
 
@@ -104,7 +104,7 @@ export function makeCfAnalytics(token: string, fetchImpl: typeof fetch = fetch):
       // estate that sizes to nothing. Any other non-2xx is treated as a transient Cloudflare-side fault.
       if (resp.status === 401 || resp.status === 403) return "auth-or-scope";
       if (!resp.ok) return "network";
-      const b = (await resp.json().catch(() => null)) as { data?: unknown; errors?: unknown } | null;
+      const b = (await readJsonOrNull(resp)) as { data?: unknown; errors?: unknown } | null;
       // An unparseable body, or a GraphQL errors array, means the DATASET the engine asks for no longer
       // answers as it did: a schema drift on Cloudflare's side, which no customer action can fix and which
       // must never be reported to them as "your source is empty".

@@ -486,7 +486,7 @@ async function main(): Promise<void> {
 
     // "Still delivers": the kept secret resolves through the drain's read path to the original value.
     const rec3 = (await dobj.getOtlpPushRecordRaw())!;
-    const resolved = await fetchOtlpPushConfig({ fetch: async () => new Response(JSON.stringify({ record: rec3 }), { status: 200 }) } as unknown as Parameters<typeof fetchOtlpPushConfig>[0], undefined);
+    const resolved = await fetchOtlpPushConfig({ fetch: async () => new Response(JSON.stringify({ record: rec3, egressAllowlist: [] }), { status: 200 }) } as unknown as Parameters<typeof fetchOtlpPushConfig>[0], undefined);
     ok("fetchOtlpPushConfig resolves the stored secret for the sender", resolved?.authHeaderValue === "new-secret-2");
   }
 
@@ -644,7 +644,7 @@ async function main(): Promise<void> {
           const url = new URL(typeof input === "string" ? input : input.toString());
           if (opts?.throwPath && url.pathname === opts.throwPath) throw new Error(`simulated DO ${url.pathname} unavailable`);
           const json = (v: unknown): Response => new Response(JSON.stringify(v), { status: 200 });
-          if (url.pathname === "/otlp-push-config") return json({ record: state.record });
+          if (url.pathname === "/otlp-push-config") return json({ record: state.record, egressAllowlist: [] }); // the DO answers the list with every record
           if (url.pathname === "/otlp-metrics-snapshot") return json({ downpipes: state.downpipes });
           if (url.pathname === "/otlp-push-record") {
             state.recorded.push(JSON.parse(String(init?.body ?? "{}")) as FakeState["recorded"][number]);

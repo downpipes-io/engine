@@ -1,3 +1,4 @@
+import { CfIdRefusal } from "../sources/cf-config-core.ts";
 import type { ConfigWriteResult } from "../sources/cf-config-surfaces.ts";
 
 // decodeConfigSnapshot decodes a verified cf-config record's plaintext into its JSON config, or throws a
@@ -45,9 +46,13 @@ export function summariseDiff(res: ConfigWriteResult): string {
   return parts.length > 0 ? parts.join(", ") : "no changes (already matches the snapshot)";
 }
 
+// The reason for a missing or malformed Cloudflare id. It is its own text so it is not read as a token fault.
+export const CF_ID_REFUSAL_REASON = "the restore request has no valid Cloudflare account id or zone id for this surface (each is 32 lower-case hex characters, and a zone-scoped surface needs the zone id)";
+
 // coarseCfReason maps a cf-config read / write exception to an enumerated, secret-free reason (the token,
 // the account id and any field value never appear), matching the coarse-reason discipline of restore.
 export function coarseCfReason(e: unknown): string {
+  if (e instanceof CfIdRefusal) return CF_ID_REFUSAL_REASON;
   const m = (e as Error).message ?? "";
   // The not-attempted case FIRST, because it is the more specific reading of "snapshot incomplete" and
   // it points at a different lever. The surface was never read, so re-running a backup on its own changes

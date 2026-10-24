@@ -123,7 +123,7 @@ export async function handleStandaloneRollback(a: RollbackRouteArgs): Promise<Re
     //                                            rather than deploy a stale/abandoned version)
     // The orchestration treats an empty target as a clean "no-target" (never a blind deploy).
     const recResp = await scheduler.fetch(doURL("/update-status"), { method: "GET" });
-    const rec = (await recResp.json()) as { pending: null | { fromVersion?: string }; last: null | { outcome?: string; fromVersion?: string }; lastConsole?: { minEngineVersion?: string } | null };
+    const rec = (await recResp.json()) as { pending: null | { fromVersion?: string }; last: null | { outcome?: string; fromVersion?: string }; lastConsole?: { minEngineVersion?: string } | null; versionDigests?: Record<string, string> };
     const target = resolveRollbackTarget(rec).trim();
     if (target === "") {
       await noteUpdateGuardRefusal(scheduler, caller, sourceIp, "no-target");
@@ -163,7 +163,7 @@ export async function handleStandaloneRollback(a: RollbackRouteArgs): Promise<Re
     const driver = makeCfDeployDriver({ token, accountId, scriptName });
     const hgate = makeHealthGate(env, scheduler, target);
     stage = "deploy-driver";
-    const r = await runStandaloneRollback(driver, hgate, { toVersion: target });
+    const r = await runStandaloneRollback(driver, hgate, { toVersion: target, ...(rec.versionDigests?.[target] ? { recordedDigest: rec.versionDigests[target] } : {}) });
     // Record the outcome on the lifecycle (the console reads it) + audit (ids + outcome, never the token).
     // CONVENTION (shared with the settle auto-rollback record so the resolver above + the console display
     // are consistent): on a rolled-back outcome, fromVersion = the version reverted TO (the known-good,
@@ -174,7 +174,7 @@ export async function handleStandaloneRollback(a: RollbackRouteArgs): Promise<Re
       // The rollback above just redeployed the known-good version, the same self-redeploy
       // that resets this DO, so both follow-up writes use the self-redeploy-safe helpers.
       stage = "persist"; // the revert applied
-      const settledWritten = await recordBookkeepingAfterSelfDeploy(env, "/update-settled", { outcome: "rolled-back", recommendedVersion: target, fromVersion: target, ...(r.fromVersion ? { toVersion: r.fromVersion } : {}), ...(r.canaryVerdict ? { canaryVerdict: r.canaryVerdict } : {}), at: Date.now(), by: caller.email ?? null, ...(r.reason ? { reason: r.reason } : {}) });
+      const settledWritten = await recordBookkeepingAfterSelfDeploy(env, "/update-settled", { outcome: "rolled-back", recommendedVersion: target, fromVersion: r.liveVersion ?? target, ...(r.fromVersion ? { toVersion: r.fromVersion } : {}), ...(r.identity ? { rollbackIdentity: r.identity } : {}), ...(r.liveSha384 ? { liveSha384: r.liveSha384 } : {}), ...(r.canaryVerdict ? { canaryVerdict: r.canaryVerdict } : {}), at: Date.now(), by: caller.email ?? null, ...(r.reason ? { reason: r.reason } : {}) });
       const audited = await recordAuditAfterSelfDeploy(env, caller, sourceIp, "update-rolled-back", { kind: "engine-state", field: "engineVersion", detail: `standalone rollback ${r.fromVersion ?? "?"} -> ${target} (canary ${r.canaryVerdict ?? "unknown"})` });
       if (!settledWritten || !audited) {
         return jsonResponse({ ...r, reason: "the rollback went live but could not be fully recorded; check GET /admin/update/status and GET /admin/audit before trying again." });

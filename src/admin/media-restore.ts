@@ -22,7 +22,7 @@ import { hexEncode } from "../crypto/bytes.ts";
 import { sha384 } from "../crypto/primitives.ts";
 import { isIncompleteMarkerValue } from "../seal/marker.ts";
 import { API_WRITE_RETRY, parseRetryAfter, rateLimitError, withRetry } from "../seal/retry.ts";
-import { CF_API_BASE } from "../lib/outbound.ts";
+import { CF_API_BASE } from "../lib/outbound.ts"; import { readJsonOrNull } from "../util/json-body.ts";
 
 // The base URL lives in src/lib/outbound.ts (the one place vendor hosts are enumerated, V13.2.5).
 
@@ -293,7 +293,7 @@ export function makeMediaUploader(token: string, fetchImpl: typeof fetch = fetch
   // unwrapResp turns one Cloudflare response into its result object, or THROWS (a 429 becomes a rateLimitError
   // carrying the parsed Retry-After). Shared by the idempotent and non-idempotent post paths.
   const unwrapResp = async (path: string, resp: Response): Promise<Record<string, unknown>> => {
-    const b = (await resp.json().catch(() => null)) as
+    const b = (await readJsonOrNull(resp)) as
       | { success?: boolean; result?: unknown; errors?: Array<{ message?: string }> }
       | null;
     if (!resp.ok || b?.success !== true) {
@@ -399,7 +399,7 @@ export function makeMediaUploader(token: string, fetchImpl: typeof fetch = fetch
         await pacer?.take();
         const get = await fetchImpl(`${CF_API_BASE}/accounts/${encodeURIComponent(accountId)}/stream/${encodeURIComponent(newUid)}`, { method: "GET", headers: auth, redirect: "manual" });
         if (get.ok) {
-          const b = (await get.json().catch(() => null)) as { success?: boolean; result?: { uid?: string } } | null;
+          const b = (await readJsonOrNull(get)) as { success?: boolean; result?: { uid?: string } } | null;
           verified = b?.success === true && b.result?.uid === newUid;
         }
       } catch {

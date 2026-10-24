@@ -65,7 +65,7 @@ function siemScheduler(f: SiemFake): SiemSched {
       const url = new URL(typeof input === "string" ? input : input.toString());
       if (f.throwOn === url.pathname) throw new Error(RAW_ERROR);
       const json = (v: unknown): Response => new Response(JSON.stringify(v), { status: 200 });
-      if (url.pathname === "/push-config") return json({ record: f.record });
+      if (url.pathname === "/push-config") return json({ record: f.record, egressAllowlist: [] }); // the DO answers the list with every record
       if (url.pathname === "/push") return json({ lastPushedSeq: 0 });
       if (url.pathname === "/audit/export") return json({ events: [], headSeq: 0, headHash: "" });
       if (url.pathname === "/push-record") {
@@ -150,7 +150,7 @@ function otlpScheduler(f: OtlpFake): OtlpSched {
       const url = new URL(typeof input === "string" ? input : input.toString());
       if (f.throwOn === url.pathname) throw new Error(RAW_ERROR);
       const json = (v: unknown): Response => new Response(JSON.stringify(v), { status: 200 });
-      if (url.pathname === "/otlp-push-config") return json({ record: f.record });
+      if (url.pathname === "/otlp-push-config") return json({ record: f.record, egressAllowlist: [] }); // the DO answers the list with every record
       if (url.pathname === "/otlp-metrics-snapshot") return json({ downpipes: [] });
       if (url.pathname === "/otlp-push-record") {
         f.recorded.push(String(init?.body ?? "{}"));

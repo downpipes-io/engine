@@ -10,7 +10,7 @@ import { runRetentionPrunes } from "../cron/retention-pass.ts";
 import { callerHeaders } from "./router-audit.ts";
 import { jsonError, jsonResponse } from "./router-core.ts";
 import { doURL, type RouterCtx } from "./router-helpers.ts";
-import { ARMABLE_FAULT_KINDS, testFaultsEnabled } from "./test-faults.ts";
+import { ARMABLE_FAULT_KINDS, testFaultsEnabled } from "./test-faults.ts"; import { readJsonObjectOrEmpty } from "../util/json-body.ts";
 
 export async function handleTestFault(ctx: RouterCtx): Promise<Response | null> {
   const { req, env, scheduler, caller, sub } = ctx;
@@ -32,7 +32,7 @@ export async function handleTestFault(ctx: RouterCtx): Promise<Response | null> 
       return jsonResponse({ harnessFaultHook: true, controlPlaneFaultHook: true, armed });
     }
     case "POST /test-fault/arm": {
-      const body = (await req.json().catch(() => ({}))) as { kind?: unknown; binding?: unknown };
+      const body = (await readJsonObjectOrEmpty(req)) as { kind?: unknown; binding?: unknown };
       const kind = typeof body.kind === "string" ? body.kind : "";
       if (!ARMABLE_FAULT_KINDS.has(kind)) return jsonError(`unknown test-fault kind "${kind}"`, 400);
       // The caller is forwarded so the DO's arm event names the Owner who loaded the fault. Arming, clearing

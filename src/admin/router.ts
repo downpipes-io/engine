@@ -1,3 +1,4 @@
+import { recordEnvEngineAccount } from "../sched/engine-scope-account.ts";
 import type { Env } from "../env.d.ts";
 import { noteAdminAuthMethod } from "./auth-method-usage.ts";
 import { adminRefusalReasonForStatus, noteAdminWriteRefusal, recordAdminRefusal } from "./diag-admin.ts";
@@ -83,7 +84,7 @@ import {
 import { handleStatus } from "./router-status.ts";
 import { handleTestFault } from "./router-test-fault.ts";
 import { handleUpdates } from "./router-updates.ts";
-import { adminTokenFingerprint, originFailClass, readSessionCookie, sessionSetCookie } from "./session.ts";
+import { adminTokenFingerprint, originFailClass, readSessionCookie, sessionSetCookie } from "./session.ts"; import { readJsonOrNull } from "../util/json-body.ts";
 
 // The admin API the in-account console calls. Every route forwards to the scheduler
 // Durable Object, which is the single authority for schedules, the run lock and the
@@ -415,7 +416,7 @@ export async function handleAdmin(req: Request, env: Env, runtime?: AdminRuntime
       body: JSON.stringify({ method: "token", tokenFp: await adminTokenFingerprint(env.ADMIN_TOKEN ?? ""), priorToken: readSessionCookie(req), client: { sourceIp: req.headers.get("CF-Connecting-IP"), userAgent: req.headers.get("user-agent") } }),
       headers: { "content-type": "application/json" },
     });
-    const out = (await issued.json().catch(() => null)) as { ok?: unknown; token?: unknown } | null;
+    const out = (await readJsonOrNull(issued)) as { ok?: unknown; token?: unknown } | null;
     if (out?.ok !== true || typeof out.token !== "string") {
       logAuthFailure("token", "session bootstrap refused: the token is retired or the mint failed");
       return new Response(JSON.stringify({ error: "the bootstrap token cannot be exchanged for a session (retired, or the scheduler refused the mint)" }), { status: 401, headers: { "content-type": "application/json" } });
@@ -456,14 +457,14 @@ export async function handleAdmin(req: Request, env: Env, runtime?: AdminRuntime
   // CSRF (defence in depth on top of the cookie's SameSite=Strict): a passkey session is carried in an
   // AMBIENT cookie a foreign page could ride on a state-changing request, so every MUTATING (non-GET,
   // non-OPTIONS) request authenticated via the passkey session MUST also carry an Origin that EXACTLY
-  // matches CONSOLE_ORIGIN. The Access and token methods present an EXPLICIT header (the Access assertion
-  // header or the Authorization bearer) that a cross-site page cannot set on a credentialed cross-origin
-  // request, so they are not ambient-credential CSRF vectors and are not subject to this check. A GET is a
+  // matches CONSOLE_ORIGIN. An Access caller is held to the same match only when its request carries an
+  // Origin header (any value, including "null"); an Access request with no Origin, and the bare ADMIN_TOKEN
+  // bearer, skip the check. A GET is a
   // read and is exempt (it is not state-changing). This sits BEFORE any route body read or DO forward, so a
   // forged cross-origin write is refused 403 before it can touch state. originAllowed fails closed on a
   // missing Origin or an unset CONSOLE_ORIGIN; the console (a real browser fetch) always sends Origin on a
   // state-changing request, so a legitimate console write is never blocked.
-  if ((isCookieBorneMethod(caller.method) || verdict.viaCookie === true) && req.method !== "GET" && req.method !== "OPTIONS") {
+  if ((isCookieBorneMethod(caller.method) || verdict.viaCookie === true || (caller.method === "access" && req.headers.has("origin"))) && req.method !== "GET" && req.method !== "OPTIONS") {
     // Classify WHICH of the three branches refused, not merely THAT one did. originFailClass returns
     // null when the check passes, so the gate below is byte-identical to the old `!originAllowed(...)`.
     const originFault = originFailClass(req, env.CONSOLE_ORIGIN);
@@ -719,6 +720,8 @@ export async function handleAdmin(req: Request, env: Env, runtime?: AdminRuntime
   // we try them in the original textual order and the FIRST non-null answer wins. The route keys are unique
   // across the spokes (no key appears in two), so this chain is byte-for-byte equivalent to the one switch:
   // the same key reaches the same body, and an unmatched key falls through every spoke to the same 404 below.
+  // CF_ACCOUNT_ID reaches the scheduler before any write that its account-scope check could judge.
+  if (req.method !== "GET") await recordEnvEngineAccount(env, scheduler);
   const ctx: RouterCtx = { req, env, url, scheduler, caller, sub, sourceIp, runtime, verdict, isOnlyOwner, roleSource, customRole };
   const dispatch = [
     handleIdentity,

@@ -316,7 +316,7 @@ export const UPDATE_REFUSAL_COUNTER_NAMES = [
   // HOW MANY attempts, and how they ended. The pending record keeps only the LAST outcome, so a night of
   // repeated settle attempts collapses to one row and "how many settle attempts were inconclusive?" (the
   // question that decides whether the ramp is stuck or the verification is genuinely slow) is unanswerable.
-  "update-settle-inconclusive", // a settle attempt RAN and could not decide (the verification is still pending): the ramp stays armed, and this is the count that says how hard the operator has been trying
+  "update-settle-inconclusive", // a settle attempt RAN and could not decide (the verification is still pending): the pending stays armed, and this is the count that says how hard the operator has been trying
   "update-settle-refused", // a settle attempt was refused by a guard before it could run
   "update-rollback-refused", // a rollback attempt was refused by a guard: "we tried to roll back at 02:00 and it refused"
 ] as const;

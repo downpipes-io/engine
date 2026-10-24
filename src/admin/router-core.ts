@@ -348,7 +348,7 @@ export function adminTokenThrottledResponse(): Response {
 
 export async function rateLimited(scheduler: DurableObjectStub, caller: Caller): Promise<Response | null> {
   const key = rateLimitKey(caller);
-  try {
+  try { // nosemgrep: incident-catch-returns-empty -- the fault is recorded as limiter-verdict-malformed and the request is admitted by design
     const resp = await scheduler.fetch(doURL("/rate-check"), {
       method: "POST",
       body: JSON.stringify({ key }),

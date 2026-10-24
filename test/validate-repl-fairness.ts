@@ -95,10 +95,13 @@ function ok(label: string, cond: boolean): void {
   if (!cond) failures++;
 }
 
-// ---- the clock: real time plus the latency each destination request is charged -----------------------
+// ---- the clock: a fixed start plus the time this test charges (request latency, the passes before) ------
+// The clock does not read real time, so a slow host spends none of the 20-second allowance: the bound holds
+// on the charged time alone, the same on every machine.
 const realNow = Date.now.bind(Date);
+const START = realNow();
 let skew = 0;
-Date.now = () => realNow() + skew;
+Date.now = () => START + skew;
 
 const ENDPOINT = "https://s3.example.test";
 

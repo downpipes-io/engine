@@ -2,7 +2,8 @@
 // internal/format/canonnum.go. Count and size fields carried as JSON numbers must be
 // non-negative integers at most 2^53-1; a value encoded as a string is rejected even
 // when in range (the string form is reserved for values above the ceiling, which this
-// reader does not accept). A missing field is permitted.
+// reader does not accept). A missing field is permitted; a field present as JSON null is refused, as is a null array or object on the path to it
+// (except at a step marked "?").
 //
 // The rule is about the TOKEN, not the parsed value. Go decodes with UseNumber and refuses any token that
 // carries ".", "e" or "E", so "1.0" and "1e2" are refused even though they parse to integers. JSON.parse
@@ -48,18 +49,23 @@ interface CountSite {
 }
 
 // collectCounts walks one dotted path through the parsed JSON, mirroring the Go reference collectCounts
-// (canonnum.go). A segment ending in "[]" names an array whose every element is walked. A missing or null
-// field yields nothing (permitted); a non-object on the way yields nothing; a key that differs from the wanted
-// one only in case is refused, because Go's case-insensitive struct decoding would read it. Resolving
-// structurally (rather than scanning the source text for the leaf name) is what makes a leaf-name collision
-// resolve the correct field: a sibling or ancestor object with the same leaf key is never reached.
+// (canonnum.go). A segment ending in "[]" names an array whose every element is walked. A segment ending in
+// "?" names an object the format allows to be null. A missing field yields nothing (permitted); a non-object
+// on the way yields nothing; a key that differs from the wanted one only in case is refused, because Go's
+// case-insensitive struct decoding would read it. A null on the path is present and is not the shape the
+// format gives that field, so it is refused: a null count, a null array, a null object the count sits in and
+// a null array element before a further step. Only a "?" step may be null, and a null there adds nothing.
+// Resolving structurally (rather than scanning the source text for the leaf name) is what makes a leaf-name
+// collision resolve the correct field: a sibling or ancestor object with the same leaf key is never reached.
 function collectCounts(v: unknown, parts: string[], prefix: string, out: CountSite[]): void {
   if (parts.length === 0) {
     out.push({ path: prefix, value: v });
     return;
   }
   const each = parts[0]!.endsWith("[]");
-  const key = each ? parts[0]!.slice(0, -2) : parts[0]!;
+  const seg = each ? parts[0]!.slice(0, -2) : parts[0]!;
+  const nullable = seg.endsWith("?");
+  const key = nullable ? seg.slice(0, -1) : seg;
   if (v === null || typeof v !== "object" || Array.isArray(v) || v instanceof NumberToken) return;
   const path = prefix === "" ? key : `${prefix}.${key}`;
   const obj = v as Record<string, unknown>;
@@ -70,13 +76,23 @@ function collectCounts(v: unknown, parts: string[], prefix: string, out: CountSi
   }
   if (!Object.hasOwn(obj, key)) return;
   const child = obj[key];
-  if (child === null || child === undefined) return;
+  if (child === undefined) return;
+  if (child === null) {
+    if (nullable) return;
+    if (parts.length === 1 && !each) throw integrityError(`field "${path}" must be a canonical integer, not null`);
+    if (each) throw integrityError(`field "${path}" must be an array, not null`);
+    throw integrityError(`field "${path}" must be an object, not null`);
+  }
   if (!each) {
     collectCounts(child, parts.slice(1), path, out);
     return;
   }
   if (!Array.isArray(child)) throw integrityError(`field "${path}" must be an array, not ${typeof child}`);
-  for (let i = 0; i < child.length; i++) collectCounts(child[i], parts.slice(1), `${path}[${i}]`, out);
+  for (let i = 0; i < child.length; i++) {
+    const elPath = `${path}[${i}]`;
+    if (child[i] === null && parts.length > 1) throw integrityError(`field "${elPath}" must be an object, not null`);
+    collectCounts(child[i], parts.slice(1), elPath, out);
+  }
 }
 
 // checkCanonicalCount enforces SPEC 11.3 for one resolved value, mirroring the Go reference
@@ -108,7 +124,7 @@ function checkCanonicalCount(field: string, v: unknown): void {
  * even when in range, a key that differs from the field name only in case is rejected, and a missing
  * field is permitted. The source is parsed once and each (possibly dotted) path is resolved
  * structurally, so a leaf-name collision resolves the correct field; a segment ending in "[]" checks
- * every element of an array. Mirrors the Go reference validateCounts (a violation is a usage error,
+ * every element of an array and a segment ending in "?" may be null. Mirrors the Go reference validateCounts (a violation is a usage error,
  * exit 6).
  *
  * @param rawText - the raw JSON source text to check (parsed once).

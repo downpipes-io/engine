@@ -69,8 +69,17 @@ interface CaseOutcome {
 // at all only if execution got PAST the scope guard.
 let probeFetches = 0;
 const realFetch = globalThis.fetch;
-globalThis.fetch = ((): Promise<Response> => {
+// zoneReply, when set, answers a zone lookup (GET .../zones/<id>) with the account that owns the zone.
+let zoneReply: { accountId: string } | null = null;
+// zoneThrows, when set, makes a zone lookup throw the way a network fault does.
+let zoneThrows = false;
+globalThis.fetch = ((input?: RequestInfo | URL): Promise<Response> => {
   probeFetches++;
+  const asked = typeof input === "string" ? input : input instanceof URL ? input.toString() : (input as Request | undefined)?.url ?? "";
+  if (zoneThrows && /\/zones\/[^/?]+$/.test(asked)) return Promise.reject(new TypeError("fetch failed"));
+  if (zoneReply !== null && /\/zones\/[^/?]+$/.test(asked)) {
+    return Promise.resolve(new Response(JSON.stringify({ success: true, result: { account: { id: zoneReply.accountId } } }), { status: 200 }));
+  }
   return Promise.resolve(new Response(JSON.stringify({ success: false, errors: [] }), { status: 403 }));
 }) as typeof fetch;
 
@@ -79,9 +88,11 @@ globalThis.fetch = ((): Promise<Response> => {
  *
  * @param accountId - the accountId the due downpipe's cf-config source names.
  * @param cfg - the discovery config the DO hands back (null = the env/IaC-only deployment).
+ * @param engineAccountId - the CF_ACCOUNT_ID the env carries, when given.
+ * @param zoneId - the zoneId the due downpipe's cf-config source names, when given.
  * @returns what the pass observably did.
  */
-async function runCase(accountId: string, cfg: DiscoveryCfgStub): Promise<CaseOutcome> {
+async function runCase(accountId: string, cfg: DiscoveryCfgStub, engineAccountId?: string, zoneId?: string): Promise<CaseOutcome> {
   resetCronFaultLedger();
   probeFetches = 0;
   const posts: string[] = [];
@@ -89,7 +100,7 @@ async function runCase(accountId: string, cfg: DiscoveryCfgStub): Promise<CaseOu
   const spends: number[] = [];
 
   const state: DownpipeState = {
-    config: { id: "dp-discovery-scope", name: "dp-discovery-scope", cadenceSeconds: 3600, enabled: true, source: { type: "cf-config", accountId, include: [], exclude: [] } } as DownpipeConfig,
+    config: { id: "dp-discovery-scope", name: "dp-discovery-scope", cadenceSeconds: 3600, enabled: true, source: { type: "cf-config", accountId, ...(zoneId !== undefined ? { zoneId } : {}), include: [], exclude: [] } } as DownpipeConfig,
     nextRunAt: 0,
     lastRunId: null,
     inFlight: false,
@@ -120,7 +131,7 @@ async function runCase(accountId: string, cfg: DiscoveryCfgStub): Promise<CaseOu
 
   // The env token is the documented fallback for a deployment with no console-set discovery config; it is
   // what carries case (4) past the no-token bail so the null-config branch can be reached at all.
-  const env = { DISCOVERY_API_TOKEN: "env-fallback-token-for-the-validator" } as unknown as Env;
+  const env = { DISCOVERY_API_TOKEN: "env-fallback-token-for-the-validator", ...(engineAccountId !== undefined ? { CF_ACCOUNT_ID: engineAccountId } : {}) } as unknown as Env;
 
   const returned = await runDiscoveryPass(env, scheduler, budget);
   const drained = drainCronFaultLedger();
@@ -175,16 +186,67 @@ async function main(): Promise<void> {
   }
 
   // ===========================================================================================
-  // (4) NULL CONFIG (the env-only / IaC deployment): there is no Owner-curated list to check
-  //     against, so the guard is a documented no-op. It must NOT read as out-of-scope, which
-  //     would silently stop discovery refreshing on every IaC deployment in the fleet.
+  // (4) NULL CONFIG (the env-only / IaC deployment): there is no Owner-curated list, so only the engine's
+  //     own account (CF_ACCOUNT_ID here) is in scope. Its own account must NOT read as out-of-scope, which
+  //     would stop discovery refreshing on every IaC deployment in the fleet.
   // ===========================================================================================
   {
-    const r = await runCase(ACCT_C, null);
-    console.log("(4) null discovery config (env/IaC only)");
-    ok("null-config: the guard does not fire (no out-of-scope skip recorded)", r.skips["out-of-scope"] === undefined);
-    ok("null-config: the pass proceeded to spend the probe reserve", r.spends.length === 1 && r.spends[0] === 250);
-    ok("null-config: it did not bail for a missing token either", r.skips["no-token"] === undefined);
+    const r = await runCase(ACCT_C, null, ACCT_C);
+    console.log("(4) null discovery config (env/IaC only), the engine's own account");
+    ok("null-config own account: the guard does not fire (no out-of-scope skip recorded)", r.skips["out-of-scope"] === undefined);
+    ok("null-config own account: the pass proceeded to spend the probe reserve", r.spends.length === 1 && r.spends[0] === 250);
+    ok("null-config own account: it did not bail for a missing token either", r.skips["no-token"] === undefined);
+  }
+
+  // ===========================================================================================
+  // (5) NULL CONFIG, a FOREIGN account: the env-only token reaches it, but it is not the engine's own, so
+  //     the pass skips it exactly as it skips a deselected account. With no engine account known at all,
+  //     nothing is in scope.
+  // ===========================================================================================
+  {
+    const r = await runCase(ACCT_C, null, ACCT_A);
+    console.log("(5) null discovery config, a foreign account");
+    ok("null-config foreign account: the out-of-scope skip is recorded", r.skips["out-of-scope"] === 1);
+    ok("null-config foreign account: nothing was probed", r.spends.length === 0 && r.probeFetches === 0);
+    const unknown = await runCase(ACCT_C, null);
+    ok("null-config, engine account unknown: the out-of-scope skip is recorded", unknown.skips["out-of-scope"] === 1);
+  }
+
+  // ===========================================================================================
+  // (6) ZONE: a zoneId must belong to the source's account. The account is in scope here (selected), so only
+  //     the zone lookup can stop a zone of another account that the account-wide token reaches.
+  // ===========================================================================================
+  {
+    const ZONE = "d".repeat(32);
+    zoneReply = { accountId: ACCT_B };
+    const foreign = await runCase(ACCT_A, CFG_SEEN_AND_SELECTED, undefined, ZONE);
+    console.log("(6) a zone of another account");
+    ok("foreign zone: the out-of-scope skip is recorded", foreign.skips["out-of-scope"] === 1);
+    ok("foreign zone: nothing was probed", foreign.spends.length === 0);
+    zoneReply = { accountId: ACCT_A.toUpperCase() };
+    const own = await runCase(ACCT_A, CFG_SEEN_AND_SELECTED, undefined, ZONE);
+    ok("negative control: a zone of the source's account (account id compared lowercased) proceeds to the probe", own.skips["out-of-scope"] === undefined && own.spends.length === 1);
+    zoneReply = null;
+    const unreadable = await runCase(ACCT_A, CFG_SEEN_AND_SELECTED, undefined, ZONE);
+    ok("zone lookup refused by the API: skipped as out of scope, never probed", unreadable.skips["out-of-scope"] === 1 && unreadable.spends.length === 0);
+  }
+
+  // ===========================================================================================
+  // (7) A THROW FROM THE ZONE LOOKUP (a network fault, not a refusal by the API): the pass must end in a
+  //     refusal. Nothing is probed, nothing is posted, the probe reserve is not spent, the tick records a
+  //     skip with a cause and the pass reports a fault.
+  // ===========================================================================================
+  {
+    const ZONE = "d".repeat(32);
+    zoneThrows = true;
+    const thrown = await runCase(ACCT_A, CFG_SEEN_AND_SELECTED, undefined, ZONE);
+    zoneThrows = false;
+    console.log("(7) a zone lookup that throws");
+    ok("zone lookup throws: the pass reports a fault (returns false)", thrown.returned === false);
+    ok("zone lookup throws: a skip with a cause is recorded", thrown.skips["probe-failed"] === 1);
+    ok("zone lookup throws: nothing was probed and the probe reserve was not spent", thrown.spends.length === 0);
+    ok("zone lookup throws: no result was posted to /cf-config/discovery", !thrown.posts.includes("/cf-config/discovery"));
+    ok("zone lookup throws: the only outbound call was the zone lookup", thrown.probeFetches === 1);
   }
 
   globalThis.fetch = realFetch;

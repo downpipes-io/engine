@@ -38,6 +38,7 @@ import {
   CLIENT_DIAG_ANOMALIES,
   CLIENT_DIAG_ERROR_CLASSES,
   CLIENT_DIAG_FAULT_SOURCES,
+  CLIENT_DIAG_CATALOGUE_CLASSES,
   CLIENT_DIAG_PER_KIND_ROW_CAP,
   CLIENT_DIAG_GLOBAL_ROW_CAP,
   CLIENT_DIAG_COUNT_MAX,
@@ -162,6 +163,17 @@ async function main(): Promise<void> {
   // test entirely so a pipe that has not run in a month reads FRESH. Coalesced into one generic `timestamp`
   // member, support could not say WHICH assurance the customer lost.
   ok("fieldClass(21) anomaly(6) errorClass(10) faultSource(2)", CLIENT_DIAG_FIELD_CLASSES.length === 21 && CLIENT_DIAG_ANOMALIES.length === 6 && CLIENT_DIAG_ERROR_CLASSES.length === 10 && CLIENT_DIAG_FAULT_SOURCES.length === 2);
+  // The two rediscover scope refusals are told apart: env-only scope (no Owner token stored) is not out-of-scope
+  // (an Owner selection), and a zone outside its account is its own member, so support reads the right remedy.
+  ok("catalogueClass(22)", CLIENT_DIAG_CATALOGUE_CLASSES.length === 22);
+  for (const c of ["cf-rediscover-env-only-scope", "cf-rediscover-zone-not-in-account"] as const) {
+    const row = projectRecord({ kind: "catalogue-degraded", screen: "sources", catalogueClass: c, count: 1, firstMs: 0, lastMs: 0 });
+    ok(`a catalogue-degraded row is admitted WITH catalogueClass ${c}`, row !== null && row.catalogueClass === c);
+  }
+  {
+    const row = projectRecord({ kind: "catalogue-degraded", screen: "sources", catalogueClass: "cf-rediscover-zone-not-in-zone", count: 1, firstMs: 0, lastMs: 0 });
+    ok("a catalogueClass outside the list is not carried", row === null || row.catalogueClass === undefined);
+  }
 
   console.log("\nthe availability-gap discriminators SURVIVE the receiver (a dropped field is a row that will not say what happened):");
   {

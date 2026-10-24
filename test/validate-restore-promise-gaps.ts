@@ -176,8 +176,8 @@ async function main(): Promise<void> {
     recipients: [breakGlass.entry, op.entry],
     signer,
     records: [
-      { sourceType: "secrets", name: "session-secret", value: utf8("s3cr3t"), account: "acct-1" },
-      { sourceType: "stream", name: "vid1/video.mp4", value: utf8("MP4-BYTES"), account: "acct-1" },
+      { sourceType: "secrets", name: "session-secret", value: utf8("s3cr3t"), account: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1" },
+      { sourceType: "stream", name: "vid1/video.mp4", value: utf8("MP4-BYTES"), account: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1" },
     ],
     windowStart: "2026-06-07T00:00:00.000Z",
     windowEnd: "2026-06-07T00:00:01.000Z",
@@ -206,7 +206,7 @@ async function main(): Promise<void> {
   ok("the secrets reason names a REMEDY (the Cloudflare API or wrangler), as three docs pages state", /Cloudflare API|wrangler/i.test(secretReason));
 
   // ---- Media restore: the receipt's id map ----
-  const applied = (await runRestore(env(), { runId: RUN, confirm: true, mediaRestore: { token: "edit", accountId: "acct-1" } }, null, { mediaUploaderFactory: () => uploader })) as RestoreResult;
+  const applied = (await runRestore(env(), { runId: RUN, confirm: true, mediaRestore: { token: "edit", accountId: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1" } }, null, { mediaUploaderFactory: () => uploader })) as RestoreResult;
   const receiptRow = (applied.receipt?.records ?? []).find((r) => r.name === "vid1/video.mp4");
   console.log(`\nThe ephemeral result carries the id map: ${JSON.stringify(applied.mediaRestored ?? [])}`);
   console.log(`       The SIGNED receipt row the customer downloads:  ${JSON.stringify(receiptRow ?? null)}`);

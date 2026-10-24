@@ -19,6 +19,7 @@ import {
 } from "../src/admin/support.ts";
 import { buildBandManifest } from "../src/admin/support-band-manifest.ts";
 import { signerFingerprint } from "../src/format/writer.ts";
+import { ENGINE_VERSION } from "../src/format/version.ts";
 import {
   mintIngestCredential,
   checkIngestCredential,
@@ -260,8 +261,8 @@ function schedulerDouble(): { stub: DurableObjectStub; grants: Record<string, In
           // dp1 has a healthy origin AND a replica proven DOWN this run (lastOk:false). The down
           // destination is recorded ONLY here (not on the run row), so the pack must surface it from here.
           return new Response(JSON.stringify({ byDownpipe: { dp1: {
-            "origin-r2": { holdsRunId: "01RUN", holdsIndex: 4, lastOk: true, lastAttemptAt: 1_700_000_000_000 },
-            "replica-s3": { holdsRunId: "01OLD", holdsIndex: 2, lastOk: false, lastAttemptAt: 1_700_000_100_000, reason: "unreachable" },
+            "origin-r2": { holdsRunId: "01RUN", holdsIndex: 4, lastOk: true, lastAttemptAt: 1_700_000_000_000, engineVersion: ENGINE_VERSION },
+            "replica-s3": { holdsRunId: "01OLD", holdsIndex: 2, lastOk: false, lastAttemptAt: 1_700_000_100_000, reason: "unreachable", engineVersion: "0.3.7" },
           } } }));
         case "/reconcile-inventory":
           // The cron's report-only reconcile pass persisted a per-destination inventory + RUNLOG health.
@@ -290,8 +291,8 @@ function schedulerDouble(): { stub: DurableObjectStub; grants: Record<string, In
           // delete loop with WORM refusing the delete (an irreducible remainder -- the real "storage keeps
           // growing" cause). A HOSTILE deferClass must be dropped while the rest of its row survives.
           return new Response(JSON.stringify({ faults: [
-            { kind: "orphan-root-reclaim", at: 1_700_000_200_000, downpipeId: "dp1", runId: "01C", reclaimed: 0, wormBlocked: true },
-            { kind: "shard-list-truncated", at: 1_700_000_100_000, downpipeId: "dp1", runId: "01RUN", found: 968, expected: 970 },
+            { kind: "orphan-root-reclaim", at: 1_700_000_200_000, downpipeId: "dp1", runId: "01C", reclaimed: 0, wormBlocked: true, engineVersion: ENGINE_VERSION },
+            { kind: "shard-list-truncated", at: 1_700_000_100_000, downpipeId: "dp1", runId: "01RUN", found: 968, expected: 970, engineVersion: "0.3.7 junk" },
             { kind: "hostile-not-a-kind", at: 1_700_000_150_000, downpipeId: "dp1" },
             { kind: "prune-deferred", at: 1_700_000_210_000, downpipeId: "dp1", runId: "01BLOCK", deferClass: "retained-run-unreadable", skipped: 2, unparseableTime: 1 },
             { kind: "prune-runs-skipped", at: 1_700_000_220_000, downpipeId: "dp1", skipped: 3, deferClass: "s3://bucket/secret-key.txt not-a-class" },
@@ -1207,6 +1208,20 @@ async function main(): Promise<void> {
     ok("sealFaults carries the truncated-archive refuse with its found/expected shard counts", sealF.some((f) => f.kind === "shard-list-truncated" && f.found === 968 && f.expected === 970 && f.runId === "01RUN"));
     ok("sealFaults carries the orphan-root reclaim with the WORM-blocked signal", sealF.some((f) => f.kind === "orphan-root-reclaim" && f.wormBlocked === true));
     ok("an out-of-vocabulary seal-fault kind is DROPPED (never reaches the pack)", !sealF.some((f) => f.kind === "hostile-not-a-kind") && !JSON.stringify(signed.bundle).includes("hostile-not-a-kind"));
+    // Version stamp: a row written by the running engine carries its version and no stale mark; a row from
+    // another version, a malformed version, or no stamp reads stale. stale is never false.
+    const stampedF = sealF as Array<Record<string, unknown>>;
+    ok("a sealFaults row stamped with the running version carries it and no stale", stampedF.some((f) => f.kind === "orphan-root-reclaim" && f.engineVersion === ENGINE_VERSION && !("stale" in f)));
+    ok("a sealFaults row with a malformed version drops it and reads stale", stampedF.some((f) => f.kind === "shard-list-truncated" && !("engineVersion" in f) && f.stale === true && f.found === 968));
+    ok("a sealFaults row with no stamp reads stale", stampedF.some((f) => f.kind === "prune-deferred" && f.stale === true && !("engineVersion" in f)));
+    ok("a replication row from another version keeps it and reads stale; the current one does not", (repl as Array<Record<string, unknown>>).some((d) => d.id === "replica-s3" && d.engineVersion === "0.3.7" && d.stale === true) && (repl as Array<Record<string, unknown>>).some((d) => d.id === "origin-r2" && d.engineVersion === ENGINE_VERSION && !("stale" in d)));
+    // The current resolution is joined at assembly onto a red replication row only, from destResolution.resolution[].
+    const drList = (signed.bundle["destResolution"] as { resolution?: Array<{ id: string; branch: string; ok: boolean }> }).resolution ?? [];
+    const redRow = (repl as Array<Record<string, unknown>>).find((d) => d.id === "replica-s3")!;
+    const listed = drList.find((r) => r.id === "replica-s3");
+    ok("the pack joins the current resolution onto the red replication row", listed === undefined ? redRow.resolution === "not-listed" : (redRow.resolution as { branch?: string; ok?: boolean })?.branch === listed.branch && (redRow.resolution as { ok?: boolean }).ok === listed.ok);
+    ok("the green replication row gets no resolution", !("resolution" in ((repl as Array<Record<string, unknown>>).find((d) => d.id === "origin-r2") ?? {})));
+    ok("stale is never false in the pack", !JSON.stringify(signed.bundle).includes("\"stale\":false"));
     // engine.cfVersionId (two-engines-flapping-ledger): this engine's immutable Cloudflare deploy id, co-located
     // with accountTag so `accountTag + cfVersionId` is the per-engine identity that disambiguates two engines
     // flapping one licence-ledger row (the ledger correlation is vendor-side). engine.deployBaseline (engine-

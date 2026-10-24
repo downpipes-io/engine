@@ -5,7 +5,9 @@
 // router.ts.
 
 
-import { accountInDiscoveryScope } from "../sched/config-validate.ts";
+import { zoneRefused } from "../sources/zone-account.ts";
+import { accountInDiscoveryScope, ENV_ONLY_SCOPE_REFUSAL } from "../sched/config-validate.ts";
+import { engineScopeAccount } from "../sched/engine-scope-account.ts";
 import { DISCOVERY_SECRET_AAD, loadConfigWrapKey, maybeWrapConfigSecret, resolveConfigSecret } from "./config-secret.ts";
 import type { DownpipeState } from "../sched/scheduler-do.ts";
 import { probeCfConfig } from "../sources/cf-config-discovery.ts";
@@ -226,6 +228,15 @@ export async function handleDiscovery(ctx: RouterCtx): Promise<Response | null> 
       if (scan.length === 0) {
         const resolved = await resolveDiscoveryAccounts(token, env);
         accountErrors.push(...resolved.errors);
+        // With no Owner discovery config the listing is limited to the same scope a source may name: the
+        // engine's own account, or the one account the token reaches when the engine's own is not yet known.
+        // Several reachable accounts and no known engine account list none.
+        if (cfg === null) {
+          const own = await engineScopeAccount(env, scheduler);
+          resolved.accounts = own !== null
+            ? resolved.accounts.filter((a) => a.id.toLowerCase() === own.toLowerCase())
+            : (resolved.accounts.length === 1 ? resolved.accounts : []);
+        }
         scan = resolved.accounts.map((a) => a.id).slice(0, MAX_DISCOVERY_ACCOUNTS);
         for (const a of resolved.accounts) if (!nameOf.has(a.id)) nameOf.set(a.id, a.name);
         if (engineAccountId === null && scan.length === 1) engineAccountId = scan[0]!;
@@ -299,8 +310,8 @@ export async function handleDiscovery(ctx: RouterCtx): Promise<Response | null> 
       // re-validation of existing downpipes), and this probe is a real per-surface presence oracle over
       // whatever account the stored config names -- so it re-checks the SAME scope boundary rather than
       // trusting the stored accountId forever.
-      if (!accountInDiscoveryScope(dp.config.source.accountId, cfg)) {
-        return jsonResponse({ ok: false, error: "this downpipe's account is no longer in the discovery scope; ask the owner to re-select it under Sources" });
+      if (!accountInDiscoveryScope(dp.config.source.accountId, cfg, cfg === null ? await engineScopeAccount(env, scheduler) : null)) {
+        return jsonResponse({ ok: false, error: cfg === null ? `this downpipe's account is outside the discovery scope: ${ENV_ONLY_SCOPE_REFUSAL}` : "this downpipe's account is no longer in the discovery scope; ask the owner to re-select it under Sources" });
       }
       const envToken = typeof env.DISCOVERY_API_TOKEN === "string" ? env.DISCOVERY_API_TOKEN.trim() : "";
       const stored = cfg?.token;
@@ -308,6 +319,9 @@ export async function handleDiscovery(ctx: RouterCtx): Promise<Response | null> 
         ? await resolveConfigSecret(loadConfigWrapKey(env.CONFIG_WRAP_KEY), stored, DISCOVERY_SECRET_AAD)
         : (envToken !== "" ? envToken : null);
       if (token === null) return jsonResponse({ ok: false, error: "no discovery token set; set the read-only discovery token first" });
+      if (await zoneRefused(token, dp.config.source)) {
+        return jsonResponse({ ok: false, error: "this downpipe's zone is not a zone of its account; ask the owner to correct the zone under Sources" });
+      }
       const discovery = await probeCfConfig(token, dp.config.source.accountId, dp.config.source.zoneId, Date.now());
       // CHECKED. The probe result is returned to the console either way, but a persist that is DROPPED
       // leaves the stored cf-config discovery stale, so the pack (and the capture plan built off it) reasons

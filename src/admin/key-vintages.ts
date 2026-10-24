@@ -93,10 +93,10 @@ export interface KeyVintageInventory {
 // next seal wraps to. A malformed or absent value is honestly null ("not a current vintage"), never a throw.
 export async function envRecipientFingerprint(b64: string | undefined): Promise<string | null> {
   if (typeof b64 !== "string" || b64.trim() === "") return null;
-  try {
+  try { // nosemgrep: incident-catch-returns-empty -- an absent or malformed key has no fingerprint and is not a current vintage
     const pub = loadRecipientPublic(b64);
     return await recipientFingerprint(pub.x25519, pub.mlkemEk);
-  } catch {
+  } catch { // site-fault-waiver: src/admin/key-vintages.ts:envRecipientFingerprint:catch:1 -- an absent or malformed key has no fingerprint and is not a current vintage
     return null;
   }
 }
@@ -108,9 +108,9 @@ export async function envRecipientFingerprint(b64: string | undefined): Promise<
 // only the Worker side can derive it.
 export async function envSignerFingerprint(b64: string | undefined): Promise<string | null> {
   if (typeof b64 !== "string" || b64.trim() === "") return null;
-  try {
+  try { // nosemgrep: incident-catch-returns-empty -- an absent or malformed key has no fingerprint and is not a current vintage
     return await signerFingerprint(verifierFrom(await loadSigner(b64)));
-  } catch {
+  } catch { // site-fault-waiver: src/admin/key-vintages.ts:envSignerFingerprint:catch:1 -- an absent or malformed key has no fingerprint and is not a current vintage
     return null;
   }
 }

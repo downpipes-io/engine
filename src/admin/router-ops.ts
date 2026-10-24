@@ -8,6 +8,7 @@
 
 import { channelPlaintextSecretRejection } from "../notify-routing.ts";
 import { deliverToChannel, type NotifyChannel, type NotifyEmission } from "../notify.ts";
+import { parseEgressAllowlist } from "../notify/push-egress.ts";
 import { envFlagEnabled } from "./auth.ts";
 import { JSM_SECRET_AAD, loadConfigWrapKey, maybeWrapConfigSecret, SERVICENOW_SECRET_AAD } from "./config-secret.ts";
 import { bumpAdminCounter, noteTestOutcome } from "./diag-counters.ts";
@@ -109,10 +110,10 @@ async function recordNotifyApplied(ctx: RouterCtx, changeKind: NotifyChangeKind,
 // requestedId reads the `id` of a delete body, or "" when the body has none. The value reaches the audit
 // chain only through recordNotifyApplied, and only after the DO proves it named a stored record.
 function requestedId(text: string): string {
-  try {
+  try { // nosemgrep: incident-catch-returns-empty -- a body with no id gives an empty id and the DO proves the id before any audit row
     const parsed = JSON.parse(text) as { id?: unknown } | null;
     return parsed !== null && typeof parsed === "object" && typeof parsed.id === "string" ? parsed.id : "";
-  } catch {
+  } catch { // site-fault-waiver: src/admin/router-ops.ts:requestedId:catch:1 -- a body with no id gives an empty id and the DO proves the id before any audit row
     return "";
   }
 }
@@ -294,7 +295,9 @@ export async function handleOps(ctx: RouterCtx): Promise<Response | null> {
       // ASVS V13.2.4: a test-send goes through the SAME allowlist screen a real delivery does (the account's
       // current list, read fresh so a test genuinely proves what a live alert would do).
       const eaResp = await scheduler.fetch(doURL("/config/egress-allowlist"), { method: "GET" });
-      const { egressAllowlist } = (await eaResp.json()) as { egressAllowlist?: string[] };
+      // A test-send that cannot read the list sends nothing, as a live alert would not.
+      const egressAllowlist = parseEgressAllowlist(eaResp.ok ? ((await eaResp.json()) as { egressAllowlist?: unknown }).egressAllowlist : undefined);
+      if (egressAllowlist === null) return jsonError("egress allowlist unreadable", 503);
       const emission: NotifyEmission = {
         event: "backup-success",
         severity: "info",
@@ -525,7 +528,7 @@ export async function handleOps(ctx: RouterCtx): Promise<Response | null> {
       });
     }
 
-    // ---- break-glass token retire (in-app disposal of the one-time bootstrap ADMIN_TOKEN) ----------
+    // ---- break-glass token retire (in-app disposal of the bootstrap ADMIN_TOKEN, valid until it is disabled or retired) ----------
     // POST /policy/retire-break-glass-token sets the durable breakGlassTokenRetired latch true, so the
     // engine STOPS honouring the ADMIN_TOKEN bearer immediately (no redeploy): the next bare-token request
     // is refused at the gate exactly as ADMIN_TOKEN_DISABLED refuses it. The engine cannot delete its own

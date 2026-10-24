@@ -25,7 +25,7 @@ export interface SourceFaultSpec {
 export function parseSourceFault(env: { CHAOS_SOURCE_FAULT?: string } | undefined): SourceFaultSpec | null {
   const raw = env?.CHAOS_SOURCE_FAULT;
   if (typeof raw !== "string" || raw.trim() === "") return null;
-  try {
+  try { // nosemgrep: incident-catch-returns-empty -- a malformed chaos setting arms no fault and cannot crash a run
     const s = JSON.parse(raw) as Partial<SourceFaultSpec>;
     if (typeof s.source !== "string" || typeof s.fault !== "string") return null;
     return {
@@ -36,7 +36,7 @@ export function parseSourceFault(env: { CHAOS_SOURCE_FAULT?: string } | undefine
       // faultUntilMs is read FAIL-SAFE: a non-number (or non-finite) is ignored, leaving the fault permanent.
       ...(typeof s.faultUntilMs === "number" && Number.isFinite(s.faultUntilMs) ? { faultUntilMs: s.faultUntilMs } : {}),
     };
-  } catch {
+  } catch { // site-fault-waiver: src/sources/chaos-fault.ts:parseSourceFault:catch:1 -- a malformed chaos setting arms no fault and cannot crash a run
     return null;
   }
 }

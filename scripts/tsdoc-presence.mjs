@@ -31,7 +31,7 @@
  *     `export * from ...`) declares no new symbol of its own, so it is NOT counted.
  *   - An export is DOCUMENTED when the nearest preceding non-blank line is the close
  *     of a block comment (its trimmed text ends with the comment-close token). A line
- *     `//` comment does NOT count: the convention for a documented public export is a
+ *     `//` comment does NOT count: a documented public export carries a
  *     full block doc-comment.
  *
  * Because it is line-based the heuristic can in principle miscount an export wrapped

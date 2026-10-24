@@ -303,8 +303,8 @@ export async function run(): Promise<void> {
   // pinned and the EMAIL binding bound, POST /admin/auth/bootstrap/send emails the PINNED address a
   // /#/register?invite=<token> link whose token authorises the FIRST-OWNER registration, bound to the
   // pinned email (never the client field). The route is a strict NO ORACLE: every outcome answers the
-  // same generic 200; only the captured sends differ. The slot is single-active (a re-send replaces the
-  // previous link), single-use (consumed on a verified finish), and closed for good once the latch sets.
+  // same generic 200; only the captured sends differ. The slot is single-active (a re-send inside the
+  // cooldown mails nothing and after it mails the same link), single-use (consumed on a verified finish), and closed for good once the latch sets.
   {
     const sends: Array<{ to: string | string[]; from: string; subject: string; text?: string }> = [];
     const emailStub = { send: async (m: { to: string | string[]; from: string; subject: string; text?: string }): Promise<void> => { sends.push(m); } };
@@ -326,12 +326,26 @@ export async function run(): Promise<void> {
     ok("link-token register/begin is authorised on the empty table", begin1.status === 200 && begin1.json.ok === true);
     ok("the options bind the PINNED owner email, not the client field", optionsFor(begin1).user.name === "owner@customer.example");
 
-    // c. A RE-SEND replaces the single slot: the old token dies, the new one is the live capability.
+    // c. A RE-SEND inside the 60 s cooldown answers the generic 200 and mails NOTHING; the response is
+    // byte-identical to the one a send that is skipped for another reason gets (no pinned owner address), so
+    // the cooldown cannot be used to tell whether an address is the pinned one. The link already in the
+    // mailbox stays live.
+    const unknownEnv = { ...base.env, EMAIL_FROM: "no-reply@engine.example", EMAIL: emailStub } as unknown as Env;
+    const rUnknown = await post(unknownEnv, "/admin/auth/bootstrap/send", {}, { origin: ORIGIN });
     const r2 = await post(env, "/admin/auth/bootstrap/send", {}, { origin: ORIGIN });
-    ok("a re-send answers the generic 200 and mails again", r2.status === 200 && r2.json.ok === true && sends.length === 2);
+    ok("a re-send inside the cooldown answers the generic 200 and mails nothing", r2.status === 200 && r2.json.ok === true && sends.length === 1);
+    ok("the cooldown response is byte-identical to the response for an unknown address (status, content type, body)", r2.status === rUnknown.status && r2.contentType === rUnknown.contentType && r2.text === rUnknown.text && r2.text === r1.text);
+    const stillLive = await registerBegin(env, "owner@customer.example", { inviteToken: token1, origin: ORIGIN });
+    ok("the link already mailed still opens after the refused re-send", stillLive.json.ok === true);
+
+    // After the cooldown the SAME link is mailed again. The route reads the real clock, so the stored send
+    // time is moved back past the cooldown instead of waiting.
+    const slot = await base.storage.get<{ token: string; email: string; createdAt: number; expiresAt: number; sentAt?: number }>("bootstrapInvite");
+    await base.storage.put("bootstrapInvite", { ...slot!, sentAt: (slot!.sentAt ?? slot!.createdAt) - 61 * 1000 });
+    const r2b = await post(env, "/admin/auth/bootstrap/send", {}, { origin: ORIGIN });
+    ok("a re-send after the cooldown answers the generic 200 and mails again", r2b.status === 200 && r2b.json.ok === true && sends.length === 2 && r2b.text === r1.text);
     const token2 = decodeURIComponent(/#\/register\?invite=([A-Za-z0-9_~.%-]+)/.exec(sends[1]!.text ?? "")![1]!);
-    const oldBegin = await registerBegin(env, "owner@customer.example", { inviteToken: token1, origin: ORIGIN });
-    ok("the replaced (old) link token is refused", oldBegin.json.ok === false && oldBegin.json.reason === "forbidden");
+    ok("the second email carries the SAME link token as the first", token2 === token1);
 
     // d. The full ceremony over the live link: finish bootstraps the pinned email to OWNER.
     const begin2 = await registerBegin(env, "owner@customer.example", { inviteToken: token2, origin: ORIGIN });

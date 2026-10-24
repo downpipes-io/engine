@@ -479,6 +479,7 @@ const SEAL_FAULT_ID_MAX = 128;
 export interface SealFault {
   readonly kind: SealFaultKind;
   readonly at: number; // epoch ms the fault was observed
+  readonly engineVersion?: string; // the engine version that recorded the row; the scheduler stamps it, a posted body cannot
   readonly downpipeId?: string; // the customer's own downpipe id
   readonly runId?: string; // the customer's own opaque run id
   readonly found?: number; // shard-list-truncated: shards enumerated back at finalise

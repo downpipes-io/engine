@@ -160,6 +160,34 @@ async function main(): Promise<void> {
     ok("the row says the remove was not forced", c?.force === false, c);
   }
 
+  console.log("-- an action page that cannot be read is a fetch failure, not an excerpt with no events --");
+  {
+    const auditStub = (actionPage: (action: string) => Response): DurableObjectStub =>
+      ({
+        async fetch(input: RequestInfo | URL): Promise<Response> {
+          const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url);
+          const action = url.searchParams.get("action");
+          if (action !== null) return actionPage(action);
+          return Response.json({ headSeq: 0, events: [] });
+        },
+      }) as unknown as DurableObjectStub;
+    const outcome = async (stub: DurableObjectStub): Promise<{ threw: boolean; fetched: boolean | null }> => {
+      try {
+        return { threw: false, fetched: (await fetchConfigEvents(stub)).fetched };
+      } catch {
+        return { threw: true, fetched: null };
+      }
+    };
+    const healthy = await outcome(auditStub(() => Response.json({ events: [] })));
+    ok("control, readable action pages give a fetched excerpt", !healthy.threw && healthy.fetched === true, healthy);
+    const http500 = await outcome(auditStub(() => new Response("upstream fault", { status: 500 })));
+    ok("an action page answering 500 throws, so the section reads error", http500.threw, http500);
+    const notJson = await outcome(auditStub(() => new Response("<html>", { status: 200 })));
+    ok("an action page that is not JSON throws, so the section reads error", notJson.threw, notJson);
+    const rejects = await outcome({ fetch: async (input: RequestInfo | URL) => (String(input).includes("action=") ? Promise.reject(new Error("DO unreachable")) : Response.json({ headSeq: 0, events: [] })) } as unknown as DurableObjectStub);
+    ok("an action page whose fetch rejects throws, so the section reads error", rejects.threw, rejects);
+  }
+
   console.log(failures === 0 ? `\nvalidate-dest-refusal-blockers: ${checks} checks passed` : `\nvalidate-dest-refusal-blockers: ${failures} of ${checks} checks FAILED`);
   verdictReached(failures, checks);
   process.exitCode = failures === 0 ? 0 : 1;

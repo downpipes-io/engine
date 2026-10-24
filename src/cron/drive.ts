@@ -12,6 +12,8 @@
 // runDiscoveryPass in discovery-pass.ts); the retention/canary/replication/digest/update passes delegate
 // to their own cron/* helpers.
 
+import { noteSiteFault } from "../admin/site-faults.ts";
+import { recordEnvEngineAccount } from "../sched/engine-scope-account.ts";
 import { CRON_CADENCE_MS } from "./cron-cadence.ts";
 import { doURL, schedulerStub } from "../admin/router.ts";
 import type { Env } from "../env.d.ts";
@@ -80,6 +82,13 @@ export async function drive(env: Env): Promise<void> {
     // The DO was unreachable acquiring the lease: proceed without the single-flight guard rather than let the
     // guard itself stop a tick. reconcileAndDue re-checks DO liveness below and skips cleanly if it is down.
     log("error", `tick-lease acquire unavailable, proceeding without the single-flight guard: ${(e as Error).message}`);
+  }
+  // CF_ACCOUNT_ID reaches the scheduler before the tick's configuration replay can judge an account.
+  try {
+    await recordEnvEngineAccount(env, scheduler);
+  } catch (e) {
+    noteSiteFault("cron.engine-account-record", e);
+    log("error", `engine account record skipped: ${(e as Error).message}`);
   }
   try {
     await runScheduledTick(env, scheduler);

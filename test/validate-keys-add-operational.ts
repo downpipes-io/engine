@@ -320,7 +320,7 @@ async function main(): Promise<void> {
 
     const call = async (email: string): Promise<Response> => handleAdmin(new Request("https://engine.example/admin/keys/add-operational", {
       method: "POST",
-      headers: { "cf-access-jwt-assertion": await tokenFor(email), "content-type": "application/json", origin: "https://engine.example" },
+      headers: { "cf-access-jwt-assertion": await tokenFor(email), "content-type": "application/json" },
       body: JSON.stringify({ token: TOKEN, operationalPublic: OPERATIONAL_PUBLIC, operationalPrivate: OPERATIONAL_PRIVATE }),
     }), env);
 

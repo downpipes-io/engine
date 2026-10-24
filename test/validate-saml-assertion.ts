@@ -355,14 +355,16 @@ console.log("");
   ok("wrong-inresponseto: @InResponseTo != expected rejected", r.ok === false);
 }
 
-// 7. Missing InResponseTo (IdP-initiated) with allowIdpInitiated=false -> reject;
-//    present-and-allowed with allowIdpInitiated=true skips the InResponseTo binding.
+// 7. Missing InResponseTo -> reject, whatever the connection's allowIdpInitiated holds: the stored flag does
+//    not relax the binding to the request the engine sent.
 {
   const reject = consumeAssertion(buildAssertion({ inResponseTo: null }), baseConn({ allowIdpInitiated: false }), baseCtx());
   ok("idp-initiated: missing InResponseTo with allowIdpInitiated=false rejected", reject.ok === false);
-  // allowed IdP-initiated: no InResponseTo on the assertion, allowIdpInitiated=true -> accepted (binding skipped).
-  const accept = consumeAssertion(buildAssertion({ inResponseTo: null }), baseConn({ allowIdpInitiated: true }), baseCtx());
-  ok("idp-initiated: missing InResponseTo with allowIdpInitiated=true accepted (binding skipped)", accept.ok === true);
+  const rejectTrue = consumeAssertion(buildAssertion({ inResponseTo: null }), baseConn({ allowIdpInitiated: true }), baseCtx());
+  ok("idp-initiated: missing InResponseTo with allowIdpInitiated=true is rejected the same way (bearer gate inresponseto)", rejectTrue.ok === false && /\[saml-bearer:inresponseto\]/.test(rejectTrue.reason));
+  // CONTROL: the same connection accepts an assertion that IS bound to the request.
+  const bound = consumeAssertion(buildAssertion({}), baseConn({ allowIdpInitiated: true }), baseCtx());
+  ok("control: allowIdpInitiated=true still accepts an assertion bound to the request", bound.ok === true);
 }
 
 // 8. Transient NameID format.

@@ -8,10 +8,12 @@
 #   @cyclonedx/cyclonedx-npm (installed as a dev dependency or globally)
 #
 # Install if missing:
-#   npm install --save-dev @cyclonedx/cyclonedx-npm@4
+#   npm install --save-dev @cyclonedx/cyclonedx-npm@4.2.1
 #
-# The generator is pinned to major version 4 below so a release SBOM is
-# reproducible. This matches the pin used by the vendor control plane's CI.
+# The generator is pinned to an exact version, and --output-reproducible
+# drops the random serial number and the wall-clock timestamp. Two builds of
+# one commit then give the same SBOM bytes. SHA256SUMS.txt names those bytes.
+# test/validate-build-tool-pins.ts holds both properties.
 #
 # This script only generates the SBOM; it does not run npm install or
 # modify any files other than sbom.cdx.json.
@@ -31,11 +33,12 @@ if ! command -v npx >/dev/null 2>&1; then
   exit 1
 fi
 
-npx --yes @cyclonedx/cyclonedx-npm@4 \
+npx --yes @cyclonedx/cyclonedx-npm@4.2.1 \
   --omit dev \
   --output-format JSON \
   --spec-version 1.6 \
   --output-file sbom.cdx.json \
+  --output-reproducible \
   --package-lock-only
 
 echo "SBOM written to ${REPO_ROOT}/sbom.cdx.json"

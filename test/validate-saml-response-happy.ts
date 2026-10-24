@@ -49,11 +49,15 @@ export async function run(h: Harness, keys: Keys): Promise<void> {
     const r = await verifySamlResponse(resp, conn, baseCtx());
     h.ok("rollover: a malformed first PEM is skipped and a good second PEM verifies", r.ok === true);
   }
-  // IdP-initiated, EXPLICITLY allowed: no Response-level @InResponseTo and no SCD InResponseTo, allowIdpInitiated.
+  // allowIdpInitiated=true does not relax the binding: no Response-level @InResponseTo and no SCD InResponseTo
+  // is refused at the envelope, and the same connection accepts a Response bound to the request.
   {
     const signed = await signAssertion(buildAssertion({ inResponseTo: null }), ASSERTION_ID, rsa.privateKey);
     const resp = encodeResponse(buildResponse([signed], { inResponseTo: null }));
     const r = await verifySamlResponse(resp, baseConn([certPem], { allowIdpInitiated: true }), baseCtx());
-    h.ok("idp-initiated allowed: a Response with no InResponseTo is accepted when allowIdpInitiated=true", r.ok === true);
+    h.ok("allowIdpInitiated=true: a Response with no InResponseTo is refused", r.ok === false && /IdP-initiated SAML Response is not permitted/.test(r.reason));
+    const signedBound = await signAssertion(buildAssertion({}), ASSERTION_ID, rsa.privateKey);
+    const rBound = await verifySamlResponse(encodeResponse(buildResponse([signedBound])), baseConn([certPem], { allowIdpInitiated: true }), baseCtx());
+    h.ok("control: allowIdpInitiated=true still accepts a Response bound to the request", rBound.ok === true);
   }
 }

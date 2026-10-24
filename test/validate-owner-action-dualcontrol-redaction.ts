@@ -118,6 +118,76 @@ export async function run(ctx: Ctx): Promise<void> {
     }
   }
 
+  // push-dest-set: the endpoint can carry the feed credential in its path, query or fragment (a vendor intake
+  // that takes its key there), so the inbox LISTING (every caller, the Owner included) and the reject echo show
+  // scheme and host (and port) only, flagged endpointRedacted. The AT-REST record keeps the full endpoint for
+  // the approved replay. NEGATIVE CONTROLS: the non-credential fields stay, and a host-only endpoint is untouched.
+  {
+    const PATH_TOKEN = "PATHTOKEN-push-listing-7c41";
+    const QUERY_KEY = "QUERYKEY-push-listing-55b0";
+    const S3_TOKEN = "S3PATHTOKEN-push-listing-91de";
+    const rp = await doFetch("/push", ownerCaller(OWNER), { endpoint: `https://intake.example:8443/v1/${PATH_TOKEN}/ingest?k=${QUERY_KEY}#frag`, format: "raw-json", authHeaderName: "Authorization", authHeaderValue: "push-header-secret", enabled: true });
+    ok("a push-dest-set is queued (202)", rp.status === 202);
+    const pidP = ((await rp.json()) as { id: string }).id;
+    for (const who of [OWNER, OWNER2]) {
+      const lp = (await inbox(who)).find((a) => a.id === pidP)!;
+      const text = JSON.stringify(lp.params);
+      ok(`[redact] the LISTING for ${who === OWNER ? "the proposer" : "the second Owner"} carries no push path token or query key`, !text.includes(PATH_TOKEN) && !text.includes(QUERY_KEY) && !text.includes("frag"));
+      ok("[redact] the LISTING push endpoint is scheme, host and port only", (lp.params as { endpoint?: unknown }).endpoint === "https://intake.example:8443");
+      ok("[redact] the LISTING push params say the endpoint was redacted", (lp.params as { endpointRedacted?: unknown }).endpointRedacted === true);
+      ok("[redact] the LISTING push params keep the non-credential fields", (lp.params as { format?: unknown }).format === "raw-json" && (lp.params as { authHeaderName?: unknown }).authHeaderName === "Authorization");
+      ok("[redact] the LISTING push params carry no auth header value", !text.includes("push-header-secret"));
+    }
+    const atRestP = sched.storage.rawGet<PendingOwnerAction>(ownerActionKey(pidP))!;
+    ok("[redact] the AT-REST push record KEEPS the full endpoint for replay", JSON.stringify(atRestP.params).includes(PATH_TOKEN) && JSON.stringify(atRestP.params).includes(QUERY_KEY));
+    const rejP = (await (await doFetch("/owner-actions/reject", ownerCaller(OWNER2), { id: pidP })).json()) as PendingOwnerAction;
+    ok("[redact] the REJECT response carries no push path token", rejP.status === "rejected" && !JSON.stringify(rejP.params).includes(PATH_TOKEN));
+
+    const rs = await doFetch("/push", ownerCaller(OWNER), { sink: "s3", format: "raw-json", enabled: true, s3Target: { endpoint: `https://s3.intake.example/${S3_TOKEN}/`, bucket: "b", region: "r", accessKeyId: "AK", secretAccessKey: "push-s3-secret" } });
+    const pidS = ((await rs.json()) as { id: string }).id;
+    const ls = (await inbox(OWNER)).find((a) => a.id === pidS)!;
+    ok("[redact] the LISTING s3 endpoint is scheme and host only, with no path token", (ls.params as { s3Target?: { endpoint?: unknown } }).s3Target?.endpoint === "https://s3.intake.example" && !JSON.stringify(ls.params).includes(S3_TOKEN));
+    ok("[redact] the LISTING s3 params keep the bucket and carry no secret key", JSON.stringify(ls.params).includes('"bucket":"b"') && !JSON.stringify(ls.params).includes("push-s3-secret"));
+    await doFetch("/owner-actions/reject", ownerCaller(OWNER2), { id: pidS });
+
+    const rh = await doFetch("/push", ownerCaller(OWNER), { endpoint: "https://hostonly.example/", format: "raw-json", authHeaderName: "Authorization", authHeaderValue: "h", enabled: true });
+    const pidH = ((await rh.json()) as { id: string }).id;
+    const lh = (await inbox(OWNER)).find((a) => a.id === pidH)!;
+    ok("[redact] negative control: a host-only push endpoint is listed unchanged, with no flag", (lh.params as { endpoint?: unknown }).endpoint === "https://hostonly.example/" && (lh.params as { endpointRedacted?: unknown }).endpointRedacted === undefined);
+    await doFetch("/owner-actions/reject", ownerCaller(OWNER2), { id: pidH });
+  }
+
+  // otlp-push-dest-set: the OTLP metrics endpoint is the same vendor-intake shape as the SIEM push endpoint, so
+  // the inbox LISTING (every caller) and the reject echo show scheme and host (and port) only, flagged
+  // endpointRedacted, while the AT-REST record keeps the full endpoint for the approved replay.
+  // NEGATIVE CONTROLS: the non-credential fields stay, and a host-only endpoint is untouched.
+  {
+    const OTLP_TOKEN = "OTLPPATHTOKEN-listing-3b9e";
+    const OTLP_QUERY = "OTLPQUERYKEY-listing-a410";
+    const ro = await doFetch("/otlp-push", ownerCaller(OWNER), { endpoint: `https://otlp.intake.example:4318/v1/${OTLP_TOKEN}/metrics?k=${OTLP_QUERY}#frag`, authHeaderName: "Authorization", authHeaderValue: "otlp-header-secret", enabled: true });
+    ok("an otlp-push-dest-set is queued (202)", ro.status === 202);
+    const pidO = ((await ro.json()) as { id: string }).id;
+    for (const who of [OWNER, OWNER2]) {
+      const lo = (await inbox(who)).find((a) => a.id === pidO)!;
+      const text = JSON.stringify(lo.params);
+      ok(`[redact] the LISTING for ${who === OWNER ? "the proposer" : "the second Owner"} carries no OTLP path token or query key`, !text.includes(OTLP_TOKEN) && !text.includes(OTLP_QUERY) && !text.includes("frag"));
+      ok("[redact] the LISTING OTLP endpoint is scheme, host and port only", (lo.params as { endpoint?: unknown }).endpoint === "https://otlp.intake.example:4318");
+      ok("[redact] the LISTING OTLP params say the endpoint was redacted", (lo.params as { endpointRedacted?: unknown }).endpointRedacted === true);
+      ok("[redact] the LISTING OTLP params keep the non-credential fields", (lo.params as { authHeaderName?: unknown }).authHeaderName === "Authorization" && (lo.params as { enabled?: unknown }).enabled === true);
+      ok("[redact] the LISTING OTLP params carry no auth header value", !text.includes("otlp-header-secret"));
+    }
+    const atRestO = sched.storage.rawGet<PendingOwnerAction>(ownerActionKey(pidO))!;
+    ok("[redact] the AT-REST OTLP record KEEPS the full endpoint for replay", JSON.stringify(atRestO.params).includes(OTLP_TOKEN) && JSON.stringify(atRestO.params).includes(OTLP_QUERY));
+    const rejO = (await (await doFetch("/owner-actions/reject", ownerCaller(OWNER2), { id: pidO })).json()) as PendingOwnerAction;
+    ok("[redact] the REJECT response carries no OTLP path token", rejO.status === "rejected" && !JSON.stringify(rejO.params).includes(OTLP_TOKEN));
+
+    const rh = await doFetch("/otlp-push", ownerCaller(OWNER), { endpoint: "https://otlp-hostonly.example/", authHeaderName: "Authorization", authHeaderValue: "h", enabled: true });
+    const pidOH = ((await rh.json()) as { id: string }).id;
+    const loh = (await inbox(OWNER)).find((a) => a.id === pidOH)!;
+    ok("[redact] negative control: a host-only OTLP endpoint is listed unchanged, with no flag", (loh.params as { endpoint?: unknown }).endpoint === "https://otlp-hostonly.example/" && (loh.params as { endpointRedacted?: unknown }).endpointRedacted === undefined);
+    await doFetch("/owner-actions/reject", ownerCaller(OWNER2), { id: pidOH });
+  }
+
   // ===========================================================================================
   // PROOF 7: BREAK-GLASS (bare token) cannot PROPOSE or APPROVE an owner action (needs an attributable id),
   //          but CAN toggle the gate (owner, no deadlock); the toggle is attributed.

@@ -85,16 +85,7 @@ export async function seedAcrossArchives(primary: RunlogSeedResult, others: read
  */
 export async function reseedAfterIndexHeld(scheduler: DurableObjectStub, readers: readonly RunlogReader[], verifier: HybridVerifier, held: IndexHeld): Promise<void> {
   const { max, archiveId } = await highestAcross(readers, verifier);
-  const r = await scheduler.fetch(doURL("/control-plane/runlog-advance"), { method: "POST", body: JSON.stringify({ to: Math.max(max, held.index) }), headers: { "content-type": "application/json" } });
-  const j = (await r.json()) as { moved?: { from?: number; to?: number; downpipeId?: string } | null };
-  const moved = j.moved;
-  if (!moved || typeof moved.from !== "number" || typeof moved.to !== "number" || typeof moved.downpipeId !== "string") return;
-  await reportRunlogAnomaly(scheduler, moved.downpipeId, {
-    kind: "counter-advanced-after-recovery",
-    indexA: moved.from,
-    indexB: moved.to,
-    ...(archiveId !== null && max >= held.index ? { archiveId } : {}),
-  });
+  await advanceAndRecord(scheduler, Math.max(max, held.index), archiveId !== null && max >= held.index ? archiveId : null);
 }
 
 /**
@@ -105,7 +96,7 @@ export async function reseedAfterIndexHeld(scheduler: DurableObjectStub, readers
  */
 export async function pinnedVerifier(env: Env): Promise<HybridVerifier | null> {
   if (typeof env.SIGNER_PRIVATE !== "string" || env.SIGNER_PRIVATE.length === 0) return null;
-  try {
+  try { // nosemgrep: incident-catch-returns-empty -- the fault is recorded as a site fault
     return verifierFrom(await loadSigner(env.SIGNER_PRIVATE));
   } catch (e) {
     noteSiteFault("runlog.advance-signer", e);
@@ -156,8 +147,8 @@ export async function advanceAfterIndexHeld(env: Env, scheduler: DurableObjectSt
   try {
     const verifier = await pinnedVerifier(env);
     if (verifier === null) {
-      // No signer, so no document can be verified: move past the refused index only.
-      await scheduler.fetch(doURL("/control-plane/runlog-advance"), { method: "POST", body: JSON.stringify({ to: held.index }) });
+      // No signer, so no document can be verified: move past the refused index only, and record the move.
+      await advanceAndRecord(scheduler, held.index, null);
       return;
     }
     const readers = await configuredArchiveReaders(env, scheduler);
@@ -172,4 +163,27 @@ export async function advanceAfterIndexHeld(env: Env, scheduler: DurableObjectSt
     noteSiteFault("runlog.advance-failed", e);
     log("error", `control-plane health pass could not advance the run counter this tick: ${(e as Error).message}`);
   }
+}
+
+
+/**
+ * advanceAndRecord posts the counter advance to the scheduler and, when the counter moved, records a
+ * counter-advanced-after-recovery row against the refused downpipe. archiveId names the archive that held the
+ * highest verified index, or is null when no verified archive set the target.
+ *
+ * @param scheduler - the scheduler DO stub.
+ * @param to - the index the counter moves past.
+ * @param archiveId - the archive behind the target, or null.
+ */
+async function advanceAndRecord(scheduler: DurableObjectStub, to: number, archiveId: string | null): Promise<void> {
+  const r = await scheduler.fetch(doURL("/control-plane/runlog-advance"), { method: "POST", body: JSON.stringify({ to }), headers: { "content-type": "application/json" } });
+  const j = (await r.json()) as { moved?: { from?: number; to?: number; downpipeId?: string } | null };
+  const moved = j.moved;
+  if (!moved || typeof moved.from !== "number" || typeof moved.to !== "number" || typeof moved.downpipeId !== "string") return;
+  await reportRunlogAnomaly(scheduler, moved.downpipeId, {
+    kind: "counter-advanced-after-recovery",
+    indexA: moved.from,
+    indexB: moved.to,
+    ...(archiveId !== null ? { archiveId } : {}),
+  });
 }

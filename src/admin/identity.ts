@@ -216,7 +216,7 @@ export interface WhoAmI {
   customRole?: CustomRole;
   capabilities?: Capability[];
   // csrfToken is the double-submit CSRF token for a COOKIE-BORNE session (passkey/oidc/saml); absent for the
-  // header-authenticated token/access methods (they are not ambient-credential CSRF vectors). The console
+  // header-authenticated token/access methods (they get no double-submit token). The console
   // echoes it in the x-downpipes-csrf header on the session-termination routes, where the engine validates
   // it server-side against the readable __Host-downpipes_csrf cookie (ML-02, defence in depth on top of the
   // strict-Origin guard). It is issued/refreshed here, on whoami, and set as the readable cookie in the same
@@ -469,7 +469,7 @@ export function encodeCaller(caller: Caller): string {
 // DO route decides what that means for its specific operation.
 export function decodeCaller(header: string | null): CallerHeaderPayload | null {
   if (!header) return null;
-  try {
+  try { // nosemgrep: incident-catch-returns-empty -- a malformed caller header is no caller and the DO then applies least privilege
     const b64 = header.replace(/-/g, "+").replace(/_/g, "/");
     const bin = atob(b64);
     const bytes = new Uint8Array(bin.length);
@@ -477,7 +477,7 @@ export function decodeCaller(header: string | null): CallerHeaderPayload | null 
     const obj = JSON.parse(new TextDecoder().decode(bytes)) as unknown;
     if (typeof obj !== "object" || obj === null) return null;
     return parseCallerPayload(obj as Record<string, unknown>);
-  } catch {
+  } catch { // site-fault-waiver: src/admin/identity.ts:decodeCaller:catch:1 -- a malformed caller header is no caller and the DO then applies least privilege
     return null;
   }
 }

@@ -448,8 +448,8 @@ export function validateSamlCerts(raw: unknown): { ok: true; certs: string[] } |
 }
 
 // validateSaml turns an untrusted SAML proposal into a stored SamlConnection (minus createdBy/createdAt) or a
-// reason. The SP is SIGN-ONLY and SP-INITIATED by default (allowIdpInitiated is an explicit owner opt-in,
-// enforced at the ACS). The hard config gates: https-only IdP SSO URL (no private/loopback host), at least
+// reason. The SP is SIGN-ONLY and SP-INITIATED ONLY (allowIdpInitiated is stored and has no effect on
+// sign-in). The hard config gates: https-only IdP SSO URL (no private/loopback host), at least
 // one PEM signing cert (the trust root - the SP pins these and IGNORES the assertion's own KeyInfo),
 // wantAssertionsSigned must be true (an unsigned assertion is refused), the NameID format must NOT be
 // transient (not stable enough to authorise), and an explicit emailVerifiedPolicy (no silent default for an
@@ -475,7 +475,7 @@ export function validateSaml(p: IdpConnectionProposal, base: Base): ValidateResu
   if (nameIdFormat === null) return { ok: false, reason: "nameIdFormat must be a non-empty string" };
   if (nameIdFormat === NAMEID_TRANSIENT) return { ok: false, reason: "a transient NameID is not stable enough to key authorization; use persistent, emailAddress, unspecified, or a pinned stable attribute" };
   if (p.wantAssertionsSigned !== true) return { ok: false, reason: "wantAssertionsSigned must be true (the SP refuses an unsigned assertion)" };
-  if (typeof p.allowIdpInitiated !== "boolean") return { ok: false, reason: "allowIdpInitiated must be a boolean (default false; true is an explicit owner opt-in)" };
+  if (typeof p.allowIdpInitiated !== "boolean") return { ok: false, reason: "allowIdpInitiated must be a boolean" };
   const clockSkewSec = typeof p.clockSkewSec === "number" && Number.isFinite(p.clockSkewSec) && p.clockSkewSec >= 0 && p.clockSkewSec <= CLOCK_SKEW_MAX ? p.clockSkewSec : null;
   if (clockSkewSec === null) return { ok: false, reason: `clockSkewSec must be a number from 0 to ${CLOCK_SKEW_MAX}` };
   if (p.emailVerifiedPolicy !== "require-flag" && p.emailVerifiedPolicy !== "trust-idp") return { ok: false, reason: "emailVerifiedPolicy must be 'require-flag' or 'trust-idp' (an explicit email-trust choice)" };

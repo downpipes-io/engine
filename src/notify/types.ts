@@ -806,10 +806,10 @@ export async function screenResolvedSinkHost(
 //     bypass an operator-configured egressAllowlist entirely.
 //   - an UNSET or EMPTY allowlist permits every host: an account that has not configured one reaches any
 //     public https host from its notify channels.
-//   - a SET, non-empty allowlist permits only an EXACT match on one of its entries, or a match against a
-//     single-label wildcard entry ("*.suffix") on a DOTTED SUFFIX boundary: "*.pagerduty.com" matches
-//     "events.pagerduty.com" but never "notpagerduty.com" or "pagerduty.com.evil" (a plain substring test
-//     would pass both of those; this never uses one).
+//   - a SET, non-empty allowlist permits only an EXACT match on one of its entries, or a wildcard entry
+//     ("*.suffix") at any depth on a DOTTED SUFFIX boundary: "*.pagerduty.com" matches "events.pagerduty.com"
+//     and "eu.events.pagerduty.com", never the bare "pagerduty.com", "notpagerduty.com" or "pagerduty.com.evil"
+//     (a plain substring test would pass the last two; this never uses one).
 //
 // It is independent of the internal-sink SSRF deny screen (isInternalSinkHost) and of allowInternal: a
 // private host still needs BOTH the allowlist match and the per-channel internal-sink opt-in, and an

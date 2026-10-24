@@ -82,7 +82,7 @@ function clampDuration(d: number | undefined): number {
 // does not. The body never leaves this module's error path -- it is consumed only to derive the closed
 // StsFailureClass (classifyStsErrorBody, an allow-listed <Code> table). Fail-safe: any hiccup yields "".
 async function readStsErrorBody(resp: Response): Promise<string> {
-  try {
+  try { // nosemgrep: incident-catch-returns-empty -- an unreadable error body is left out of the message and the failure it explains is already raised
     const cl = resp.headers.get("content-length");
     if (cl !== null) {
       const advertised = Number(cl);
@@ -90,7 +90,7 @@ async function readStsErrorBody(resp: Response): Promise<string> {
     }
     const text = await resp.text();
     return text.slice(0, MAX_DEST_TEXT_BYTES);
-  } catch {
+  } catch { // site-fault-waiver: src/dest/sts.ts:readStsErrorBody:catch:1 -- an unreadable error body is left out of the message and the failure it explains is already raised
     return "";
   }
 }

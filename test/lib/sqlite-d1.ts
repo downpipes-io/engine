@@ -37,6 +37,8 @@ export class SqliteD1 {
   maxPageRows = 0;
   // failRowidProbe makes the _rowid_ probe throw, as a transient D1 fault would on a rowid table.
   failRowidProbe = false;
+  // failKeyLookup makes the PRIMARY KEY pragmas throw, as a transient D1 fault would on a WITHOUT ROWID table.
+  failKeyLookup = false;
   static readonly BOOKMARK = "00000003-00000004-00000000-0011223344556677";
 
   withSession(_constraint?: string): { prepare(q: string): SqliteStmt; getBookmark(): string } {
@@ -82,6 +84,7 @@ export class SqliteStmt {
     return s;
   }
   async all<T>(): Promise<{ results: T[]; success: true; meta: Record<string, unknown> }> {
+    if (this.d1.failKeyLookup && /^PRAGMA index_(list|xinfo)\(/.test(this.query)) throw new Error("D1_ERROR: transient fault (test double)");
     const rows = this.statement().all(...this.binds.map(toSqliteBind)) as Record<string, unknown>[];
     const results = rows.map((r) => Object.fromEntries(Object.entries(r).map(([k, v]) => [k, fromSqliteValue(v)])));
     return { results: results as T[], success: true, meta: {} };

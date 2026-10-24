@@ -352,7 +352,7 @@ async function testDecideKeepAndCoreApply(fx: Fixtures): Promise<void> {
     const r = await runSafeApply(d, g, input());
     ok("rollback failure -> outcome rollback-failed (the engine is STILL on the bad version)", r.outcome === "rollback-failed");
     ok("...and it is NOT reported as rolled-back, which would be the opposite of the truth", r.outcome !== "rolled-back");
-    ok("rollback failure names the manual recovery (re-deploy prior version)", /re-deploy|dashboard/i.test(r.reason ?? ""));
+    ok("rollback failure points at the console rollback and not the dashboard", /Roll back in the console/.test(r.reason ?? "") && !/dashboard/i.test(r.reason ?? ""));
     ok("rollback failure reassures DATA + RECOVERY are safe", /DATA|RECOVERY|immutable|out-of-band/i.test(r.reason ?? ""));
   }
 
@@ -735,7 +735,7 @@ async function testRampSettle(): Promise<void> {
     const r = await settleAfterRamp(d, g, settleArgs());
     ok("ramp-settle dead + rollback deploy fails -> rollback-failed-still-split (traffic is STILL split)", r.outcome === "rollback-failed-still-split");
     ok("...and it is NOT reported as rolled-back, which would claim a revert that never happened", r.outcome !== "rolled-back");
-    ok("ramp-settle failed-rollback names the manual re-deploy and reassures data/recovery", /re-deploy|dashboard/i.test(r.reason ?? "") && /DATA|RECOVERY|immutable|out-of-band/i.test(r.reason ?? ""));
+    ok("ramp-settle failed-rollback points at the console rollback and reassures data/recovery", /Roll back in the console/.test(r.reason ?? "") && !/dashboard/i.test(r.reason ?? "") && /DATA|RECOVERY|immutable|out-of-band/i.test(r.reason ?? ""));
   }
   {
     // fail-safe: a hostile gate never throws out of settleAfterRamp.

@@ -47,6 +47,13 @@
 // origin/main ref supports no conclusion about its currency, which is fine on a single-repo clone and is a
 // configuration fault in CI, where the ref is always there. CI sets it.
 //
+// A RELEASE-TAG PIN is graded against the newest release tag, not against main. CI checks the reader out at
+// a v* tag on purpose, so every later commit on the reader's main (a SECURITY.md edit is enough) made that
+// checkout "behind" and turned the nightly red with nothing graded having changed (engine run 38276133304,
+// 12 Oct). A checkout whose HEAD is exactly the newest v* tag it has fetched is fresh. One at an OLDER v* tag
+// while a newer one exists is exit 1, "pin bump owed": a finding, and the hatch above does not suppress it,
+// because suppressing it is how an engine silently falls behind a released reader.
+//
 // CANONICAL COPY. This file is duplicated verbatim into each repo that needs it, because a repo cannot
 // import it from a sibling without reintroducing the dependency it exists to police. Keep the copies in
 // step; `git grep -l sibling-freshness` across the workspace finds all of them.
@@ -78,6 +85,71 @@ export function behindOriginMain(repoPath) {
   }
 }
 
+const RELEASE_TAG = /^v(\d+)\.(\d+)\.(\d+)$/;
+
+/**
+ * The X, Y and Z of a tag that matches RELEASE_TAG.
+ *
+ * @param {string} tag
+ * @returns {number[]}
+ */
+function releaseNumbers(tag) {
+  return (RELEASE_TAG.exec(tag) ?? []).slice(1).map(Number);
+}
+
+/**
+ * Numeric X.Y.Z order for two tags that both match RELEASE_TAG.
+ *
+ * @param {string} a
+ * @param {string} b
+ * @returns {number}
+ */
+function compareReleaseTags(a, b) {
+  const x = releaseNumbers(a);
+  const y = releaseNumbers(b);
+  for (let i = 0; i < 3; i += 1) {
+    const d = (x[i] ?? 0) - (y[i] ?? 0);
+    if (d !== 0) return d;
+  }
+  return 0;
+}
+
+/**
+ * The non-empty output lines of a git command in `repoPath`, or `ok: false` when git fails, so that a failed
+ * read is never mistaken for "no tags".
+ *
+ * @param {string} repoPath
+ * @param {string[]} args
+ * @returns {{ok: true, lines: string[]} | {ok: false}}
+ */
+function gitLines(repoPath, args) {
+  try {
+    const out = execFileSync("git", ["-C", repoPath, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+    return { ok: true, lines: out.split("\n").map((l) => l.trim()).filter(Boolean) };
+  } catch {
+    return { ok: false };
+  }
+}
+
+/**
+ * The release tag `repoPath`'s HEAD sits on and the newest release tag it has fetched, or null when HEAD is on
+ * no X.Y.Z release tag or git cannot read the tags. Only fetched tags are read (no network, as for origin/main above): CI checks out with
+ * fetch-depth 0, which fetches every tag.
+ *
+ * @param {string} repoPath
+ * @returns {{tag: string, newest: string} | null}
+ */
+export function releasePin(repoPath) {
+  // A tag read that git cannot answer is no pin, so the checkout is graded on its lag, which refuses.
+  const atHead = gitLines(repoPath, ["tag", "--points-at", "HEAD"]);
+  if (!atHead.ok) return null;
+  const tag = atHead.lines.filter((t) => RELEASE_TAG.test(t)).sort(compareReleaseTags).at(-1);
+  if (tag === undefined) return null;
+  const all = gitLines(repoPath, ["tag", "--list", "v*"]);
+  if (!all.ok) return null;
+  return { tag, newest: all.lines.filter((t) => RELEASE_TAG.test(t)).sort(compareReleaseTags).at(-1) ?? tag };
+}
+
 /** The repos the caller is allowed to grade against while stale, from the environment. */
 function allowance(env) {
   const raw = (env.DOWNPIPES_ALLOW_STALE_SIBLINGS ?? "").trim();
@@ -87,7 +159,8 @@ function allowance(env) {
 }
 
 /**
- * Refuse, with exit 2, when any sibling this gate reads is behind its own origin/main.
+ * Refuse, with exit 2, when any sibling this gate reads is behind its own origin/main. A sibling on a release
+ * tag is graded against the newest release tag instead: at it, fresh; behind it, exit 1 (pin bump owed).
  *
  * @param {Array<{name: string, path: string | null | undefined}>} siblings the repos actually read
  * @param {object} [opts]
@@ -127,9 +200,14 @@ export function requireFreshSiblings(siblings, opts = {}) {
 
   const stale = [];
   const unknown = [];
+  const pinBehind = [];
   for (const s of present) {
     const behind = behindOriginMain(s.path);
+    const pin = behind !== null && behind > 0 ? releasePin(s.path) : null;
     if (behind === null) unknown.push(s);
+    else if (pin !== null && pin.tag === pin.newest) {
+      log(`note  ${s.name} is pinned at ${pin.tag}, its newest release tag; the ${behind} commit(s) on main after it are not lag.`);
+    } else if (pin !== null) pinBehind.push({ ...s, ...pin });
     else if (behind > 0) stale.push({ ...s, behind });
   }
 
@@ -173,5 +251,14 @@ export function requireFreshSiblings(siblings, opts = {}) {
     log("that checkout and run again, or set DOWNPIPES_ALLOW_STALE_SIBLINGS to the repo names you deliberately");
     log("mean to grade against an old tree (it prints every repo it lets through).");
     return exit(2);
+  }
+
+  // After the exit-2 checks: a finding needs a run that could check. Not suppressible (see the header).
+  if (pinBehind.length > 0) {
+    log(`FAIL: ${gate} reads a sibling pinned to an older release tag than one it has fetched. Pin bump owed:\n`);
+    for (const s of pinBehind) log(`  ${s.name}: pinned at ${s.tag}, newest release tag ${s.newest}, at ${s.path}`);
+    log("");
+    log("This is exit 1, a finding. Move the pin to the newest release tag.");
+    return exit(1);
   }
 }

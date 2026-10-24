@@ -349,7 +349,7 @@ async function main(): Promise<void> {
 
     // "Still delivers": the kept secret resolves through the drain's read path to the original value.
     const resolved = await fetchPushConfig(
-      { fetch: async () => new Response(JSON.stringify({ record: rec2 }), { status: 200 }) } as unknown as Parameters<typeof fetchPushConfig>[0],
+      { fetch: async () => new Response(JSON.stringify({ record: rec2, egressAllowlist: [] }), { status: 200 }) } as unknown as Parameters<typeof fetchPushConfig>[0],
       undefined,
     );
     ok("KEEP-SECRET still delivers: fetchPushConfig resolves the kept secret for the sender", resolved?.authHeaderValue === "kept-secret-xyz");
@@ -436,7 +436,7 @@ async function main(): Promise<void> {
           const url = new URL(typeof input === "string" ? input : input.toString());
           if (opts?.throwPath && url.pathname === opts.throwPath) throw new Error(`simulated DO ${url.pathname} unavailable`);
           const json = (v: unknown): Response => new Response(JSON.stringify(v), { status: 200 });
-          if (url.pathname === "/push-config") return json({ record: state.record });
+          if (url.pathname === "/push-config") return json({ record: state.record, egressAllowlist: [] }); // the DO answers the list with every record
           if (url.pathname === "/push") return json({ present: state.record !== null, lastPushedSeq: state.lastPushedSeq, trail: [] });
           if (url.pathname === "/audit/export") {
             const afterSeq = Number(url.searchParams.get("afterSeq") ?? "0");

@@ -30,6 +30,7 @@ import type { DestFaultSnapshot } from "../dest/fault-log.ts";
 import { type Addressing, S3Destination } from "../dest/s3.ts";
 import type { Env } from "../env.d.ts";
 import { log } from "../log.ts";
+import { PUSH_EGRESS_BLOCKED_CODE, pushTargetAllowed, requireEgressAllowlist } from "../notify/push-egress.ts";
 import { deliverSiemPush, type SiemPushSendResult } from "../notify/siem-push-sender.ts";
 import { deliverSiemSyslog, type SiemSyslogSendResult } from "../notify/siem-syslog-sender.ts";
 import type { PushDestinationRecord, PushFormat, PushSink } from "../sched/scheduler-do-base.ts";
@@ -53,6 +54,9 @@ export interface ResolvedPushConfig {
   authInUrl: boolean;
   s3?: ResolvedS3Target;
   syslog?: { host: string; port: number };
+  // egressAllowlist is the account's operator allowlist as the DO read it with this record. Absent or empty
+  // permits every host (screenEgressAllowlist's unset reading); a set list limits the target to its entries.
+  egressAllowlist?: string[];
 }
 
 // ResolvedS3Target is the S3-drop sink's destination with its secretAccessKey resolved to plaintext, ready to
@@ -207,8 +211,11 @@ export function classifyPushConfigFault(e: unknown): Extract<PushPassFailCode, "
 export async function fetchPushConfig(scheduler: ReturnType<typeof schedulerStub>, wrapKey: Uint8Array | undefined): Promise<ResolvedPushConfig | null> {
   const resp = await scheduler.fetch(doURL("/push-config"), { method: "GET" });
   if (!resp.ok) throw new Error(`${PUSH_CONFIG_UNREADABLE_PREFIX} (DO responded ${resp.status})`);
-  const { record } = (await resp.json()) as { record?: PushDestinationRecord | null };
+  const { record, egressAllowlist } = (await resp.json()) as { record?: PushDestinationRecord | null; egressAllowlist?: unknown };
   if (!record) return null;
+  // The DO answers the allowlist with every record (an empty list when none is set). An answer without one is
+  // malformed, and reading it as "no list" would allow every host, so the send refuses instead.
+  const allowlist = requireEgressAllowlist(egressAllowlist, `${PUSH_CONFIG_UNREADABLE_PREFIX} (the answer carries no egress allowlist)`);
   const authHeaderValue = await resolveConfigSecret(wrapKey, record.authHeaderValue, PUSH_SECRET_AAD);
   const sink: PushSink = record.sink ?? "http";
   let s3: ResolvedS3Target | undefined;
@@ -236,7 +243,17 @@ export async function fetchPushConfig(scheduler: ReturnType<typeof schedulerStub
     authInUrl: record.authInUrl === true,
     ...(s3 !== undefined ? { s3 } : {}),
     ...(record.syslog !== undefined ? { syslog: record.syslog } : {}),
+    egressAllowlist: allowlist,
   };
+}
+
+// pushTargetRefused reports whether the operator egress allowlist refuses the destination's stored target:
+// the s3 endpoint, the syslog host or the http endpoint, by sink. It runs at send time so a list set or
+// tightened after the destination was saved applies to the next delivery.
+function pushTargetRefused(cfg: ResolvedPushConfig): boolean {
+  if (cfg.sink === "s3") return cfg.s3 !== undefined && !pushTargetAllowed(cfg.s3.endpoint, "url", cfg.egressAllowlist);
+  if (cfg.sink === "syslog-tls") return cfg.syslog !== undefined && !pushTargetAllowed(cfg.syslog.host, "host", cfg.egressAllowlist);
+  return !pushTargetAllowed(cfg.endpoint, "url", cfg.egressAllowlist);
 }
 
 // spliceUrlToken appends the auth secret to the endpoint as a trailing path segment (the Devo-style
@@ -322,6 +339,7 @@ interface PushDeliveryOpts {
 // one request per event (deliverGelfHttp: Graylog's GELF HTTP input drops a batched body by
 // default). It NEVER throws.
 export async function deliverResolvedPush(cfg: ResolvedPushConfig, events: AuditEvent[], meta: PushCursorMeta, opts?: PushDeliveryOpts): Promise<PushDeliveryResult> {
+  if (pushTargetRefused(cfg)) return { ok: false, reason: PUSH_EGRESS_BLOCKED_CODE };
   if (cfg.sink === "s3") {
     if (!cfg.s3) return { ok: false, reason: "s3-target-missing" };
     return putSiemBatchToS3(cfg.s3, cfg.format, events, meta, opts);

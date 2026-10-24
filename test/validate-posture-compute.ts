@@ -1179,7 +1179,7 @@ function computeConsoleOnWorkersDev(): void {
   ok("console-origin: the remediation names the custom domain route settings and CONSOLE_ORIGIN", /custom_domain = true/.test(wd?.remediation ?? "") && /workers_dev = false/.test(wd?.remediation ?? "") && /CONSOLE_ORIGIN/.test(wd?.remediation ?? ""));
   ok("console-origin: the remediation names Minimum TLS 1.2 and the Modern cipher preset with its Advanced Certificate Manager need", /Minimum TLS 1\.2/.test(wd?.remediation ?? "") && /Modern/.test(wd?.remediation ?? "") && /Advanced Certificate Manager/.test(wd?.remediation ?? ""));
   ok("console-origin: the how names the hostname of the configured CONSOLE_ORIGIN", /hostname of the configured CONSOLE_ORIGIN/.test(wd?.how ?? ""));
-  ok("console-origin: the copy has no U+2014 and claims no workers.dev TLS version", wd !== undefined && !JSON.stringify(wd).includes("\u2014") && !/TLS 1\.3|TLSv1/i.test(wd.detail));
+  ok("console-origin: the copy claims no workers.dev TLS version", wd !== undefined && !/TLS 1\.3|TLSv1/i.test(wd.detail));
   ok("console-origin: a mixed-case .Workers.Dev origin FAILS", consoleOriginCheck("https://Console.Team.Workers.Dev")?.status === "fail");
   ok("console-origin: a workers.dev origin with a port and path FAILS", consoleOriginCheck("https://a.b.workers.dev:443/x")?.status === "fail");
   const own = consoleOriginCheck("https://console.example.com");

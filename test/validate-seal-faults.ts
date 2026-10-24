@@ -9,6 +9,7 @@
 // is dropped entirely.
 
 import { SEAL_FAULT_KINDS, sanitiseSealFault, isWormRefusal, type SealFault } from "../src/seal/seal-faults.ts";
+import { foldSealFaultSpan, sanitiseSealFaultSpans } from "../src/seal/seal-fault-spans.ts";
 import { verdictReached } from "./lib/verdict-guard.ts";
 
 let failures = 0;
@@ -116,6 +117,36 @@ function main(): void {
     ok("a 500 outage does NOT match", isWormRefusal("DELETE key: status 500 (InternalError)") === false);
     ok("a network fault does NOT match", isWormRefusal("fetch failed: ECONNRESET") === false);
     ok("a 404 does NOT match", isWormRefusal("DELETE key: status 404") === false);
+  }
+
+  console.log("\nPART G: the engine version stamp on a span, and the stale mark the sanitiser derives");
+  {
+    const stamped = { ...(sanitiseSealFault({ kind: "replica-target-fault", at: NOW, destinationId: "deploy", replicaReason: "not-configured" }, NOW) as SealFault), engineVersion: "0.3.9" } as SealFault;
+    const folded = foldSealFaultSpan(undefined, stamped);
+    ok("a span folded from a stamped fault carries lastEngineVersion", (folded.spans[0] as { lastEngineVersion?: string }).lastEngineVersion === "0.3.9");
+    const again = foldSealFaultSpan(folded, { ...stamped, engineVersion: "0.4.0" } as SealFault);
+    ok("the next fold moves lastEngineVersion to the latest writer", (again.spans[0] as { lastEngineVersion?: string }).lastEngineVersion === "0.4.0");
+    const unstamped = foldSealFaultSpan(undefined, sanitiseSealFault({ kind: "replica-target-fault", at: NOW, destinationId: "deploy", replicaReason: "not-configured" }, NOW) as SealFault);
+    ok("a fault with no stamp leaves the span without lastEngineVersion", !("lastEngineVersion" in unstamped.spans[0]!));
+    const out = (v: unknown) => sanitiseSealFaultSpans({ spans: [{ kind: "lease-lost-abandon", count: 1, firstSeenAt: NOW, lastSeenAt: NOW, lastEngineVersion: v }], overflow: 0 })!.spans[0] as unknown as Record<string, unknown>;
+    ok("a span with a version unlike the running one reads stale", out("0.0.1").stale === true && out("0.0.1").lastEngineVersion === "0.0.1");
+    ok("a span with no version reads stale", out(undefined).stale === true && !("lastEngineVersion" in out(undefined)));
+    ok("a malformed or over-long version is dropped and the span reads stale", ["1.2.3-x", "1.2", "9".repeat(40), 4].every((v) => !("lastEngineVersion" in out(v)) && out(v).stale === true));
+    ok("control: the other span fields are unchanged", out("0.0.1").count === 1 && out("0.0.1").firstSeenAt === NOW && out("0.0.1").kind === "lease-lost-abandon");
+  }
+
+  console.log("\nPART H: clearedAt on a span, and what a recurrence does to it");
+  {
+    const f = (at: number): SealFault => sanitiseSealFault({ kind: "replica-target-fault", at, destinationId: "deploy", replicaReason: "not-configured" }, NOW) as SealFault;
+    const one = foldSealFaultSpan(undefined, f(NOW));
+    const closed = { spans: one.spans.map((s) => ({ ...s, clearedAt: NOW + 50 })), overflow: 0 };
+    const again = foldSealFaultSpan(closed, f(NOW + 100)).spans[0] as unknown as Record<string, unknown>;
+    ok("a fault after clearedAt is a recurrence: clearedAt is removed and firstSeenAt is kept", !("clearedAt" in again) && again.firstSeenAt === NOW && again.lastSeenAt === NOW + 100 && again.count === 2);
+    const late = foldSealFaultSpan(closed, f(NOW + 10)).spans[0] as unknown as Record<string, unknown>;
+    ok("a late fault stamped before clearedAt leaves the span closed", late.clearedAt === NOW + 50 && late.lastSeenAt === NOW + 10);
+    const sane = (v: unknown) => sanitiseSealFaultSpans({ spans: [{ kind: "lease-lost-abandon", count: 1, firstSeenAt: NOW, lastSeenAt: NOW, clearedAt: v }], overflow: 0 })!.spans[0] as unknown as Record<string, unknown>;
+    ok("the span sanitiser passes clearedAt through as a clamped timestamp", sane(NOW + 1.9).clearedAt === NOW + 1 && sane(-5).clearedAt === 0 && sane(1e300).clearedAt === 8_640_000_000_000_000);
+    ok("a span with no clearedAt projects without one", !("clearedAt" in sane(undefined)));
   }
 
   console.log(failures === 0 ? "\nALL PASS" : `\n${failures} FAILURE(S)`);

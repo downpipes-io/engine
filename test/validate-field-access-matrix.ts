@@ -112,7 +112,7 @@ const FIELD_ROWS: FieldRow[] = [
     ownerReserved: false,
     expectRead: READ_ALL,
     expectWrite: [],
-    evidence: [{ file: "src/admin/router.ts", line: 598, mustContain: "downpipe.read" }],
+    evidence: [{ file: "src/admin/router.ts", line: 599, mustContain: "downpipe.read" }],
   },
   {
     field: "Downpipe configuration (create/edit)",
@@ -122,8 +122,8 @@ const FIELD_ROWS: FieldRow[] = [
     expectRead: [],
     expectWrite: OPERATOR_UP,
     evidence: [
-      { file: "src/admin/router-pipelines.ts", line: 43, mustContain: "downpipe.write" },
-      { file: "src/admin/router-discovery.ts", line: 282, mustContain: "downpipe.write" },
+      { file: "src/admin/router-pipelines.ts", line: 44, mustContain: "downpipe.write" },
+      { file: "src/admin/router-discovery.ts", line: 293, mustContain: "downpipe.write" },
     ],
   },
   {
@@ -133,7 +133,7 @@ const FIELD_ROWS: FieldRow[] = [
     ownerReserved: false,
     expectRead: [],
     expectWrite: OPERATOR_UP,
-    evidence: [{ file: "src/admin/router-pipelines.ts", line: 100, mustContain: "downpipe.delete" }],
+    evidence: [{ file: "src/admin/router-pipelines.ts", line: 106, mustContain: "downpipe.delete" }],
   },
   {
     field: "Manual run trigger",
@@ -142,7 +142,7 @@ const FIELD_ROWS: FieldRow[] = [
     ownerReserved: false,
     expectRead: [],
     expectWrite: OPERATOR_UP,
-    evidence: [{ file: "src/admin/router-pipelines.ts", line: 150, mustContain: "run.trigger" }],
+    evidence: [{ file: "src/admin/router-pipelines.ts", line: 156, mustContain: "run.trigger" }],
   },
   {
     field: "Restore drill (recovery test)",
@@ -151,7 +151,7 @@ const FIELD_ROWS: FieldRow[] = [
     ownerReserved: false,
     expectRead: [],
     expectWrite: OPERATOR_UP_PLUS_RESTORE_OP,
-    evidence: [{ file: "src/admin/router-ops.ts", line: 132, mustContain: "drill.run" }],
+    evidence: [{ file: "src/admin/router-ops.ts", line: 133, mustContain: "drill.run" }],
   },
   {
     field: "Restore dry-run preview",
@@ -256,7 +256,7 @@ const FIELD_ROWS: FieldRow[] = [
       { file: "src/admin/router-keys.ts", line: 419, mustContain: "keys.ceremony" },
       { file: "src/admin/router-destinations.ts", line: 351, mustContain: "keys.ceremony" },
       { file: "src/admin/router-identity.ts", line: 843, mustContain: "keys.ceremony" },
-      { file: "src/admin/router-push.ts", line: 232, mustContain: "keys.ceremony" },
+      { file: "src/admin/router-push.ts", line: 266, mustContain: "keys.ceremony" },
     ],
   },
   {
@@ -266,7 +266,7 @@ const FIELD_ROWS: FieldRow[] = [
     ownerReserved: false,
     expectRead: [],
     expectWrite: OPERATOR_UP,
-    evidence: [{ file: "src/admin/router-ops.ts", line: 155, mustContain: "notify.config" }],
+    evidence: [{ file: "src/admin/router-ops.ts", line: 156, mustContain: "notify.config" }],
   },
   {
     field: "Expiry / licence-lapse policy",
@@ -275,7 +275,7 @@ const FIELD_ROWS: FieldRow[] = [
     ownerReserved: false,
     expectRead: [],
     expectWrite: OPERATOR_UP,
-    evidence: [{ file: "src/admin/router-ops.ts", line: 381, mustContain: "expiry.config" }],
+    evidence: [{ file: "src/admin/router-ops.ts", line: 384, mustContain: "expiry.config" }],
   },
   {
     field: "Scheduled restore-test policy",
@@ -290,7 +290,7 @@ const FIELD_ROWS: FieldRow[] = [
     // caller who can hold one without the other is a composable custom role). The capability's
     // grant is still pinned in ROLE_CAPABILITIES (identity-rbac.ts), which is what row 6 above
     // checks cell-by-cell; here the citation is the DO re-check comment itself.
-    evidence: [{ file: "src/admin/router-pipelines.ts", line: 40, mustContain: "scheduledtest.config" }],
+    evidence: [{ file: "src/admin/router-pipelines.ts", line: 41, mustContain: "scheduledtest.config" }],
   },
   {
     field: "Reports (SLA / compliance projections)",
@@ -299,7 +299,7 @@ const FIELD_ROWS: FieldRow[] = [
     ownerReserved: false,
     expectRead: READ_ALL,
     expectWrite: [],
-    evidence: [{ file: "src/admin/router.ts", line: 589, mustContain: "reports.read" }],
+    evidence: [{ file: "src/admin/router.ts", line: 590, mustContain: "reports.read" }],
   },
   {
     field: "Security posture (checks and scores)",

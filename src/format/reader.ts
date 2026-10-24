@@ -347,13 +347,13 @@ function finaliseStream(plaintext: ReadableStream<Uint8Array>, rec: ShardRecord)
 // unverified field for a message, never a trust decision, is safe. Returns "" when the fingerprints match
 // (a genuine tamper or corruption) or the hint cannot be read, so the message is unchanged in those cases.
 function signerMismatchHint(rootBytes: Uint8Array, verifier: HybridVerifier): string {
-  try {
+  try { // nosemgrep: incident-catch-returns-empty -- an unreadable hint leaves the signature failure message unchanged and the open still fails closed
     const declared = (JSON.parse(new TextDecoder().decode(rootBytes)) as { signingKeyFingerprint?: unknown }).signingKeyFingerprint;
     if (typeof declared !== "string" || declared.length === 0) return "";
     const current = `edmldsa1:${hexEncode(nobleSha384(concat(verifier.ed, verifier.mldsa)))}`;
     if (declared === current) return "";
     return ` (the archive was signed by ${declared}, but the pinned signer is ${current}; it was most likely sealed before a signer rotation, so verify or restore it with the prior signer's public key, for example the offline tool's --signer)`;
-  } catch {
+  } catch { // site-fault-waiver: src/format/reader.ts:signerMismatchHint:catch:1 -- an unreadable hint leaves the signature failure message unchanged and the open still fails closed
     return "";
   }
 }

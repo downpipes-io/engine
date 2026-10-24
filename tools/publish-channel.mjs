@@ -828,6 +828,21 @@ async function main() {
     bundleBytes = new Uint8Array(readFileSync(args.bundle));
   }
 
+  // THE LABEL IS THE BUNDLE'S OWN VERSION. The engine compares the channel's version with the ENGINE_VERSION
+  // built into the code that is running, so a bundle published under another label can never report the
+  // version the channel promised: the update would look pending for ever. This holds for every channel and
+  // every way of supplying the bundle. A bundle that names no version, or more than one, is refused too,
+  // since the label cannot be checked against it.
+  if (bundleBytes !== null) {
+    const named = [...new Set([...new TextDecoder().decode(bundleBytes).matchAll(/\bENGINE_VERSION = "([^"]+)"/g)].map((m) => m[1]))];
+    if (named.length !== 1) {
+      throw new Error(`the engine bundle names ${named.length === 0 ? "no ENGINE_VERSION" : `more than one ENGINE_VERSION (${named.join(", ")})`}, so --version ${recommendedVersion} cannot be checked against the version the bundle reports. Nothing was signed.`);
+    }
+    if (named[0] !== recommendedVersion) {
+      throw new Error(`--version ${recommendedVersion} does not match the bundle's own ENGINE_VERSION ${named[0]}; a channel must name the version its bundle reports. Nothing was signed.`);
+    }
+  }
+
   // Build the artefact for the recommended version. checkUpdates surfaces notes for the artefact whose
   // version === recommendedVersion; the safe-apply harness needs url + sha384 (+ mainModule) to DOWNLOAD
   // and VERIFY the bundle before deploying it. Fields are added conditionally so the document carries no

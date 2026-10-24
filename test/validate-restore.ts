@@ -463,7 +463,7 @@ async function proofGranular(fx: Fixture): Promise<void> {
       ok("there are at least two proven surfaces, so widening is expressible (else this proves nothing)", proven.length >= 2);
       // token is REQUIRED on the cf-config restore input. It is constant across all three hashes below so
       // the only thing varying is the surface set, which is what this case is about.
-      const cf = { token: "cf-token-for-hashing", accountId: "acct-1" };
+      const cf = { token: "cf-token-for-hashing", accountId: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1" };
       const narrow = await restorePlanHash({ runId: RUN_ID, cfConfig: { ...cf, surfaces: [proven[0]!] } });
       const wider = await restorePlanHash({ runId: RUN_ID, cfConfig: { ...cf, surfaces: [proven[0]!, proven[1]!] } });
       ok("WIDENING the surface set changes the plan hash, so an old approval cannot cover it", narrow !== wider);
@@ -622,19 +622,19 @@ async function proofCfConfigWriteBack(fx: Fixture): Promise<void> {
       master: rand(32), recipients: [breakGlass.entry, op.entry], signer,
       records: [
         // account stamps the SIGNED origin the cross-account guard cross-checks against (the source adapter's
-        // own accountId at seal); acct-1 here, so the acct-1 restore below is a same-account restore.
-        { sourceType: "cf-config", name: "dns", value: utf8(JSON.stringify(dnsSnapshot)), account: "acct-1" },
+        // own accountId at seal); the first test account here, so the first-account restore below is a same-account restore.
+        { sourceType: "cf-config", name: "dns", value: utf8(JSON.stringify(dnsSnapshot)), account: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1" },
         // The self-identifying record must NOT be treated as a restorable surface: it is informational.
-        { sourceType: "cf-config", name: "_cf-config-identity", value: utf8(JSON.stringify({ v: 1, accountId: "acct-1", zoneId: "zone", zoneName: "example.com" })), account: "acct-1" },
+        { sourceType: "cf-config", name: "_cf-config-identity", value: utf8(JSON.stringify({ v: 1, accountId: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1", zoneId: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb1", zoneName: "example.com" })), account: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1" },
         // The coverage record is metadata too: it names the surfaces the run has no record for, and why.
-        { sourceType: "cf-config", name: "_cf-config-coverage", value: utf8(JSON.stringify({ v: 1, basis: "discovery", discoveryAt: 1, registrySurfaces: 2, ownRecords: 1, leftOut: { "not-used": [], "plan-gated": ["account-waf"], "no-zone": [], "not-selected": [] } })), account: "acct-1" },
+        { sourceType: "cf-config", name: "_cf-config-coverage", value: utf8(JSON.stringify({ v: 1, basis: "discovery", discoveryAt: 1, registrySurfaces: 2, ownRecords: 1, leftOut: { "not-used": [], "plan-gated": ["account-waf"], "no-zone": [], "not-selected": [] } })), account: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1" },
       ],
       windowStart: "2026-06-07T00:00:00.000Z", windowEnd: "2026-06-07T00:00:01.000Z", createdAt: "2026-06-07T00:00:01.000Z",
       runlogIndex: 1, prevRunId: null, randomNonce: () => rand(16), randomSalt: () => rand(16),
     });
     installArchive(r2, cfgArchive);
 
-    const cfCtx = { token: "edit-token-xyz", accountId: "acct-1", zoneId: "zone" };
+    const cfCtx = { token: "edit-token-xyz", accountId: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1", zoneId: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb1" };
 
     // DRY-RUN with a cfConfig context: per-surface diff computed READ-ONLY (no send), surfaced in configChanges.
     const cfDry = makeCfDouble();
@@ -705,7 +705,7 @@ async function proofCfConfigWriteBack(fx: Fixture): Promise<void> {
         const scopeArchive = await buildArchive({
           downpipeId: "dp_scope", downpipeName: "scope", cadence: "3600s", runId: RUN_SCOPE,
           master: rand(32), recipients: [breakGlass.entry, op.entry], signer,
-          records: [{ sourceType: "cf-config", name: target, value: utf8(JSON.stringify([{ name: "dp-scope-probe" }])), account: "acct-1" }],
+          records: [{ sourceType: "cf-config", name: target, value: utf8(JSON.stringify([{ name: "dp-scope-probe" }])), account: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1" }],
           windowStart: "2026-06-07T00:00:00.000Z", windowEnd: "2026-06-07T00:00:01.000Z", createdAt: "2026-06-07T00:00:01.000Z",
           runlogIndex: 1, prevRunId: null, randomNonce: () => rand(16), randomSalt: () => rand(16),
         });
@@ -745,13 +745,13 @@ async function proofCfConfigWriteBack(fx: Fixture): Promise<void> {
     // record stays out of band. Proves an empty token is never treated as "authenticated" -- the engine
     // does not even attempt a live Cloudflare call with it.
     const cfEmpty = makeCfDouble();
-    const cfgEmptyPlan = (await runRestore(baseEnv(), { runId: RUN_CFG, cfConfig: { token: "", accountId: "acct-1", zoneId: "zone" } }, null, { cfApiFactory: () => cfEmpty.api })) as RestorePlan;
+    const cfgEmptyPlan = (await runRestore(baseEnv(), { runId: RUN_CFG, cfConfig: { token: "", accountId: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1", zoneId: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb1" } }, null, { cfApiFactory: () => cfEmpty.api })) as RestorePlan;
     ok("cf-config with an EMPTY TOKEN (account id present) stays OUT OF BAND, exactly like no cfConfig at all", cfgEmptyPlan.configChanges === undefined && cfgEmptyPlan.skipped.some((s) => s.name === "dns") && cfEmpty.sent.length === 0);
 
     // The cf-config apply binds the account/zone into the plan hash (its own approval) but NEVER the token.
     const hWith = await restorePlanHash({ runId: RUN_CFG, cfConfig: cfCtx });
-    const hOtherAcct = await restorePlanHash({ runId: RUN_CFG, cfConfig: { token: "edit-token-xyz", accountId: "acct-2", zoneId: "zone" } });
-    const hOtherToken = await restorePlanHash({ runId: RUN_CFG, cfConfig: { token: "A-DIFFERENT-token", accountId: "acct-1", zoneId: "zone" } });
+    const hOtherAcct = await restorePlanHash({ runId: RUN_CFG, cfConfig: { token: "edit-token-xyz", accountId: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa2", zoneId: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb1" } });
+    const hOtherToken = await restorePlanHash({ runId: RUN_CFG, cfConfig: { token: "A-DIFFERENT-token", accountId: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1", zoneId: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb1" } });
     const hPlain = await restorePlanHash({ runId: RUN_CFG });
     ok("cf-config plan hash differs by account + from a plain restore (its own approval)", hWith !== hOtherAcct && hWith !== hPlain);
     ok("cf-config plan hash IGNORES the token (a secret never enters the hash)", hWith === hOtherToken);
@@ -782,20 +782,20 @@ async function proofMediaReupload(fx: Fixture): Promise<void> {
       downpipeId: "dp_media", downpipeName: "media", cadence: "3600s", runId: RUN_MEDIA,
       master: rand(32), recipients: [breakGlass.entry, op.entry], signer,
       records: [
-        // account is the SIGNED origin the cross-account guard cross-checks; acct-1 here, so the acct-1
+        // account is the SIGNED origin the cross-account guard cross-checks; the first test account here, so the first-account
         // media restore below is a same-account restore that needs no cross-account confirmation.
-        { sourceType: "images", name: "img1", value: utf8(JSON.stringify({ id: "img1", filename: "a.png" })), account: "acct-1" }, // metadata (inventory)
-        { sourceType: "images", name: "img1/blob", value: utf8("PNG-BYTES-img1"), account: "acct-1" }, // an uploadable image blob
-        { sourceType: "images", name: "img2/blob", value: utf8(JSON.stringify({ _unavailable: "403" })), incompleteMarker: "_unavailable", account: "acct-1" }, // a capture MARKER, never uploaded
-        { sourceType: "stream", name: "vid1", value: utf8(JSON.stringify({ uid: "vid1" })), account: "acct-1" }, // metadata
-        { sourceType: "stream", name: "vid1/video.mp4", value: utf8("MP4-BYTES-vid1"), account: "acct-1" }, // an uploadable video
+        { sourceType: "images", name: "img1", value: utf8(JSON.stringify({ id: "img1", filename: "a.png" })), account: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1" }, // metadata (inventory)
+        { sourceType: "images", name: "img1/blob", value: utf8("PNG-BYTES-img1"), account: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1" }, // an uploadable image blob
+        { sourceType: "images", name: "img2/blob", value: utf8(JSON.stringify({ _unavailable: "403" })), incompleteMarker: "_unavailable", account: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1" }, // a capture MARKER, never uploaded
+        { sourceType: "stream", name: "vid1", value: utf8(JSON.stringify({ uid: "vid1" })), account: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1" }, // metadata
+        { sourceType: "stream", name: "vid1/video.mp4", value: utf8("MP4-BYTES-vid1"), account: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1" }, // an uploadable video
       ],
       windowStart: "2026-06-07T00:00:00.000Z", windowEnd: "2026-06-07T00:00:01.000Z", createdAt: "2026-06-07T00:00:01.000Z",
       runlogIndex: 1, prevRunId: null, randomNonce: () => rand(16), randomSalt: () => rand(16),
     });
     installArchive(r2, mediaArchive);
 
-    const mediaCtx = { token: "edit-token-media", accountId: "acct-1" };
+    const mediaCtx = { token: "edit-token-media", accountId: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1" };
 
     // DRY-RUN with a mediaRestore context: previews the uploadable blobs, uploads NOTHING; the marker is out of band.
     const mDry = makeUploaderDouble();
@@ -823,7 +823,7 @@ async function proofMediaReupload(fx: Fixture): Promise<void> {
     // exactly as cfConfig does, so this must behave IDENTICALLY to mediaRestore being absent: nothing
     // planned, no uploader instantiated, both blobs stay out of band.
     const mEmpty = makeUploaderDouble();
-    const mEmptyPlan = (await runRestore(baseEnv(), { runId: RUN_MEDIA, mediaRestore: { token: "", accountId: "acct-1" } }, null, { mediaUploaderFactory: () => mEmpty.uploader })) as RestorePlan;
+    const mEmptyPlan = (await runRestore(baseEnv(), { runId: RUN_MEDIA, mediaRestore: { token: "", accountId: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1" } }, null, { mediaUploaderFactory: () => mEmpty.uploader })) as RestorePlan;
     ok("media with an EMPTY TOKEN (account id present) stays OUT OF BAND, exactly like no mediaRestore at all", mEmptyPlan.mediaPlanned === undefined && mEmptyPlan.skipped.some((s) => s.name === "img1/blob") && mEmpty.uploads.length === 0);
 
     // The media apply binds the account into the plan hash (its own approval) but NEVER the token: a
@@ -831,8 +831,8 @@ async function proofMediaReupload(fx: Fixture): Promise<void> {
     // cannot be reused for another, while the secret token never enters the hash.
     const mhWith = await restorePlanHash({ runId: RUN_MEDIA, mediaRestore: mediaCtx });
     const mhPlain = await restorePlanHash({ runId: RUN_MEDIA });
-    const mhOtherAcct = await restorePlanHash({ runId: RUN_MEDIA, mediaRestore: { token: "edit-token-media", accountId: "acct-2" } });
-    const mhOtherToken = await restorePlanHash({ runId: RUN_MEDIA, mediaRestore: { token: "A-DIFFERENT-token", accountId: "acct-1" } });
+    const mhOtherAcct = await restorePlanHash({ runId: RUN_MEDIA, mediaRestore: { token: "edit-token-media", accountId: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa2" } });
+    const mhOtherToken = await restorePlanHash({ runId: RUN_MEDIA, mediaRestore: { token: "A-DIFFERENT-token", accountId: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1" } });
     ok("media plan hash differs from a plain restore + by account (its own approval)", mhWith !== mhPlain && mhWith !== mhOtherAcct);
     ok("media plan hash IGNORES the token (a secret never enters the hash)", mhWith === mhOtherToken);
 }
@@ -847,16 +847,16 @@ async function proofMediaReupload(fx: Fixture): Promise<void> {
 async function proofInAccountBoundsMedia(fx: Fixture): Promise<void> {
   const { baseEnv, r2, signer, breakGlass, op } = fx;
   const dnsSnap = (h: string) => utf8(JSON.stringify([{ type: "A", name: `${h}.example.com`, content: "9.9.9.9", proxied: false, ttl: 1 }]));
-  const cfCtx = { token: "edit-token-xyz", accountId: "acct-1", zoneId: "zone" };
-  const mediaCtx = { token: "edit-token-media", accountId: "acct-1" };
+  const cfCtx = { token: "edit-token-xyz", accountId: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1", zoneId: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb1" };
+  const mediaCtx = { token: "edit-token-media", accountId: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1" };
   const sealMedia = async (runId: string, mediaN: number) => {
-    // account "acct-1" is the SIGNED origin the cross-account guard cross-checks; it matches cfCtx/mediaCtx
-    // (acct-1), so these are same-account restores that the guard passes without a cross-account confirmation.
+    // the first test account is the SIGNED origin the cross-account guard cross-checks; it matches cfCtx/mediaCtx
+    // (the first test account), so these are same-account restores that the guard passes without a cross-account confirmation.
     const records = [
-      ...Array.from({ length: mediaN }, (_, i) => ({ sourceType: "images" as const, name: `m3img${String(i).padStart(4, "0")}/blob`, value: utf8(`PNG-${i}`), account: "acct-1" })),
-      { sourceType: "cf-config" as const, name: "dns", value: dnsSnap("a"), account: "acct-1" },
-      { sourceType: "cf-config" as const, name: "firewall-access-rules", value: utf8(JSON.stringify([])), account: "acct-1" },
-      { sourceType: "cf-config" as const, name: "page-rules", value: utf8(JSON.stringify([])), account: "acct-1" },
+      ...Array.from({ length: mediaN }, (_, i) => ({ sourceType: "images" as const, name: `m3img${String(i).padStart(4, "0")}/blob`, value: utf8(`PNG-${i}`), account: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1" })),
+      { sourceType: "cf-config" as const, name: "dns", value: dnsSnap("a"), account: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1" },
+      { sourceType: "cf-config" as const, name: "firewall-access-rules", value: utf8(JSON.stringify([])), account: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1" },
+      { sourceType: "cf-config" as const, name: "page-rules", value: utf8(JSON.stringify([])), account: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1" },
     ];
     const archive = await buildArchive({
       downpipeId: "dp_m3", downpipeName: "m3", cadence: "3600s", runId,
@@ -1263,7 +1263,7 @@ async function proofCfConfigErrors(fx: Fixture): Promise<void> {
       runlogIndex: 1, prevRunId: null, randomNonce: () => rand(16), randomSalt: () => rand(16),
     });
     installArchive(r2, cfeArchive);
-    const cfCtx = { token: "edit-token", accountId: "acct-1", zoneId: "zone" };
+    const cfCtx = { token: "edit-token", accountId: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1", zoneId: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb1" };
     const truncApi: CfApi = { get: async () => [], getPage: async (): Promise<CfPage> => ({ result: [] }), send: async () => ({}) };
     // DRY-RUN: the truncated snapshot cannot be decoded as config -> out of band with the incomplete reason.
     const cfeDry = (await runRestore(baseEnv(), { runId: RUN_CFE, cfConfig: cfCtx }, null, { cfApiFactory: () => truncApi })) as RestorePlan;
@@ -1274,7 +1274,7 @@ async function proofCfConfigErrors(fx: Fixture): Promise<void> {
     const cfwArchive = await buildArchive({
       downpipeId: "dp_cfg", downpipeName: "cfg", cadence: "3600s", runId: RUN_CFW,
       master: rand(32), recipients: [breakGlass.entry, op.entry], signer,
-      records: [{ sourceType: "cf-config" as const, name: "dns", value: utf8(JSON.stringify([{ type: "A", name: "x.example.com", content: "1.1.1.1", proxied: false, ttl: 1 }])), account: "acct-1" }],
+      records: [{ sourceType: "cf-config" as const, name: "dns", value: utf8(JSON.stringify([{ type: "A", name: "x.example.com", content: "1.1.1.1", proxied: false, ttl: 1 }])), account: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1" }],
       windowStart: "2026-06-07T00:00:00.000Z", windowEnd: "2026-06-07T00:00:01.000Z", createdAt: "2026-06-07T00:00:01.000Z",
       runlogIndex: 1, prevRunId: null, randomNonce: () => rand(16), randomSalt: () => rand(16),
     });
@@ -1290,15 +1290,15 @@ async function proofCfConfigErrors(fx: Fixture): Promise<void> {
     const cfnArchive = await buildArchive({
       downpipeId: "dp_cfg", downpipeName: "cfg", cadence: "3600s", runId: RUN_CFN,
       master: rand(32), recipients: [breakGlass.entry, op.entry], signer,
-      records: [{ sourceType: "cf-config" as const, name: "dns", value: utf8(JSON.stringify([{ type: "A", name: "z.example.com", content: "2.2.2.2", proxied: false, ttl: 1 }])), account: "acct-1" }],
+      records: [{ sourceType: "cf-config" as const, name: "dns", value: utf8(JSON.stringify([{ type: "A", name: "z.example.com", content: "2.2.2.2", proxied: false, ttl: 1 }])), account: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1" }],
       windowStart: "2026-06-07T00:00:00.000Z", windowEnd: "2026-06-07T00:00:01.000Z", createdAt: "2026-06-07T00:00:01.000Z",
       runlogIndex: 1, prevRunId: null, randomNonce: () => rand(16), randomSalt: () => rand(16),
     });
     installArchive(r2, cfnArchive);
     let sawNoZone = false;
     const noZoneApi: CfApi = { get: async () => [], getPage: async (): Promise<CfPage> => ({ result: [] }), send: async (method, path) => { sawNoZone = true; return { method, path }; } };
-    const cfnApply = (await runRestore(baseEnv(), { runId: RUN_CFN, confirm: true, cfConfig: { token: "t", accountId: "acct-1" } }, null, { cfApiFactory: () => noZoneApi })) as RestoreResult;
-    ok("cf-config applies with no zoneId in the ids (account-only context)", cfnApply.ok === true && sawNoZone && (cfnApply.configApplied ?? []).some((c) => c.surface === "dns"));
+    const cfnApply = (await runRestore(baseEnv(), { runId: RUN_CFN, confirm: true, cfConfig: { token: "t", accountId: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1" } }, null, { cfApiFactory: () => noZoneApi })) as RestoreResult;
+    ok("cf-config with no zoneId refuses a zone-scoped surface before any request (account-only context)", !sawNoZone && !(cfnApply.configApplied ?? []).some((c) => c.surface === "dns") && cfnApply.failures.some((f) => f.name === "dns" && /no valid Cloudflare account id or zone id/.test(f.reason)));
   }
 }
 
@@ -1321,7 +1321,7 @@ async function proofMediaErrors(fx: Fixture): Promise<void> {
       runlogIndex: 1, prevRunId: null, randomNonce: () => rand(16), randomSalt: () => rand(16),
     });
     installArchive(r2, meArchive);
-    const mePlan = (await runRestore(baseEnv(), { runId: RUN_ME, mediaRestore: { token: "t", accountId: "acct-1" } }, null, { mediaUploaderFactory: () => ({ uploadImage: async () => ({ restoredId: "x", remapped: false, verifiedSha384: null, verified: true, via: "media-image-readback", readbackReadable: true }), uploadStreamVideo: async () => ({ restoredId: "y", remapped: true, verifiedSha384: null, verified: true, via: "media-stream-exists", readbackReadable: true }) }) })) as RestorePlan;
+    const mePlan = (await runRestore(baseEnv(), { runId: RUN_ME, mediaRestore: { token: "t", accountId: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1" } }, null, { mediaUploaderFactory: () => ({ uploadImage: async () => ({ restoredId: "x", remapped: false, verifiedSha384: null, verified: true, via: "media-image-readback", readbackReadable: true }), uploadStreamVideo: async () => ({ restoredId: "y", remapped: true, verifiedSha384: null, verified: true, via: "media-stream-exists", readbackReadable: true }) }) })) as RestorePlan;
     ok("a stream caption record is inventory/metadata with the re-attach note", mePlan.skipped.some((s) => s.name === "vid9/captions/en" && /re-attach the caption track/.test(s.reason)));
     ok("an artifact blob is git re-push, not a REST upload", mePlan.skipped.some((s) => s.name === "ns/repo/blob/sha" && /re-push the repository via git/.test(s.reason)));
     ok("an artifact inventory record steers to re-create the namespace/repository", mePlan.skipped.some((s) => s.name === "ns/repo" && /re-create the namespace\/repository/.test(s.reason)));
@@ -1338,7 +1338,7 @@ async function proofMediaErrors(fx: Fixture): Promise<void> {
       runlogIndex: 1, prevRunId: null, randomNonce: () => rand(16), randomSalt: () => rand(16),
     });
     installArchive(r2, bigMedArchive);
-    const bigMedPlan = (await runRestore(baseEnv(), { runId: RUN_BIGMED, mediaRestore: { token: "t", accountId: "acct-1" } }, null, { mediaUploaderFactory: () => ({ uploadImage: async () => ({ restoredId: "x", remapped: false, verifiedSha384: null, verified: true, via: "media-image-readback", readbackReadable: true }), uploadStreamVideo: async () => ({ restoredId: "y", remapped: true, verifiedSha384: null, verified: true, via: "media-stream-exists", readbackReadable: true }) }) })) as RestorePlan;
+    const bigMedPlan = (await runRestore(baseEnv(), { runId: RUN_BIGMED, mediaRestore: { token: "t", accountId: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1" } }, null, { mediaUploaderFactory: () => ({ uploadImage: async () => ({ restoredId: "x", remapped: false, verifiedSha384: null, verified: true, via: "media-image-readback", readbackReadable: true }), uploadStreamVideo: async () => ({ restoredId: "y", remapped: true, verifiedSha384: null, verified: true, via: "media-stream-exists", readbackReadable: true }) }) })) as RestorePlan;
     ok("a media blob over the re-upload cap is out of band (captured in full, re-upload offline)", bigMedPlan.mediaPlanned === undefined && bigMedPlan.skipped.some((s) => s.name === "huge/blob" && /exceeds the .* in-account re-upload limit/.test(s.reason)));
 
     // APPLY where the uploader THROWS: a per-record media failure (ok:false), never a silent drop.
@@ -1346,12 +1346,12 @@ async function proofMediaErrors(fx: Fixture): Promise<void> {
     const mefArchive = await buildArchive({
       downpipeId: "dp_media", downpipeName: "media", cadence: "3600s", runId: RUN_MEF,
       master: rand(32), recipients: [breakGlass.entry, op.entry], signer,
-      records: [{ sourceType: "images" as const, name: "img7/blob", value: utf8("PNG-BYTES-img7"), account: "acct-1" }],
+      records: [{ sourceType: "images" as const, name: "img7/blob", value: utf8("PNG-BYTES-img7"), account: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1" }],
       windowStart: "2026-06-07T00:00:00.000Z", windowEnd: "2026-06-07T00:00:01.000Z", createdAt: "2026-06-07T00:00:01.000Z",
       runlogIndex: 1, prevRunId: null, randomNonce: () => rand(16), randomSalt: () => rand(16),
     });
     installArchive(r2, mefArchive);
-    const mefApply = (await runRestore(baseEnv(), { runId: RUN_MEF, confirm: true, mediaRestore: { token: "t", accountId: "acct-1" } }, null, { mediaUploaderFactory: () => ({ uploadImage: async () => { throw new Error("HTTP 500 upload failed"); }, uploadStreamVideo: async () => ({ restoredId: "y", remapped: true, verifiedSha384: null, verified: true, via: "media-stream-exists", readbackReadable: true }) }) })) as RestoreResult;
+    const mefApply = (await runRestore(baseEnv(), { runId: RUN_MEF, confirm: true, mediaRestore: { token: "t", accountId: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1" } }, null, { mediaUploaderFactory: () => ({ uploadImage: async () => { throw new Error("HTTP 500 upload failed"); }, uploadStreamVideo: async () => ({ restoredId: "y", remapped: true, verifiedSha384: null, verified: true, via: "media-stream-exists", readbackReadable: true }) }) })) as RestoreResult;
     ok("a media upload that throws is a per-record failure (ok:false), never dropped", mefApply.ok === false && mefApply.failures.some((f) => f.name === "img7/blob" && /media re-upload failed/.test(f.reason)));
   }
 }
@@ -1555,10 +1555,10 @@ async function proofStreamOverCap(fx: Fixture): Promise<void> {
       runlogIndex: 1, prevRunId: null, randomNonce: () => rand(16), randomSalt: () => rand(16),
     });
     installArchive(r2, bigVidArchive);
-    const bigVidPlan = (await runRestore(baseEnv(), { runId: RUN_BIGVID, mediaRestore: { token: "t", accountId: "acct-1" } }, null, { mediaUploaderFactory: () => ({ uploadImage: async () => ({ restoredId: "x", remapped: false, verifiedSha384: null, verified: true, via: "media-image-readback", readbackReadable: true }), uploadStreamVideo: async () => ({ restoredId: "y", remapped: true, verifiedSha384: null, verified: true, via: "media-stream-exists", readbackReadable: true }) }) })) as RestorePlan;
+    const bigVidPlan = (await runRestore(baseEnv(), { runId: RUN_BIGVID, mediaRestore: { token: "t", accountId: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1" } }, null, { mediaUploaderFactory: () => ({ uploadImage: async () => ({ restoredId: "x", remapped: false, verifiedSha384: null, verified: true, via: "media-image-readback", readbackReadable: true }), uploadStreamVideo: async () => ({ restoredId: "y", remapped: true, verifiedSha384: null, verified: true, via: "media-stream-exists", readbackReadable: true }) }) })) as RestorePlan;
     ok("a stream video over the re-upload cap reports the Video too-large wording", bigVidPlan.skipped.some((s) => s.name === "bigvid/video.mp4" && /^Video file exceeds/.test(s.reason)));
 
-    // cf-config DRY-RUN with an account-only context (no zoneId): the dry-run ids omit zoneId (L557 no-zone arm).
+    // cf-config DRY-RUN with an account-only context (no zoneId): a zone-scoped surface is refused.
     const RUN_CFDZ = "01ARZ3NDEKTSV4RRFFQ69G5CDZ";
     const cfdzArchive = await buildArchive({
       downpipeId: "dp_cfg", downpipeName: "cfg", cadence: "3600s", runId: RUN_CFDZ,
@@ -1569,8 +1569,8 @@ async function proofStreamOverCap(fx: Fixture): Promise<void> {
     });
     installArchive(r2, cfdzArchive);
     const dzApi: CfApi = { get: async () => [], getPage: async (): Promise<CfPage> => ({ result: [] }), send: async () => ({}) };
-    const cfdzPlan = (await runRestore(baseEnv(), { runId: RUN_CFDZ, cfConfig: { token: "t", accountId: "acct-1" } }, null, { cfApiFactory: () => dzApi })) as RestorePlan;
-    ok("a cf-config dry-run with no zoneId still computes a diff (account-only ids)", (cfdzPlan.configChanges ?? []).some((c) => c.surface === "dns"));
+    const cfdzPlan = (await runRestore(baseEnv(), { runId: RUN_CFDZ, cfConfig: { token: "t", accountId: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1" } }, null, { cfApiFactory: () => dzApi })) as RestorePlan;
+    ok("a cf-config dry-run with no zoneId computes no diff for a zone-scoped surface (account-only ids)", !(cfdzPlan.configChanges ?? []).some((c) => c.surface === "dns") && cfdzPlan.skipped.some((s) => s.name === "dns" && /no valid Cloudflare account id or zone id/.test(s.reason)));
   }
 }
 
@@ -1602,7 +1602,7 @@ async function proofSummariseDiff(fx: Fixture): Promise<void> {
       { id: "2", type: "A", name: "liveonly.example.com", content: "5.5.5.5", proxied: false, ttl: 1 }, // -> live-only
     ];
     const diffApi: CfApi = { get: async () => liveRecords, getPage: async (): Promise<CfPage> => ({ result: liveRecords }), send: async () => ({}) };
-    const diffPlan = (await runRestore(baseEnv(), { runId: RUN_DIFF, cfConfig: { token: "t", accountId: "acct-1", zoneId: "zone" } }, null, { cfApiFactory: () => diffApi })) as RestorePlan;
+    const diffPlan = (await runRestore(baseEnv(), { runId: RUN_DIFF, cfConfig: { token: "t", accountId: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1", zoneId: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb1" } }, null, { cfApiFactory: () => diffApi })) as RestorePlan;
     // The DNS write classifies a matched-but-edited record as a CHANGE. The extra live-only record stays LEFT
     // IN PLACE (additive restore never deletes) but is REPORTED, so the operator can see what the restore did
     // not touch: on an allow-list surface an unreported live extra is exactly what an attacker could have
@@ -1623,7 +1623,7 @@ async function proofSummariseDiff(fx: Fixture): Promise<void> {
     installArchive(r2, nochArchive);
     const sameLive = [{ id: "1", type: "A", name: "same.example.com", content: "1.1.1.1", proxied: false, ttl: 1 }];
     const nochApi: CfApi = { get: async () => sameLive, getPage: async (): Promise<CfPage> => ({ result: sameLive }), send: async () => ({}) };
-    const nochPlan = (await runRestore(baseEnv(), { runId: RUN_NOCH, cfConfig: { token: "t", accountId: "acct-1", zoneId: "zone" } }, null, { cfApiFactory: () => nochApi })) as RestorePlan;
+    const nochPlan = (await runRestore(baseEnv(), { runId: RUN_NOCH, cfConfig: { token: "t", accountId: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1", zoneId: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb1" } }, null, { cfApiFactory: () => nochApi })) as RestorePlan;
     ok("summariseDiff reports no changes when live already matches the snapshot", (nochPlan.configChanges ?? []).some((c) => c.surface === "dns" && /no changes \(already matches the snapshot\)/.test(c.summary) && c.willApply === false));
   }
 }
@@ -1643,7 +1643,7 @@ async function proofMediaDecodeFault(fx: Fixture): Promise<void> {
       runlogIndex: 1, prevRunId: null, randomNonce: () => rand(16), randomSalt: () => rand(16),
     });
     installArchive(r2, mmkArchive);
-    const mmkPlan = (await runRestore(baseEnv(), { runId: RUN_MMK, mediaRestore: { token: "t", accountId: "acct-1" } }, null, { mediaUploaderFactory: () => ({ uploadImage: async () => ({ restoredId: "x", remapped: false, verifiedSha384: null, verified: true, via: "media-image-readback", readbackReadable: true }), uploadStreamVideo: async () => ({ restoredId: "y", remapped: true, verifiedSha384: null, verified: true, via: "media-stream-exists", readbackReadable: true }) }) })) as RestorePlan;
+    const mmkPlan = (await runRestore(baseEnv(), { runId: RUN_MMK, mediaRestore: { token: "t", accountId: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1" } }, null, { mediaUploaderFactory: () => ({ uploadImage: async () => ({ restoredId: "x", remapped: false, verifiedSha384: null, verified: true, via: "media-image-readback", readbackReadable: true }), uploadStreamVideo: async () => ({ restoredId: "y", remapped: true, verifiedSha384: null, verified: true, via: "media-stream-exists", readbackReadable: true }) }) })) as RestorePlan;
     ok("a marker media blob is out of band on the dry-run (capture had failed), never planned", mmkPlan.mediaPlanned === undefined && mmkPlan.skipped.some((s) => s.name === "mk/blob" && /the captured value was a marker/.test(s.reason)));
   }
 }
@@ -1688,7 +1688,7 @@ async function proofMediaGuidanceNoId(fx: Fixture): Promise<void> {
       runlogIndex: 1, prevRunId: null, randomNonce: () => rand(16), randomSalt: () => rand(16),
     });
     installArchive(r2, noidArchive);
-    const noidPlan = (await runRestore(baseEnv(), { runId: RUN_NOID, mediaRestore: { token: "t", accountId: "acct-1" } }, null, { mediaUploaderFactory: () => ({ uploadImage: async () => ({ restoredId: "x", remapped: false, verifiedSha384: null, verified: true, via: "media-image-readback", readbackReadable: true }), uploadStreamVideo: async () => ({ restoredId: "y", remapped: true, verifiedSha384: null, verified: true, via: "media-stream-exists", readbackReadable: true }) }) })) as RestorePlan;
+    const noidPlan = (await runRestore(baseEnv(), { runId: RUN_NOID, mediaRestore: { token: "t", accountId: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1" } }, null, { mediaUploaderFactory: () => ({ uploadImage: async () => ({ restoredId: "x", remapped: false, verifiedSha384: null, verified: true, via: "media-image-readback", readbackReadable: true }), uploadStreamVideo: async () => ({ restoredId: "y", remapped: true, verifiedSha384: null, verified: true, via: "media-stream-exists", readbackReadable: true }) }) })) as RestorePlan;
     ok("an image blob with no extractable id and a token falls to the capture-marker guidance", noidPlan.mediaPlanned === undefined && noidPlan.skipped.some((s) => s.name === "/blob" && /captured but not re-uploaded/.test(s.reason)));
   }
 }
@@ -1746,13 +1746,13 @@ async function proofCoarseCfReason(fx: Fixture): Promise<void> {
       const a = await buildArchive({
         downpipeId: "dp_cfg", downpipeName: "cfg", cadence: "3600s", runId,
         master: rand(32), recipients: [breakGlass.entry, op.entry], signer,
-        records: [{ sourceType: "cf-config" as const, name: "dns", value: utf8(JSON.stringify([{ type: "A", name: "r.example.com", content: "8.8.8.8", proxied: false, ttl: 1 }])), account: "acct-1" }],
+        records: [{ sourceType: "cf-config" as const, name: "dns", value: utf8(JSON.stringify([{ type: "A", name: "r.example.com", content: "8.8.8.8", proxied: false, ttl: 1 }])), account: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1" }],
         windowStart: "2026-06-07T00:00:00.000Z", windowEnd: "2026-06-07T00:00:01.000Z", createdAt: "2026-06-07T00:00:01.000Z",
         runlogIndex: 1, prevRunId: null, randomNonce: () => rand(16), randomSalt: () => rand(16),
       });
       installArchive(r2, a);
     };
-    const cfCtx = { token: "t", accountId: "acct-1", zoneId: "zone" };
+    const cfCtx = { token: "t", accountId: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1", zoneId: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb1" };
     const apiThrowing = (msg: string): CfApi => ({ get: async () => { throw new Error(msg); }, getPage: async (): Promise<CfPage> => { throw new Error(msg); }, send: async () => { throw new Error(msg); } });
 
     await mkCfgArchive(RUN_CFR);

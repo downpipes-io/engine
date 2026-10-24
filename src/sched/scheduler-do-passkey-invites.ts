@@ -8,7 +8,7 @@
 // Dispatch is byte-identical; no storage key, route, status code, response body or auth gate changes because
 // of the split. A leaf the assembly depends on, never the reverse.
 
-import { BOOTSTRAP_INVITE_TTL_MS, type BootstrapInvite, CHALLENGE_TTL_MS, loginChallengeId, PasskeyError, type PasskeyInvite, randomChallengeB64, randomInviteToken, StoredKeyCorruptError, verifyAssertion } from "../admin/passkey.ts";
+import { BOOTSTRAP_INVITE_TTL_MS, BOOTSTRAP_RESEND_COOLDOWN_MS, type BootstrapInvite, CHALLENGE_TTL_MS, loginChallengeId, PasskeyError, type PasskeyInvite, randomChallengeB64, randomInviteToken, StoredKeyCorruptError, verifyAssertion } from "../admin/passkey.ts";
 import { b64urlDecode, b64urlEncode, constantTimeEqual } from "../crypto/bytes.ts";
 import { recordCeremonyError, recordCeremonyFault } from "./sched-fault-ledger.ts";
 import { BOOTSTRAP_INVITE_KEY, PASSKEY_AUTH_DATA_MAX, PASSKEY_CLIENT_DATA_MAX, PASSKEY_CRED_ID_MAX, PASSKEY_INVITE_PREFIX, PASSKEY_SIG_MAX, type SchedulerDOCtor } from "./scheduler-do-base.ts";
@@ -16,12 +16,12 @@ import { BOOTSTRAP_INVITE_KEY, PASSKEY_AUTH_DATA_MAX, PASSKEY_CLIENT_DATA_MAX, P
 export function PasskeyInvitesMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
   return class extends Base {
   // ---- FIRST-OWNER bootstrap invite (the email-link bootstrap) -----------------------------------
-  // One fixed slot (BOOTSTRAP_INVITE_KEY): minting overwrites, so at most ONE link is ever live and a
-  // re-send invalidates the previous link. Mint/peek/consume all run inside this single-threaded DO, so
+  // One fixed slot (BOOTSTRAP_INVITE_KEY): at most ONE link is ever live, and a re-send while it is valid
+  // sends that same link again. Mint/peek/consume all run inside this single-threaded DO, so
   // the empty-table + latch checks and the single-use delete are race-free, exactly like the token
   // bootstrap and the teammate invite.
 
-  // mintBootstrapInvite mints (or REPLACES) the single first-Owner invite for the deploy-time-pinned
+  // mintBootstrapInvite mints (or reuses) the single first-Owner invite for the deploy-time-pinned
   // owner email. It refuses (null) unless the role table is EMPTY and the bootstrap latch is unset: once
   // any Owner exists (or ever existed), no first-Owner link can be minted again. The email was validated
   // by the router from env (never a client field) and is re-normalised here at the authority boundary.
@@ -46,8 +46,21 @@ export function PasskeyInvitesMixin<TBase extends SchedulerDOCtor>(Base: TBase) 
       await this.recordAuthSignal("invite-mint-refused-latch-consumed");
       return null;
     }
+    // A live link for the same address is kept, never replaced, so a caller who presses the send button
+    // repeatedly cannot invalidate the link already in the owner's mailbox. A send inside the cooldown is
+    // refused (null: the route sends no email); after it, the same link is sent again.
+    const prior = await this.state.storage.get<BootstrapInvite>(BOOTSTRAP_INVITE_KEY);
+    if (prior !== undefined && typeof prior.token === "string" && prior.email === email && typeof prior.expiresAt === "number" && prior.expiresAt > now) {
+      const sentAt = typeof prior.sentAt === "number" ? prior.sentAt : prior.createdAt;
+      if (now - sentAt < BOOTSTRAP_RESEND_COOLDOWN_MS) {
+        await this.recordAuthSignal("invite-mint-refused-cooldown");
+        return null;
+      }
+      await this.state.storage.put(BOOTSTRAP_INVITE_KEY, { ...prior, sentAt: now });
+      return prior.token;
+    }
     const token = randomInviteToken();
-    const rec: BootstrapInvite = { token, email, createdAt: now, expiresAt: now + BOOTSTRAP_INVITE_TTL_MS };
+    const rec: BootstrapInvite = { token, email, createdAt: now, expiresAt: now + BOOTSTRAP_INVITE_TTL_MS, sentAt: now };
     await this.state.storage.put(BOOTSTRAP_INVITE_KEY, rec);
     return token;
   }
@@ -67,10 +80,8 @@ export function PasskeyInvitesMixin<TBase extends SchedulerDOCtor>(Base: TBase) 
     const enc = new TextEncoder();
     if (!constantTimeEqual(enc.encode(token), enc.encode(rec.token))) {
       // The ONE invite refusal where a record was FOUND, is live, and the presented secret is simply not
-      // it. The bootstrap slot is a single fixed key that minting OVERWRITES, so re-sending the first-Owner
-      // link silently invalidates every earlier one: the owner clicks the link in the older email and is told
-      // it is invalid, while a perfectly valid invite sits in the slot. That is a different remedy (open the
-      // newest email) from an absent or expired invite, and it was recorded nowhere. Never the token.
+      // it (a mistyped, truncated or altered link). It is a different remedy (open the link from the latest
+      // email) from an absent or expired invite, so it is recorded apart. Never the token.
       await this.recordAuthSignal("invite-redeem-refused-token-mismatch");
       return null;
     }

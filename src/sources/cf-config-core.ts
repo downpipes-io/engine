@@ -13,7 +13,7 @@ import type { CfWriteSkipClass } from "./cf-config-fault.ts";
 import type { ConfigChange } from "./cf-config-shared.ts";
 import { isPlainObject } from "./cf-config-shared.ts";
 import { classifySourceFaultReason, faultItemId, recordIncompleteFault, recordShapeAnomaly } from "./source-fault-ledger.ts";
-import { CF_API_BASE } from "../lib/outbound.ts";
+import { CF_API_BASE } from "../lib/outbound.ts"; import { readJsonOrNull } from "../util/json-body.ts";
 
 export type CfScope = "zone" | "account";
 export type RestoreTier = "idempotent" | "ordered" | "reprovision";
@@ -155,7 +155,7 @@ export function makeCfApi(token: string, fetchImpl: typeof fetch = fetch, pacer?
         ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
       };
       const resp = await fetchImpl(`${CF_API_BASE}${path}`, init);
-      const b = (await resp.json().catch(() => null)) as
+      const b = (await readJsonOrNull(resp)) as
         | { success?: boolean; result?: unknown; result_info?: CfResultInfo; errors?: Array<{ code?: number; message?: string; error?: string }> }
         | null;
       // A 200 with NO `success` field at all is not a Cloudflare-envelope response, it is an endpoint
@@ -341,6 +341,37 @@ export async function paginate(
 
 // Z/A are the path interpolation helpers (a surface's path needs the zone or account id).
 export type Ids = { accountId: string; zoneId?: string };
+
+// A Cloudflare account id or zone id is exactly 32 lower-case hex characters.
+const CF_ID_SHAPE = /^[0-9a-f]{32}$/;
+
+// cfIdFault returns the 400 text when a caller-supplied account or zone id is not that shape, else null.
+// The empty string is the disabled leg (no write is planned for it) and cannot reach a path. An absent id
+// is refused when required is true.
+export function cfIdFault(field: string, v: unknown, required = false): string | null {
+  if (v === undefined) return required ? `${field} is required` : null;
+  if (v === "") return null;
+  return typeof v === "string" && CF_ID_SHAPE.test(v) ? null : `${field} must be 32 lower-case hex characters`;
+}
+
+// cfRequireId returns an id that is present and 32 lower-case hex, URL-encoded for a path. Any other value
+// throws before a request goes out.
+export function cfRequireId(field: string, v: unknown): string {
+  if (typeof v !== "string" || !CF_ID_SHAPE.test(v)) throw new CfIdRefusal(`${field} must be 32 lower-case hex characters`);
+  return encodeURIComponent(v);
+}
+
+// cfWriteIds builds the ids a restore write puts into Cloudflare API paths. The account id must be present;
+// the zone id must be present when the surface is zone-scoped. Each id is shape-checked (a refusal throws
+// before any request) and URL-encoded, so a value can never add a path segment, a query or a fragment.
+export function cfWriteIds(c: { accountId: string; zoneId?: string }, scope: CfScope): Ids {
+  const accountId = cfRequireId("accountId", c.accountId);
+  if (c.zoneId === undefined || c.zoneId === "") {
+    if (scope === "zone") throw new CfIdRefusal("zoneId is required to write a zone-scoped surface");
+    return { accountId };
+  }
+  return { accountId, zoneId: cfRequireId("zoneId", c.zoneId) };
+}
 // one builds a read that GETs a single (non-list / single-object) endpoint, metering one call.
 // Use it ONLY for surfaces that return ONE object (zone settings object, gateway configuration,
 // dns settings): a list-shaped surface must use list() so it pages.
@@ -403,9 +434,9 @@ function dig(obj: Record<string, unknown> | null, path: string): unknown {
 export function oneTolerating(pathFor: (ids: Ids) => string, codes: readonly number[]): CfConfigSurface["read"] {
   return async (api, ids, meter) => {
     meter?.spend(1, "cfApiRead");
-    try {
+    try { // nosemgrep: incident-catch-returns-empty -- only the Cloudflare codes the caller named read as absent and every other error is rethrown
       return await api.get(pathFor(ids));
-    } catch (e) {
+    } catch (e) { // site-fault-waiver: src/sources/cf-config-core.ts:oneTolerating:catch:1 -- only the Cloudflare codes the caller named read as absent and every other error is rethrown
       if (e instanceof CfApiError && e.codes.some((c) => codes.includes(c))) return null;
       throw e;
     }
@@ -617,3 +648,7 @@ export function expandRulesets(scope: CfScope): CfConfigSurface["read"] {
     return out;
   };
 }
+
+// CfIdRefusal marks the refusal of a missing or malformed Cloudflare account or zone id, so the restore
+// reason text can name that cause and not a token fault.
+export class CfIdRefusal extends Error {}

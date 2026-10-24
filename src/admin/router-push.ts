@@ -10,12 +10,16 @@ import { deliverResolvedPush, fetchPushConfig } from "../cron/siem-push-pass.ts"
 import { addressingRejected, STORAGE_CLASSES, validateStorageClass } from "../dest/factory-validators.ts";
 import { buildSyntheticPushEvent } from "../cron/siem-push-shape.ts";
 import { canonicaliseBareHost, isAllowedWebhookUrl, isInternalSinkHost } from "../notify.ts";
+import { PUSH_EGRESS_REFUSAL, pushTargetAllowed, readEgressAllowlist } from "../notify/push-egress.ts";
 import { isForbiddenPushHeaderName, isValidPushHeaderValue, isValidPushVendor, PUSH_FORMAT_SET, PUSH_FORMATS, pushSinkFormatError } from "../sched/scheduler-do-limits.ts";
 import { loadConfigWrapKey, maybeWrapConfigSecret, PUSH_S3_SECRET_AAD, PUSH_SECRET_AAD, type WrappedSecret } from "./config-secret.ts";
 import { recordAdminRefusal } from "./diag-admin.ts";
+import { callerCan } from "./identity.ts";
 import { noteTestOutcome } from "./diag-counters.ts";
+import { endpointOriginOnly } from "./owner-action.ts";
 import { callerHeaders, gate, jsonError, jsonResponse, rateLimited } from "./router-core.ts";
 import { doURL, type RouterCtx } from "./router-helpers.ts";
+import { noteSiteFault } from "./site-faults.ts";
 
 // fireInBackground mirrors the identical helper in router-identity.ts.
 function fireInBackground(runtime: RouterCtx["runtime"], task: Promise<unknown>): void {
@@ -71,7 +75,7 @@ function validatePushVendor(v: unknown): { ok: true; vendor?: string } | { ok: f
 // the currently sealed secret unchanged", so the console can toggle `enabled` or edit a non-secret field
 // without resupplying a write-only secret. Each secret is present in the result ONLY when the operator
 // supplied a non-empty one; the DO enforces that a FIRST-ever create still carries the secret its sink needs.
-function validatePushSetShape(body: {
+function validatePushSetShape(egressAllowlist: readonly string[], body: {
   endpoint?: unknown;
   format?: unknown;
   authHeaderName?: unknown;
@@ -109,7 +113,7 @@ function validatePushSetShape(body: {
     if (s3 === null || typeof s3 !== "object" || Array.isArray(s3)) return { ok: false, response: jsonError("push destination s3 target is required for the s3 sink", 400) };
     const o = s3 as Record<string, unknown>;
     // SSRF/https-screen the s3 endpoint (the SAME default-deny the http endpoint gets).
-    const v = isAllowedWebhookUrl(typeof o.endpoint === "string" ? o.endpoint.trim() : "");
+    const v = isAllowedWebhookUrl(typeof o.endpoint === "string" ? o.endpoint.trim() : "", { egressAllowlist });
     if (!v.ok) return { ok: false, response: jsonError(`push destination s3 endpoint invalid: ${v.reason}`, 400) };
     const bucket = typeof o.bucket === "string" ? o.bucket.trim() : "";
     const region = typeof o.region === "string" ? o.region.trim() : "";
@@ -157,6 +161,10 @@ function validatePushSetShape(body: {
     if (isInternalSinkHost(canonicaliseBareHost(host))) {
       return { ok: false, response: jsonError("push destination syslog host resolves to a private/loopback/link-local address (incl. cloud metadata); these are refused. This engine runs at the Cloudflare edge and cannot reach a host on your private network.", 400) };
     }
+    // The operator egress allowlist applies to the syslog host as it does to every other push target.
+    if (!pushTargetAllowed(host, "host", egressAllowlist)) {
+      return { ok: false, response: jsonError(`push destination syslog ${PUSH_EGRESS_REFUSAL}`, 400) };
+    }
     // ABSENT means the 6514 default. A PRESENT port outside 1..65535, or a fractional one, is REFUSED rather
     // than replaced by 6514: silently substituting the default would tell the operator the push destination
     // was saved while their audit stream went to a port they never chose, which on an audit-export surface is
@@ -169,7 +177,7 @@ function validatePushSetShape(body: {
   }
 
   // http sink (default).
-  const v = isAllowedWebhookUrl(typeof body.endpoint === "string" ? body.endpoint.trim() : "");
+  const v = isAllowedWebhookUrl(typeof body.endpoint === "string" ? body.endpoint.trim() : "", { egressAllowlist });
   if (!v.ok) return { ok: false, response: jsonError(`push destination endpoint invalid: ${v.reason}`, 400) };
   // ABSENT (or null) means false, the default: the token rides in a header. A PRESENT value that is not a
   // boolean is REFUSED rather than coerced: coercing would accept the JSON string "true" as truthy and store
@@ -202,6 +210,29 @@ function validatePushSetShape(body: {
   return { ok: true, format, sink, enabled: body.enabled, endpoint: v.url, authHeaderName, ...(authInUrl ? { authInUrl: true } : {}), ...(authHeaderValue !== "" ? { authHeaderValue } : {}), ...vendorField };
 }
 
+// redactPushViewQuery returns the redacted admin view for a caller without keys.ceremony: the http endpoint
+// and the s3 endpoint show scheme and host (and port) only, since a vendor intake can take its feed credential
+// in the path, the query or the fragment, and endpointRedacted:true says so. A reply that is
+// not a 200 JSON object passes through unchanged.
+export async function redactPushViewQuery(reply: Response): Promise<Response> {
+  if (!reply.ok) return reply;
+  const view = (await reply.json()) as Record<string, unknown>;
+  let redacted = false;
+  if (typeof view.endpoint === "string") {
+    const r = endpointOriginOnly(view.endpoint);
+    view.endpoint = r.url;
+    redacted = redacted || r.cut;
+  }
+  const s3 = view.s3;
+  if (s3 !== null && typeof s3 === "object" && typeof (s3 as { endpoint?: unknown }).endpoint === "string") {
+    const r = endpointOriginOnly((s3 as { endpoint: string }).endpoint);
+    (s3 as { endpoint: string }).endpoint = r.url;
+    redacted = redacted || r.cut;
+  }
+  if (redacted) view.endpointRedacted = true;
+  return jsonResponse(view);
+}
+
 // handlePush dispatches the SIEM push destination group. Returns the route's Response, or null when no
 // case here matched (the hub falls to the next spoke).
 export async function handlePush(ctx: RouterCtx): Promise<Response | null> {
@@ -210,7 +241,8 @@ export async function handlePush(ctx: RouterCtx): Promise<Response | null> {
     // GET /push is the redacted admin view (any authenticated role, the same reconnaissance class as
     // GET /destinations): the endpoint, format, header NAME, enabled flag, who/when, the cursor lag and the
     // bounded trail. The secret and its ciphertext NEVER appear (the DO's getSiemPushView never reads them
-    // into the response); this route is a byte-for-byte forward of the DO's own reply.
+    // into the response); this route forwards the DO's own reply, with the
+    // endpoint cut to scheme and host for a caller without keys.ceremony.
     // The redaction above is a claim about the BODY only; the caller is checked here instead. The forward
     // carries no callerHeaders, so the DO's getSiemPushView() has no principal and the router is the only
     // place a caller check can happen. posture.read is the floor this data already sits behind:
@@ -220,7 +252,9 @@ export async function handlePush(ctx: RouterCtx): Promise<Response | null> {
     case "GET /push": {
       const denied = gate(caller, "posture.read");
       if (denied) return denied;
-      return scheduler.fetch(doURL("/push"), { method: "GET" });
+      const reply = await scheduler.fetch(doURL("/push"), { method: "GET" });
+      // The Owner capability sees the full endpoint; every other reader sees the scheme and host only.
+      return callerCan(caller, "keys.ceremony") ? reply : redactPushViewQuery(reply);
     }
 
     // POST /push sets or replaces the push destination. Owner-exclusive (keys.ceremony) + rate-limited, then
@@ -245,7 +279,16 @@ export async function handlePush(ctx: RouterCtx): Promise<Response | null> {
         syslog?: unknown;
         vendor?: unknown;
       };
-      const validated = validatePushSetShape(body);
+      // The list is read before validating so a save to a host outside it is refused here, before it can be
+      // queued as a pending approval.
+      let egressAllowlist: string[];
+      try {
+        egressAllowlist = await readEgressAllowlist(scheduler);
+      } catch (e) {
+        noteSiteFault("admin.push-egress-allowlist-read", e);
+        return jsonError("the egress allowlist could not be read; try again", 503);
+      }
+      const validated = validatePushSetShape(egressAllowlist, body);
       if (!validated.ok) {
         // Recording this closed (surface, reason) pair means a support pack shows that a submission was
         // rejected and why, rather than holding no record that the customer had even tried. Never the

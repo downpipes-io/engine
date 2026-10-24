@@ -22,7 +22,7 @@
 //                   STORED COSE key that no longer decodes is reported to the user as their own
 //                   `bad_request`; an internal fault is coerced to `bad_request` too; a login challenge
 //                   EVICTED under a begin flood is indistinguishable from an expired one; and the recovery
-//                   limiter cannot say WHICH bucket denied (per-email, per-IP, or the limiter itself failing
+//                   limiter cannot say WHICH bucket denied (per-email-and-source, per-IP, or the limiter itself failing
 //                   closed). Those are the classes here. Where an EXISTING auth-signal name already says the
 //                   thing (recovery-ratelimited, recovery-code-invalid, stepup-failed) the DO keeps calling
 //                   recordAuthSignal: this ledger never duplicates that vocabulary, it completes it.
@@ -121,7 +121,7 @@ export const CEREMONY_FAULT_KINDS = [
   // signed-in accounts refused inside a few minutes; the admin refusal counters still count the attempt.
   "denied-audit-key-cap",
   // --- recovery-code break-glass: which limiter tripped, and the silent generation failures ---
-  "recovery-denied-email-bucket", // the recovery attempt was denied by the PER-EMAIL bucket (this one account is being sprayed)
+  "recovery-denied-email-bucket", // the recovery attempt was denied by the PER-EMAIL-AND-SOURCE bucket (this one account is being sprayed from one source)
   "recovery-denied-ip-bucket", // the recovery attempt was denied by the PER-IP bucket (a whole office behind one NAT can lock itself out this way)
   "recovery-limiter-unavailable", // the recovery limiter's own STORE failed and the attempt was denied FAIL-CLOSED: "every recovery code we try is rejected" while nothing is wrong with the codes
   "recovery-regenerate-refused", // a signed-in caller's regenerate was refused before it began (an unusable email): the console nags them to regenerate forever and they never can

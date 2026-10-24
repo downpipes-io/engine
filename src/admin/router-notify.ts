@@ -3,15 +3,22 @@
 // history) routers for a recovery-code alert, an auth-affecting change, a dual-control disarm, and a
 // posture regression. All are fully fail-open. router.ts and its other spokes import them; this module
 // imports neither.
+import { isCustomDomainAddress } from "../email.ts";
+import { renderEngineEmailHtml } from "../email-theme.ts";
 import type { Env } from "../env.d.ts";
 import { log } from "../log.ts";
+import { requireEgressAllowlist } from "../notify/push-egress.ts";
 import { type DeliveryRecord, deliverEmission, type NotifyChannel, type NotifyEmission, type NotifyEvent, type Severity, severityOf } from "../notify.ts";
+import { recordAuthSignalEdge } from "./router-helpers.ts";
+import { type Caller, canonicalEmail, passkeySubject, type Role } from "./identity.ts";
+import { isRole } from "./identity-roles.ts";
+import { recordAudit } from "./router-audit.ts";
 import { bumpAdminCounter } from "./diag-counters.ts";
 import type { AdminCounterName } from "./diag-records.ts";
 import type { PostureRegression } from "./posture.ts";
 import { type AlertClass, alertEmissionCounter, alertEmissionCounterAdmitted, type AlertEmissionStage } from "./posture-counters.ts";
 import { doURL } from "../do-url.ts";
-import { noteSiteFault } from "./site-faults.ts";
+import { noteSiteFault } from "./site-faults.ts"; import { readJsonOrNull } from "../util/json-body.ts";
 
 // nowStamp is the millisecond-precision ISO timestamp the notify emissions carry.
 function nowStamp(): string {
@@ -75,10 +82,11 @@ async function routeEmission(env: Env, scheduler: DurableObjectStub, emission: N
     // with a live channel AND a matching rule would get the row that says "wire a rule", and no rule change
     // could ever help, because the alert never reached rule matching at all. The discriminator sits in the
     // response and must be read, not discarded.
-    const parsed = (await resolveResp.json()) as { now?: NotifyChannel[]; emission?: NotifyEmission | null; egressAllowlist?: string[] };
+    const parsed = (await resolveResp.json()) as { now?: NotifyChannel[]; emission?: NotifyEmission | null; egressAllowlist?: unknown };
     if (!Array.isArray(parsed.now)) throw new Error("resolve answered no channel list");
     now = parsed.now;
-    egressAllowlist = parsed.egressAllowlist;
+    // A send needs its list: an answer without one throws into the resolve-failure path below, so nothing is sent.
+    if (now.length > 0) egressAllowlist = requireEgressAllowlist(parsed.egressAllowlist, "resolve answered no egress allowlist");
     rejected = parsed.emission === null;
   } catch (e) {
     // The alert died BEFORE any channel was chosen. It is fully fail-open (the caller's operation already
@@ -126,7 +134,7 @@ async function routeEmission(env: Env, scheduler: DurableObjectStub, emission: N
       log("error", `${label} history record refused (non-critical): the DO answered ${resp.status}`);
       return;
     }
-    const body = (await resp.json().catch(() => null)) as { recorded?: unknown; skipped?: unknown } | null;
+    const body = (await readJsonOrNull(resp)) as { recorded?: unknown; skipped?: unknown } | null;
     const recorded = typeof body?.recorded === "number" ? body.recorded : -1;
     const skipped = typeof body?.skipped === "number" ? body.skipped : 0;
     // A body the engine cannot read at all (recorded === -1) is itself a lost history write: count it rather
@@ -362,4 +370,128 @@ export async function routeRetentionArmedAloneAlert(env: Env, scheduler: Durable
     noteSiteFault("notify.retention-armed-alone-alert", e);
     log("error", `retention armed-alone alert skipped (non-critical): ${(e as Error).message}`);
   }
+}
+
+
+// RECOVERY_ENROL_SUBJECT is the fixed subject line of the notice an Owner receives when a member enrols a passkey
+// from a recovery-code session. It names no person.
+export const RECOVERY_ENROL_SUBJECT = "A passkey was enrolled from a recovery-code session on your Downpipes backups";
+
+// sendRecoveryEnrolNotice emails ONE Owner that a member enrolled a passkey from a session signed in with a recovery
+// code. It uses the same gates as the role-invite email (the EMAIL binding plus INVITE_EMAIL_FROM, both addresses
+// custom-domain). A skipped send is a short reason; a send the binding rejects throws, and the caller records it.
+export async function sendRecoveryEnrolNotice(env: Env, ownerEmail: string, enrolledEmail: string): Promise<{ sent: boolean; reason?: string }> {
+  const binding = env.EMAIL;
+  if (!binding || typeof binding.send !== "function") return { sent: false, reason: "invite-not-configured" };
+  const fromRaw = env.INVITE_EMAIL_FROM;
+  if (typeof fromRaw !== "string" || fromRaw.trim().length === 0) return { sent: false, reason: "invite-from-not-configured" };
+  const fromV = isCustomDomainAddress(fromRaw);
+  if (!fromV.ok) return { sent: false, reason: "invite-from-invalid" };
+  const toV = isCustomDomainAddress(ownerEmail);
+  if (!toV.ok) return { sent: false, reason: "invite-recipient-invalid" };
+  const sentence = `${enrolledEmail} signed in with a recovery code and enrolled a new passkey. The passkey stays in place after the code is spent.`;
+  const advice = "If you do not expect this, review the passkeys for that member under Access and security.";
+  const html = renderEngineEmailHtml({ subject: RECOVERY_ENROL_SUBJECT, heading: "A passkey was enrolled from a recovery-code session", paragraphs: [sentence, advice] });
+  await binding.send({ to: toV.address, from: fromV.address, subject: RECOVERY_ENROL_SUBJECT, text: `${sentence} ${advice}`, html });
+  return { sent: true };
+}
+
+// RecoveryNotice is what the Owner email did, in closed words and counts. It is written to the audit chain, put in the
+// alert text and projected into the support pack, so a skipped or failed email is as visible as a sent one. It never
+// holds an address.
+export type RecoveryNotice = { state: "sent" | "partial" | "skipped" | "failed"; reason?: string; owners: number; sent: number; skipped: number; failed: number };
+
+// The closed reasons a notice can carry, mapped from the send gates' own skip reasons.
+export const RECOVERY_NOTICE_REASONS = ["mail-not-configured", "mail-sender-invalid", "recipient-address-unusable", "no-other-owner", "send-rejected", "roster-unreadable"] as const;
+const NOTICE_SKIP_REASON: Readonly<Record<string, string>> = {
+  "invite-not-configured": "mail-not-configured",
+  "invite-from-not-configured": "mail-not-configured",
+  "invite-from-invalid": "mail-sender-invalid",
+  "invite-recipient-invalid": "recipient-address-unusable",
+};
+
+// noticeOtherOwners emails every bound, unexpired, built-in Owner except the enrolling member and returns what
+// happened. It is fail-open: the enrolment is already committed, so a roster read or a send that fails only costs the
+// notice, the failure is counted as a closed auth signal, and the outcome says so.
+async function noticeOtherOwners(env: Env, scheduler: DurableObjectStub, enrolledEmail: string): Promise<RecoveryNotice> {
+  const out: RecoveryNotice = { state: "skipped", owners: 0, sent: 0, skipped: 0, failed: 0 };
+  let skipReason: string | undefined;
+  try {
+    const resp = await scheduler.fetch(doURL("/roles"), { method: "GET" });
+    const roster = (await resp.json()) as Array<{ subject?: unknown; email?: unknown; role?: unknown; expiresAt?: unknown; customRole?: unknown }>;
+    if (!Array.isArray(roster)) throw new Error("roster is not a list");
+    const now = Date.now();
+    const seen = new Set<string>();
+    for (const r of roster) {
+      if (r.role !== "owner" || r.customRole !== undefined || typeof r.subject !== "string" || r.subject === "" || typeof r.email !== "string" || r.email === "") continue;
+      if (typeof r.expiresAt === "string" && !(Date.parse(r.expiresAt) > now)) continue;
+      const to = canonicalEmail(r.email);
+      if (to === null || to === canonicalEmail(enrolledEmail) || seen.has(to)) continue;
+      seen.add(to);
+      out.owners++;
+      try {
+        const res = await sendRecoveryEnrolNotice(env, to, enrolledEmail);
+        if (res.sent) out.sent++;
+        else {
+          out.skipped++;
+          skipReason ??= NOTICE_SKIP_REASON[res.reason ?? ""] ?? "mail-not-configured";
+        }
+      } catch (e) {
+        out.failed++;
+        log("error", `recovery-enrolment owner notice send failed (non-critical): ${(e as Error).message}`);
+        await recordAuthSignalEdge(scheduler, "recovery-enrol-notice-failed");
+      }
+    }
+  } catch (e) {
+    log("error", `recovery-enrolment owner notice skipped (non-critical): ${(e as Error).message}`);
+    await recordAuthSignalEdge(scheduler, "recovery-enrol-notice-failed");
+    return { state: "failed", reason: "roster-unreadable", owners: 0, sent: 0, skipped: 0, failed: 0 };
+  }
+  if (out.owners === 0) return { ...out, state: "skipped", reason: "no-other-owner" };
+  if (out.sent === out.owners) return { ...out, state: "sent" };
+  if (out.sent > 0) return { ...out, state: "partial" };
+  if (out.failed > 0) return { ...out, state: "failed", reason: "send-rejected" };
+  return { ...out, state: "skipped", ...(skipReason !== undefined ? { reason: skipReason } : {}) };
+}
+
+// noticeSentence is the plain sentence the alert adds about the Owner email.
+function noticeSentence(n: RecoveryNotice): string {
+  if (n.state === "sent") return "The other Owners were emailed.";
+  if (n.state === "partial") return `Emailed ${n.sent} of ${n.owners} other Owners; the rest could not be emailed.`;
+  switch (n.reason) {
+    case "mail-not-configured": return "Other Owners were not emailed: invite email is not configured.";
+    case "mail-sender-invalid": return "Other Owners were not emailed: the invite email sender address is not valid.";
+    case "recipient-address-unusable": return "Other Owners were not emailed: their addresses cannot receive engine email.";
+    case "no-other-owner": return "There is no other Owner to email.";
+    case "roster-unreadable": return "Other Owners were not emailed: the Owner list could not be read.";
+    default: return "Other Owners were not emailed: the email send failed.";
+  }
+}
+
+// routeCredentialEnrolAlert raises the credential-change alert for a passkey a member added to their own account. A
+// self-add from a recovery-code session says so in the alert, because the single-use code is spent and the passkey it
+// enrolled is not. It also emails the other Owners, writes the result to the audit chain as a follow-up row, and states
+// the result in the alert, so a notice that was skipped or failed is never silent. The DO's own reading of the session
+// decides `recovered`.
+export async function routeCredentialEnrolAlert(env: Env, scheduler: DurableObjectStub, email: string, recovered: boolean, sourceIp: string | null = null, roleHint: unknown = undefined): Promise<void> {
+  if (!recovered) {
+    await routeAuthChangeAlert(env, scheduler, "auth-credential-change", "credential-change", `A new passkey credential was enrolled for ${email}.`);
+    return;
+  }
+  const notice = await noticeOtherOwners(env, scheduler, email);
+  try {
+    const role: Role = isRole(roleHint) ? roleHint : "viewer";
+    const caller: Caller = { method: "passkey", email, subject: passkeySubject(email), role, groups: [], sourceIp };
+    await recordAudit(scheduler, caller, sourceIp, "passkey-recovery-enrol-notice", noticeAuditOutcome(notice), { kind: "role", email, role, notice });
+  } catch (e) {
+    log("error", `recovery-enrolment notice audit row skipped (non-critical): ${(e as Error).message}`);
+    await recordAuthSignalEdge(scheduler, "recovery-enrol-notice-failed");
+  }
+  await routeAuthChangeAlert(env, scheduler, "auth-credential-change", "credential-change", `A new passkey was enrolled for ${email} from a session signed in with a recovery code. If ${email} did not do this, remove the passkey under Access and security. ${noticeSentence(notice)}`);
+}
+
+// noticeAuditOutcome is the audit outcome of a notice row. A sent notice, and an estate with no other Owner to email,
+// are success: nothing went wrong. Every other state is failed, so a reader looks for the cause.
+export function noticeAuditOutcome(n: RecoveryNotice): "success" | "failed" {
+  return n.state === "sent" || (n.state === "skipped" && n.reason === "no-other-owner") ? "success" : "failed";
 }

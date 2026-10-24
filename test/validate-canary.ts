@@ -25,7 +25,7 @@ import { encodeCaller, CALLER_HEADER, type Caller } from "../src/admin/identity.
 import { CANARY_CORPUS, CANARY_CORPUS_BYTES, CanarySource } from "../src/canary/corpus.ts";
 import { PrefixedDestination, prefixedStore } from "../src/canary/prefixed-dest.ts";
 import { classifyReadFailure, finalise } from "../src/canary/cycle-helpers.ts";
-import { formatUnsupportedError, freshnessError, freshnessUnverifiableError, integrityError } from "../src/format/integrity-error.ts";
+import { formatUnsupportedError, freshnessError, freshnessUnverifiableError, integrityError, usageError } from "../src/format/integrity-error.ts";
 import type { CanaryAspectResult, CanaryView, CanaryFlightPlan, CanaryCheckResult } from "../src/canary/types.ts";
 import { verdictReached } from "./lib/verdict-guard.ts";
 
@@ -455,6 +455,10 @@ function sectionE(): void {
   // format-unsupported: the canary reads back what this same build just wrote, so it is a death.
   const badFormat = classifyReadFailure(formatUnsupportedError("formatVersion downpipe/9.9.9: not implemented"));
   ok("E: a format-unsupported read-back is dead (the build cannot read its own writer)", badFormat.dead === true && badFormat.aspect === "read-signature");
+  // usage: the canary's own pin or signer.pub input was refused before any byte was judged. The message is
+  // worded to match the integrity net ("signature"), so only the category can give the ailing answer.
+  const badUsage = classifyReadFailure(usageError("no bundled signer.pub to check the signature pin against"));
+  ok("E: a usage read-back is ailing, not dead (no archive byte was judged)", badUsage.dead === false && badUsage.aspect === "read-signature" && /refused/.test(badUsage.detail));
 }
 
 // sectionF pins finalise's ailingCause threading (op-key-canary-drill Gap A): the override branch carries

@@ -713,10 +713,15 @@ export const RECOVERY_STAGED_PREFIX = "recovery-staged:";
 // high-value credential, so it is limited HARDER than ordinary sign-in AND FAILS CLOSED (like the per-IP
 // auth limiter, unlike the fail-open per-caller limiter): if the limiter's own store hiccups, deny rather than admit, because an
 // oracle/guessing attack must never benefit from knocking the limiter over. Two independent buckets are
-// checked, both must pass: per source IP (RECOVERY_RATE_MAX_PER_IP) and per target email
-// (RECOVERY_RATE_MAX_PER_EMAIL), each over RECOVERY_RATE_WINDOW_MS. The per-email bucket stops a distributed
-// guess against ONE account; the per-IP bucket stops one host spraying many accounts. Caps are deliberately
-// low (a human using a recovery code needs one or two tries).
+// checked, both must pass: per source group (RECOVERY_RATE_MAX_PER_IP, key `ip:<group>`) and per target
+// email and source group (RECOVERY_RATE_MAX_PER_EMAIL, key `email:<email>:<group>`), each over
+// RECOVERY_RATE_WINDOW_MS. The group is ipSourceGroup of the caller's address; a request with no address uses
+// the group `none`. The email is typed by an unauthenticated caller, so a bucket keyed on the email alone
+// would let anyone who knows an address exhaust it for everyone; keying it on the source group as well
+// confines that to the caller's own source. There is no cap per email across sources: a code is 150 bits, so
+// the per-IP bucket bounds guessing, and the per-email-and-source bucket bounds one source against one
+// account. A caller inside the Owner's own source group can still hold that group's bucket for one window.
+// Caps are deliberately low (a human using a recovery code needs one or two tries).
 //
 // A refusal on this path does NOT report retryAfterMs so the client can back off. Over 12 consecutive
 // attempts in one window: attempt 6 is the first denial, and recoveryRateCheck answers exactly
@@ -984,3 +989,8 @@ export function importDestPricing(v: unknown): unknown {
   }
   return out;
 }
+
+// RECOVERY_EMAIL_MAX_LENGTH bounds the email that recoveryRecover turns into a `recovery-rate:email:` key. The
+// caller is unauthenticated, so a longer address is treated as malformed (it shares the one `_invalid` bucket
+// and writes no row of its own). 254 is the RFC 5321 practical maximum for a mailbox address.
+export const RECOVERY_EMAIL_MAX_LENGTH = 254;

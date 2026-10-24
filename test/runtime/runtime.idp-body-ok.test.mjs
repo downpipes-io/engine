@@ -48,7 +48,7 @@
 // THE HOUSE ALREADY STATES THE RULE, eleven lines from a sibling site. router-rbac.ts:148 reads the BODY:
 // "notify on an ACTUAL offboarding ... The DO returns { deleted:true } only when a member was really removed;
 // a no-op delete of an absent member returns { deleted:false } and is not a change worth alerting on." And
-// routeAuthChangeAlert's own contract (router-notify.ts:218) opens "The change itself is already committed +
+// routeAuthChangeAlert's own contract (router-notify.ts:220) opens "The change itself is already committed +
 // AUDITED in the DO". A refusal commits nothing and audits nothing.
 //
 // THE ASSERTION IS THE EXACT RECORD, never existence and never a count. Wired: a notify-history row whose

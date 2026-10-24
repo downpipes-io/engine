@@ -15,6 +15,44 @@ format major stays 0), specified normatively in the format specification of the
 `downpipe` reader repository, not an entry here. This changelog
 tracks the engine Worker, its scheduler Durable Object and the admin API.
 
+## [0.3.9] - 2026-10-25
+
+### Changed
+
+- The engine refuses a signed count or size field that is present as JSON null, as it refuses any other non-canonical count. It refuses a null array, array element or object on the path to a count field in the same way, except a record's `packed` object, which may be null. A field that is absent stays absent. The RUNLOG is one document per destination and every RUNLOG writer reads all of it, so a RUNLOG line that holds a null count stops RUNLOG writes for every downpipe on that destination.
+- `SHA256SUMS.txt` names the engine bundle by its file name alone, the same name as the SLSA provenance subject.
+- The release SBOM names the exact generator version and is reproducible.
+- In the support pack, a seal fault row, a seal fault span and a replication destination row carry their engine version. A row is marked stale when that version is not the running one, or is absent.
+- In the support pack, a red destination, its replica faults and its fault span show the destination's current resolution beside them.
+- A seal fault span closes when replication to its destination recovers and no downpipe it lists still fails there. A span with a cut-short downpipe list stays open.
+- The seal fault spans section shows the time of the oldest row in the seal fault ring. A fault with no span can be dated back only to that time.
+- A restore refuses a Cloudflare account id or zone id that is not 32 lower-case hex characters, before it sends any request, and encodes each id in the request path.
+
+### Fixed
+
+- The re-key hand-over record opens only after the pre-check passes, with every target pending.
+- The deploy preflight accepts the update channel URL as a Worker secret, or as a single `UPDATE_CHANNEL_URL` line in `wrangler.toml` with an https URL on `update.downpipes.io`. It refuses any other line that sets it.
+- With an environment discovery token and no discovery configuration, a downpipe source names only the engine's own Cloudflare account, and a cf-config zone belongs to its source's account. The scheduler follows `CF_ACCOUNT_ID` when it changes, and records the change in the audit log. A resume from the signed export applies the discovery selection before the downpipes, so a source on an account the Owner selected comes back.
+- A rollback after a secret change uploads the prior code as a new version that keeps the current secrets, then deploys it. The engine refuses the rollback when that code does not match the digest it recorded for the version. The result says whether the identity was checked.
+- In the support pack, the replication, notify, destination, recovery refusal, status baseline and audit page sections show an error when their read fails. A destination row that cannot be shown is counted.
+- With no pinned signer, when the engine moves the run counter past a refused RUNLOG index, the support pack records a `counter-advanced-after-recovery` row, as it does when a signer is pinned.
+- The settled record of a kept update holds the reason for the keep, and the status read shows it.
+- For 15 minutes after a promote, a settle answered by the previous version decides nothing. It answers inconclusive and leaves the verification pending.
+- The channel publisher refuses to sign a channel whose engine bundle reports a different version, no version or more than one.
+
+### Security
+
+- Logout waits up to 2.5 s for the session revocation, and says when the revocation did not land.
+- A push or notification send refuses when its egress allowlist cannot be read. Every push sink checks the allowlist when a target is saved and when it is sent: SIEM over HTTP, the S3 drop, syslog over TLS and OTLP. A refused target is recorded.
+- Recovery-code sign-in keeps one rate bucket per email and source, and one per source. An email longer than 254 characters shares one bucket. At the upgrade, recovery rate counts start from zero.
+- On the admin routes and the recovery-code writes, a Cloudflare Access caller whose request carries an `Origin` must match the console origin.
+- A fresh engine keeps one first-Owner invite link, and mails it at most once a minute.
+- The push destination view shows a caller without the Owner capability the endpoint's scheme, host and port only, and says that it redacted the rest. The approval inbox lists a pending push destination the same way for every caller.
+- The passkey registration routes refuse a passkey, OIDC or SAML session caller whose request carries no `Origin` or one other than the console's, and a Cloudflare Access caller whose request carries an `Origin` other than the console's, the same rule as every other mutating admin route.
+- The OTLP metrics push destination view shows a caller without the Owner capability the endpoint's scheme, host and port only, and says that it redacted the rest. The approval inbox lists a pending OTLP push destination with its endpoint cut the same way, for every caller.
+- A SAML sign-in response must carry `InResponseTo`, and it must name the sign-in request the engine sent. The engine refuses a response without it, whatever `allowIdpInitiated` holds.
+- A passkey enrolled from a session signed in with a recovery code has its own audit row, and the credential alert says so. The other Owners are emailed when invite email is set up. The audit row, the alert and the support pack say whether they were.
+
 ## [0.3.8] - 2026-10-11
 
 ### Added

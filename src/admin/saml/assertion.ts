@@ -93,8 +93,8 @@ export interface AssertionContext {
   // controls req.url's host via Host/X-Forwarded-* headers, so trusting it would defeat the wrong-SP defence).
   acsUrl: string;
   // The id of the AuthnRequest WE sent and stored (samlreq:<connId>:<id>). SubjectConfirmationData/@InResponseTo
-  // MUST equal this exactly. An assertion with NO InResponseTo is IdP-initiated and is rejected unless
-  // conn.allowIdpInitiated is true (then this binding is skipped, since there was no request to bind to).
+  // MUST equal this exactly. An assertion with NO InResponseTo is IdP-initiated and is rejected, whatever
+  // conn.allowIdpInitiated holds: every verification answers a request the engine sent.
   expectedInResponseTo: string;
   // The injected clock as epoch milliseconds. Tests pass a fixed value; this module NEVER calls Date.now() or
   // new Date() (both are forbidden here - they break determinism). All time comparisons use this.
@@ -245,7 +245,7 @@ export function consumeAssertion(assertion: XmlElement, conn: SamlConnection, ct
   // SubjectConfirmation with Method bearer. There may be several SubjectConfirmation elements; we require at
   // least ONE bearer confirmation whose SubjectConfirmationData satisfies Recipient + InResponseTo +
   // NotOnOrAfter. We track the bearer confirmation's NotOnOrAfter to return (the replay-dedupe upper bound).
-  const bearerResult = confirmBearer(subject, inSubject, conn, ctx, now, skewMs);
+  const bearerResult = confirmBearer(subject, inSubject, ctx, now, skewMs);
   if (!bearerResult.ok) return bearerResult;
   const scNotOnOrAfterMs = bearerResult.notOnOrAfter;
 
@@ -393,13 +393,12 @@ function readSubjectNameId(
 
 // confirmBearer enforces the SubjectConfirmation (bearer) stage: it requires at least ONE bearer confirmation
 // whose SubjectConfirmationData satisfies @Recipient == ctx.acsUrl, a present/parseable/unexpired
-// @NotOnOrAfter, and the @InResponseTo binding (equal to ctx.expectedInResponseTo when present; absent is
-// IdP-initiated, rejected unless conn.allowIdpInitiated). It returns the satisfying confirmation's
+// @NotOnOrAfter, and the @InResponseTo binding (present and equal to ctx.expectedInResponseTo; absent is
+// IdP-initiated and rejected). It returns the satisfying confirmation's
 // NotOnOrAfter (the replay-dedupe upper bound) or a typed rejection. Pure; extracted verbatim.
 function confirmBearer(
   subject: XmlElement,
   inSubject: Map<string, string>,
-  conn: SamlConnection,
   ctx: AssertionContext,
   now: number,
   skewMs: number,
@@ -440,15 +439,12 @@ function confirmBearer(
     }
 
     // @InResponseTo: the anti-replay/anti-injection binding for SP-initiated SSO. When PRESENT it MUST equal
-    // ctx.expectedInResponseTo exactly. When ABSENT the assertion is IdP-initiated, which is rejected unless
-    // conn.allowIdpInitiated is true (then the binding is skipped, there being no request to bind to).
+    // ctx.expectedInResponseTo exactly. When ABSENT the confirmation is not bound to the request the engine
+    // sent, and it is rejected whatever conn.allowIdpInitiated holds: the stored flag does not relax the binding.
     const inResponseTo = decAttr(scd, "InResponseTo");
     if (inResponseTo === null) {
-      if (!conn.allowIdpInitiated) {
-        blocked = "inresponseto"; // IdP-initiated not allowed: this confirmation cannot satisfy
-        continue;
-      }
-      // allowed IdP-initiated: skip the InResponseTo check for this confirmation
+      blocked = "inresponseto"; // no InResponseTo: this confirmation cannot satisfy
+      continue;
     } else if (inResponseTo !== ctx.expectedInResponseTo) {
       blocked = "inresponseto"; // wrong InResponseTo (replay/injection): this confirmation cannot satisfy
       continue;

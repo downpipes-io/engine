@@ -123,9 +123,9 @@ const ULID_TIME_BYTES = 6;
  */
 export function ulidTimeMs(runId: string): number | null {
   let bytes: Uint8Array;
-  try {
+  try { // nosemgrep: incident-catch-returns-empty -- a non-ULID id has no time and the caller keeps the orphan
     bytes = decodeULID(runId);
-  } catch {
+  } catch { // site-fault-waiver: src/seal/reconcile.ts:ulidTimeMs:catch:1 -- a non-ULID id has no time and the caller keeps the orphan
     return null;
   }
   let ms = 0;

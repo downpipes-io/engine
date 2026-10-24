@@ -2,10 +2,12 @@
 // auto-mode cf-config downpipe per tick to refresh its surface set, gated on ample shared
 // budget so it never starves backups/replication.
 
+import { zoneRefused } from "../sources/zone-account.ts";
 import { doURL, type schedulerStub } from "../admin/router.ts";
 import type { Env } from "../env.d.ts";
 import { log } from "../log.ts";
 import { accountInDiscoveryScope, type DiscoveryScopeConfig } from "../sched/config-validate.ts";
+import { engineScopeAccount } from "../sched/engine-scope-account.ts";
 import type { DownpipeState } from "../sched/scheduler-do.ts";
 import type { budgetFromEnv } from "../seal/budget.ts";
 import { probeCfConfig } from "../sources/cf-config-discovery.ts";
@@ -51,7 +53,11 @@ export async function runDiscoveryPass(env: Env, scheduler: ReturnType<typeof sc
     // Cross-account confused-deputy re-check (ASVS V4): `selected` can narrow AFTER this
     // downpipe was created, and this periodic refresh must not keep silently servicing a
     // since-deselected account with no further gate; skip this tick exactly as the no-token case does.
-    if (!accountInDiscoveryScope(target.config.source.accountId, cfg)) {
+    if (!accountInDiscoveryScope(target.config.source.accountId, cfg, cfg === null ? await engineScopeAccount(env, scheduler) : null)) {
+      noteDiscoverySkip("out-of-scope");
+      return true;
+    }
+    if (await zoneRefused(token, target.config.source)) {
       noteDiscoverySkip("out-of-scope");
       return true;
     }

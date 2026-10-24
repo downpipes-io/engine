@@ -4,8 +4,8 @@
 // module does the minimum, in a fixed order, and returns an error-as-value at the first failure - it NEVER
 // throws out of verifySamlResponse.
 //
-// The SP is SIGN-ONLY (no EncryptedAssertion in v1), SP-INITIATED by default (allowIdpInitiated is an explicit
-// owner opt-in), and PINS the IdP signing certs (conn.idpSigningCerts): the assertion's own ds:KeyInfo is
+// The SP is SIGN-ONLY (no EncryptedAssertion in v1), SP-INITIATED ONLY (conn.allowIdpInitiated does not relax
+// the request binding), and PINS the IdP signing certs (conn.idpSigningCerts): the assertion's own ds:KeyInfo is
 // IGNORED entirely (dsig.ts never reads it). The pipeline, in order:
 //   1. base64-decode the raw SAMLResponse POST value (standard base64) to bytes - reject non-base64 / oversized.
 //      RelayState is NEVER decoded here (it is opaque round-trip state, handled by the caller).
@@ -16,8 +16,8 @@
 //   4. Status: assertStatusSuccess(response) MUST be true (no oracle detail in the reason).
 //   5. Response-level binds (defence in depth; the assertion-level Recipient/InResponseTo are RE-checked inside
 //      consumeAssertion): @Destination (decoded) MUST equal ctx.acsUrl when present; @InResponseTo MUST equal
-//      ctx.expectedInResponseTo when present; and when conn.allowIdpInitiated is false an assertion with NO
-//      InResponseTo anywhere on the Response is rejected (IdP-initiated denied).
+//      ctx.expectedInResponseTo when present; and a Response with NO @InResponseTo is rejected (IdP-initiated
+//      denied), whatever conn.allowIdpInitiated holds.
 //   6. extract the verifying KEY (SubjectPublicKeyInfo / SPKI) from EACH pinned PEM cert by a minimal DER walk
 //      (rollover: any current cert is acceptable).
 //   7. verifyXmlSignature(assertion, spki, { idAttribute:"ID", requireReferenceIsTarget:true }) for each pinned
@@ -221,15 +221,15 @@ export async function verifySamlResponse(
     return fail("Response @Destination does not match our ACS URL");
   }
 
-  // @InResponseTo (SP-initiated): when PRESENT it MUST equal ctx.expectedInResponseTo exactly (the
-  // anti-injection binding). When ABSENT the Response is IdP-initiated; reject unless conn.allowIdpInitiated.
+  // @InResponseTo (SP-initiated): it MUST be PRESENT and equal ctx.expectedInResponseTo exactly (the
+  // anti-injection binding). Every verification here answers a request the engine sent, so an ABSENT one is refused.
   const inResponseTo = decAttr(responseRoot, "InResponseTo");
   if (inResponseTo !== null) {
     if (inResponseTo !== ctx.expectedInResponseTo) return fail("Response @InResponseTo does not match the request we sent");
-  } else if (!conn.allowIdpInitiated) {
-    // No InResponseTo anywhere on the Response envelope, and IdP-initiated is not allowed -> reject. (The
-    // assertion-level InResponseTo is also re-checked under allowIdpInitiated inside consumeAssertion; this is
-    // the envelope-level instance of the same gate.)
+  } else {
+    // No InResponseTo on the Response envelope -> reject, whatever conn.allowIdpInitiated holds: the stored
+    // flag does not relax the binding. (The assertion-level InResponseTo is required the same way inside
+    // consumeAssertion; this is the envelope-level instance of the same gate.)
     return fail("IdP-initiated SAML Response is not permitted for this connection");
   }
 

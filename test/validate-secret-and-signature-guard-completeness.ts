@@ -490,35 +490,35 @@ async function main(): Promise<void> {
     // call under this one domain. The count assertion above would not tell you that; a new secret kind that
     // skipped the wrap entirely would leave the count unchanged and the credential in plaintext.
     "admin/router-destinations.ts:238": "default", // the destination secretAccessKey, CONFIG_SECRET_AAD
-    "admin/router-discovery.ts:407": "DISCOVERY_SECRET_AAD",
+    "admin/router-discovery.ts:421": "DISCOVERY_SECRET_AAD",
     // The IdP client secret's write ingress. It is the last console-set credential class that would
     // otherwise land in Durable Object storage as a bare string; it is sealed here, in the Worker, because
     // the DO holds no wrap key.
     "admin/router-identity.ts:872": "IDP_SECRET_AAD",
-    "admin/router-ops.ts:42": "aad", // the JSM / ServiceNow shared writer, whose domain is its own argument
+    "admin/router-ops.ts:43": "aad", // the JSM / ServiceNow shared writer, whose domain is its own argument
     // The key-install re-wrap (config-rewrap.ts): it seals a credential stored before the engine held the key,
     // under the domain its own save uses, looked up per class in CLASS_AAD, a Record over the closed class type.
     "admin/config-rewrap.ts:110": "aad",
-    "admin/router-otlp-push.ts:120": "OTLP_PUSH_SECRET_AAD",
-    "admin/router-push.ts:265": "PUSH_SECRET_AAD",
-    "admin/router-push.ts:268": "PUSH_S3_SECRET_AAD",
+    "admin/router-otlp-push.ts:134": "OTLP_PUSH_SECRET_AAD",
+    "admin/router-push.ts:308": "PUSH_SECRET_AAD",
+    "admin/router-push.ts:311": "PUSH_S3_SECRET_AAD",
     // read sites
     // The same re-wrap's proof: the envelope it just sealed is opened under the same domain before the DO swap.
     "admin/config-rewrap.ts:111": "aad",
     // resolveIdpSecret, the just-in-time read both the OIDC and the OAuth2 token exchange make. It is the
     // ONE read site for this class: nothing else may open an IdP client secret.
     "admin/oidc-store.ts:183": "IDP_SECRET_AAD",
-    "admin/router-discovery.ts:213": "DISCOVERY_SECRET_AAD",
-    "admin/router-discovery.ts:308": "DISCOVERY_SECRET_AAD",
+    "admin/router-discovery.ts:215": "DISCOVERY_SECRET_AAD",
+    "admin/router-discovery.ts:319": "DISCOVERY_SECRET_AAD",
     "admin/router-helpers.ts:95": "DISCOVERY_SECRET_AAD",
     "admin/router-sources-discovery.ts:113": "DISCOVERY_SECRET_AAD",
-    "cron/otlp-push-pass.ts:83": "OTLP_PUSH_SECRET_AAD",
+    "cron/otlp-push-pass.ts:89": "OTLP_PUSH_SECRET_AAD",
     // The census is keyed by file:line ON PURPOSE -- a declaration that followed the code automatically
     // would pass over a site nobody had looked at -- so line drift reds this gate and the coordinates must
     // be re-read rather than derived. Both sites pass distinct AADs, downpipes/push-secret/v1 and
     // downpipes/push-s3-secret/v1, so the separation this file exists to prove holds.
-    "cron/siem-push-pass.ts:212": "PUSH_SECRET_AAD",
-    "cron/siem-push-pass.ts:216": "PUSH_S3_SECRET_AAD",
+    "cron/siem-push-pass.ts:219": "PUSH_SECRET_AAD",
+    "cron/siem-push-pass.ts:223": "PUSH_S3_SECRET_AAD",
     "dest/factory.ts:263": "default",
     "notify/channels/jsm.ts:246": "JSM_SECRET_AAD",
     "notify/channels/servicenow.ts:135": "SERVICENOW_SECRET_AAD",

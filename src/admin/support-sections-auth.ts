@@ -337,7 +337,7 @@ const LOCKOUT_RECOVERY_REASON: ReadonlySet<string> = new Set([
  *
  * WHY THIS MATTERS. `GET /policy/lockout-preflight` is the one surface in the product built to answer
  * "can this account still get back in"; the console's require-access wizard is its only other caller
- * (`router-ops.ts:355`). Without this projection a customer whose role roster is corrupt (`rosterUnreadable`,
+ * (`router-ops.ts:358`). Without this projection a customer whose role roster is corrupt (`rosterUnreadable`,
  * a count of the stored role records BOTH readers refuse to parse -- how an account loses its only Owner in
  * silence) would send a pack byte-identical to a healthy one. `passkeyOwnerEvidence` carries the same weight
  * one field along: it distinguishes `unknown` from `never-asserted` on the FIRST credential an account ever

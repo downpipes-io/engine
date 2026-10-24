@@ -26,7 +26,7 @@ import { loadSigner, verifierFrom } from "../keys-env.ts";
 import { classifyRestoreFailure, coarseRestoreTestReasonCode } from "../restore-reasons.ts";
 import { b64urlEncode, b64urlDecode } from "../crypto/bytes.ts";
 import type { AttestSession, DownpipeState, RunHistoryEntry } from "../sched/types.ts";
-import type { Caller } from "./identity.ts";
+import type { Caller } from "./identity.ts"; import { readJsonObjectOrEmpty } from "../util/json-body.ts";
 
 // ATTEST_VERIFY_BATCH_MAX caps how many runs one POST /attest/session/verify request may carry, so a single
 // call cannot fan out an unbounded number of destination reads + decrypt passes.
@@ -166,7 +166,7 @@ export async function handleAttest(ctx: RouterCtx): Promise<Response | null> {
     case "POST /attest/session/prove": {
       const denied = gate(caller, "drill.run");
       if (denied) return denied;
-      const body = (await req.json().catch(() => ({}))) as { sessionId?: unknown; proofB64?: unknown };
+      const body = (await readJsonObjectOrEmpty(req)) as { sessionId?: unknown; proofB64?: unknown };
       const sessionId = typeof body.sessionId === "string" ? body.sessionId : "";
       const limited = await rateLimited(scheduler, caller);
       if (limited) return limited;
@@ -190,7 +190,7 @@ export async function handleAttest(ctx: RouterCtx): Promise<Response | null> {
     case "POST /attest/session/capsules": {
       const denied = gate(caller, "drill.run");
       if (denied) return denied;
-      const body = (await req.json().catch(() => ({}))) as { sessionId?: unknown; runIds?: unknown };
+      const body = (await readJsonObjectOrEmpty(req)) as { sessionId?: unknown; runIds?: unknown };
       const sessionId = typeof body.sessionId === "string" ? body.sessionId : "";
       const limited = await rateLimited(scheduler, caller);
       if (limited) return limited;
@@ -235,7 +235,7 @@ export async function handleAttest(ctx: RouterCtx): Promise<Response | null> {
     case "POST /attest/session/verify": {
       const denied = gate(caller, "drill.run");
       if (denied) return denied;
-      const body = (await req.json().catch(() => ({}))) as { sessionId?: unknown; batch?: unknown };
+      const body = (await readJsonObjectOrEmpty(req)) as { sessionId?: unknown; batch?: unknown };
       const sessionId = typeof body.sessionId === "string" ? body.sessionId : "";
       const batch = Array.isArray(body.batch) ? body.batch : [];
       if (batch.length === 0) return jsonError("batch must be a non-empty array of { runId, masterB64 }", 400);
@@ -321,7 +321,7 @@ export async function handleAttest(ctx: RouterCtx): Promise<Response | null> {
     case "POST /attest/session/abort": {
       const denied = gate(caller, "drill.run");
       if (denied) return denied;
-      const body = (await req.json().catch(() => ({}))) as { sessionId?: unknown };
+      const body = (await readJsonObjectOrEmpty(req)) as { sessionId?: unknown };
       const sessionId = typeof body.sessionId === "string" ? body.sessionId : "";
       const limited = await rateLimited(scheduler, caller);
       if (limited) return limited;

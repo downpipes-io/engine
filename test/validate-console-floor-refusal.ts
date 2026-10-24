@@ -97,7 +97,7 @@ async function main(): Promise<void> {
   const fixture = mkdtempSync(join(tmpdir(), "console-floor-"));
   try {
     // ---- the channel, built and signed by the publisher itself ----
-    writeFileSync(join(fixture, "engine.mjs"), `export default { fetch() { return new Response("engine ${FLOOR}"); } };\n`);
+    writeFileSync(join(fixture, "engine.mjs"), `var ENGINE_VERSION = "${FLOOR}";\nexport default { fetch() { return new Response("engine " + ENGINE_VERSION); } };\n`);
     writeFileSync(join(fixture, "console.json"), consoleBundle(CONSOLE_VERSION));
     const seed = Buffer.concat([createHash("sha256").update("throwaway-edseed").digest(), createHash("sha256").update("throwaway-mldsaseed").digest()]).toString("base64url");
     const published = JSON.parse(

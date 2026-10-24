@@ -20,6 +20,7 @@ import { aggregateLiveness, type CanaryCheckResult, type CanaryFlightPlan } from
 import type { Env } from "../env.d.ts";
 import { ENGINE_VERSION } from "../format/version.ts";
 import { log } from "../log.ts";
+import { parseEgressAllowlist, requireEgressAllowlist } from "../notify/push-egress.ts";
 import {
   type DeliveryRecord,
   type DigestBatch,
@@ -110,7 +111,7 @@ export async function runUpdateAlertIfNew(env: Env, scheduler: DurableObjectStub
 // longer exists or is disabled is skipped for DELIVERY, but its consumed seqs are still returned so a deleted
 // channel's deferrals do not accumulate forever. A thrown path (e.g. the channel fetch threw) propagates to the
 // caller, which then does NOT clear the seqs, so they remain pending and the next tick retries them.
-async function deliverDigestBatch(env: Env, scheduler: DurableObjectStub, batch: DigestBatch, at: string, egressAllowlist: string[] | undefined): Promise<number[]> {
+async function deliverDigestBatch(env: Env, scheduler: DurableObjectStub, batch: DigestBatch, at: string, egressAllowlist: readonly string[]): Promise<number[]> {
   const chResp = await scheduler.fetch(doURL(`/notify/channel?id=${encodeURIComponent(batch.channelId)}`), { method: "GET" });
   const { channel } = (await chResp.json()) as { channel: NotifyChannel | null };
   const emission: NotifyEmission = digestEmissionFor(batch.summary, at);
@@ -150,8 +151,15 @@ export async function flushDigests(env: Env, scheduler: DurableObjectStub): Prom
     body: JSON.stringify({ nowMs }),
     headers: { "content-type": "application/json" },
   });
-  const { batches, egressAllowlist } = (await dueResp.json()) as { batches: DigestBatch[]; egressAllowlist?: string[] };
+  const { batches, egressAllowlist: answeredAllowlist } = (await dueResp.json()) as { batches: DigestBatch[]; egressAllowlist?: unknown };
   if (batches.length === 0) return;
+  // Digests send only with a readable list. Without one nothing is delivered and nothing is cleared, so the
+  // batches stay pending and the next tick retries them.
+  const egressAllowlist = parseEgressAllowlist(answeredAllowlist);
+  if (egressAllowlist === null) {
+    log("error", "digest flush skipped (non-critical): digest-due answered no egress allowlist");
+    return;
+  }
   const cleared: number[] = [];
   for (const batch of batches) {
     try {
@@ -191,9 +199,10 @@ export async function routeNotification(env: Env, scheduler: DurableObjectStub, 
       body: JSON.stringify({ emission }),
       headers: { "content-type": "application/json" },
     });
-    const { now, egressAllowlist } = (await resolveResp.json()) as { now: NotifyChannel[]; digestedCount: number; emission: NotifyEmission | null; egressAllowlist?: string[] };
+    const { now, egressAllowlist } = (await resolveResp.json()) as { now: NotifyChannel[]; digestedCount: number; emission: NotifyEmission | null; egressAllowlist?: unknown };
     if (now.length === 0) return false;
-    const records: DeliveryRecord[] = await deliverEmission(env, emission, now, egressAllowlist);
+    // An answer without the list throws into the skipped-routing path below: nothing is sent.
+    const records: DeliveryRecord[] = await deliverEmission(env, emission, now, requireEgressAllowlist(egressAllowlist, "resolve answered no egress allowlist"));
     // Record the per-channel outcomes so the DO appends history. The append is AWAITED and CHECKED: an
     // isolate that exits the moment routeNotification returns must not drop the row for an alert that WAS
     // delivered, since the pack's answer to "was our critical alert delivered?" is that row. The append is one

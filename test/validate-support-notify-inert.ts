@@ -9,7 +9,7 @@
 //
 // Run:  node test/validate-support-notify-inert.ts
 
-import { fetchNotifyConfig } from "../src/admin/support-sections-notify.ts";
+import { fetchNotifyConfig, fetchNotifyHealth } from "../src/admin/support-sections-notify.ts";
 import { verdictReached } from "./lib/verdict-guard.ts";
 
 let failures = 0;
@@ -57,6 +57,36 @@ async function main(): Promise<void> {
   // Honest absence: every rule deliverable -> rulesInert omitted entirely.
   const allHealthy = (await fetchNotifyConfig(notifyScheduler(channels, [{ channelIds: ["ch-live"] }]))) as { rulesInert?: unknown };
   ok("rulesInert is omitted when every rule can deliver (no false inert block)", allHealthy.rulesInert === undefined);
+
+  // A channel or rule list that is not JSON is a failed read. An empty inventory would read as "no channel
+  // is configured", so the gatherer throws and the pack's section reads "error".
+  const garbled = (path: string): DurableObjectStub =>
+    ({
+      async fetch(input: RequestInfo | URL): Promise<Response> {
+        const url = new URL(input instanceof Request ? input.url : String(input));
+        if (url.pathname === path) return new Response("<html>502</html>", { status: 502 });
+        if (url.pathname === "/notify/channels") return new Response(JSON.stringify(channels));
+        if (url.pathname === "/notify/rules") return new Response(JSON.stringify(rules));
+        if (url.pathname === "/notify/health") return new Response(JSON.stringify({ passSkips: 0 }));
+        return new Response("{}");
+      },
+    }) as unknown as DurableObjectStub;
+  const outcome = async (f: () => Promise<unknown>): Promise<string> => {
+    try {
+      await f();
+      return "returned";
+    } catch {
+      return "threw";
+    }
+  };
+  ok("an unreadable channel list throws and does not read as no channels", (await outcome(() => fetchNotifyConfig(garbled("/notify/channels")))) === "threw");
+  ok("an unreadable rule list throws and does not read as no rules", (await outcome(() => fetchNotifyConfig(garbled("/notify/rules")))) === "threw");
+  ok("an unreadable digest queue throws and does not read as an empty queue", (await outcome(() => fetchNotifyHealth(garbled("/notify/digest-pending")))) === "threw");
+  // The scheduler answers a fault with a JSON body and status 500. That body parses, so the status decides.
+  const http500 = (): DurableObjectStub => ({ fetch: async () => new Response(JSON.stringify({ error: "internal error", errorId: "e1" }), { status: 500 }) }) as unknown as DurableObjectStub;
+  ok("a JSON 500 on the inventory reads throws and does not read as no channels", (await outcome(() => fetchNotifyConfig(http500()))) === "threw");
+  ok("a JSON 500 on the health reads throws and does not read as an empty queue", (await outcome(() => fetchNotifyHealth(http500()))) === "threw");
+  ok("control, readable lists return", (await outcome(() => fetchNotifyConfig(garbled("/none")))) === "returned" && (await outcome(() => fetchNotifyHealth(garbled("/none")))) === "returned");
 
   console.log(failures === 0 ? "\nALL SUPPORT-NOTIFY-INERT VALIDATIONS PASS" : `\n${failures} FAILURE(S)`);
   verdictReached(failures);

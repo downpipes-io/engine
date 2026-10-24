@@ -207,7 +207,7 @@ class FakeScheduler {
         const body = JSON.parse(String(init?.body ?? "{}")) as { emission?: NotifyEmission };
         this.lastResolveEmission = body.emission ?? null;
       } catch { /* ignore */ }
-      return new Response(JSON.stringify({ now: this.channels, digestedCount: 0, emission: this.lastResolveEmission }), { status: 200, headers: { "content-type": "application/json" } });
+      return new Response(JSON.stringify({ now: this.channels, digestedCount: 0, emission: this.lastResolveEmission, egressAllowlist: [] }), { status: 200, headers: { "content-type": "application/json" } });
     }
     if (path === "/notify/record") {
       return new Response(JSON.stringify({ recorded: 1 }), { status: 200, headers: { "content-type": "application/json" } });

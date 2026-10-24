@@ -16,7 +16,7 @@ import { bodyTooLargeResponse, PRE_AUTH_MAX_BODY_BYTES, readBoundedRequestText }
 import { type PasskeyCeremony, passkeySignalName } from "./passkey-types.ts";
 import { attemptedMethod, authRateLimited, logAuthFailure, requireStepUp, logAuthCeremonySuccess } from "./router-core.ts";
 import { type AdminRuntime, doURL, recordAuthSignalEdge, schedulerStub } from "./router-helpers.ts";
-import { routeAuthChangeAlert, routeRecoveryAlert, routeSignInContextAlert } from "./router-notify.ts";
+import { routeAuthChangeAlert, routeCredentialEnrolAlert, routeRecoveryAlert, routeSignInContextAlert } from "./router-notify.ts";
 import { breakGlassRetiredViaDO, passkeyOriginAndRpId, verifyPasskeySessionViaDO } from "./router-session.ts";
 import { originFailClass, readSessionCookie, sessionClearCookie, sessionSetCookie } from "./session.ts";
 import { consumePasskeySessionMintFault } from "./test-faults.ts";
@@ -45,7 +45,7 @@ export async function handleRecovery(req: Request, env: Env, runtime?: AdminRunt
   };
   const scheduler = schedulerStub(env);
   // PER-IP pre-throttle (same fail-closed per-IP ceremony limiter as the passkey routes), BEFORE the body
-  // read, so a flood is shed early. The DO then applies the HARD per-email + per-IP recovery limit (fail
+  // read, so a flood is shed early. The DO then applies the HARD per-email-and-source + per-IP recovery limit (fail
   // closed) on top; this outer one is the cheap first line, the DO's is the authoritative one.
   const authLimited = await authRateLimited(scheduler, req, runtime);
   if (authLimited) return authLimited;
@@ -114,8 +114,8 @@ export async function handleRecovery(req: Request, env: Env, runtime?: AdminRunt
 // and the token is the thing being disposed of, not a recovery-code holder. The DO mints a fresh set,
 // invalidates all prior codes for that email, and returns the plaintext ONCE; the router returns it verbatim
 // for one-time display (it is never stored or returned again). CSRF: a regenerate is a MUTATING request that
-// can be cookie-borne (a passkey-session caller), so it is strict-Origin gated for that method, exactly like
-// the mutating admin routes.
+// can be cookie-borne (a passkey-session caller) or an Access caller, so it takes the same Origin rule as the
+// mutating admin routes.
 export async function handleRegenerate(req: Request, env: Env, runtime?: AdminRuntime): Promise<Response> {
   // fireInBackground: see handleRecovery's identical helper above.
   const fireInBackground = (task: Promise<unknown>): void => {
@@ -139,13 +139,13 @@ export async function handleRegenerate(req: Request, env: Env, runtime?: AdminRu
     logAuthFailure(verdict.method, "regenerate recovery codes: caller has no per-user email (token break-glass cannot hold recovery codes)");
     return new Response(JSON.stringify({ error: "recovery codes are per-user; sign in as a user (passkey or Access) to regenerate" }), { status: 403, headers: { "content-type": "application/json" } });
   }
-  // CSRF for the cookie (passkey-session) method on this mutating request: require a strict-Origin match,
-  // exactly like every other mutating cookie-borne route. Access/token carry an explicit header and are not
-  // ambient-credential CSRF vectors, so they are exempt (mirroring handleAdmin's conditional check).
+  // CSRF on this mutating request, the same rule as handleAdmin: a cookie-borne caller must carry an Origin that
+  // matches CONSOLE_ORIGIN, and so must an Access caller whose request carries an Origin. An Access request with
+  // no Origin, and a token caller, skip the check.
   // Records WHICH branch refused (unset CONSOLE_ORIGIN vs a foreign Origin vs no Origin at all): this is the
   // last-way-back-in path, so "regenerate recovery codes always 403s" would otherwise leave no trace in the
   // pack whatsoever. The 403 and its body are unchanged.
-  const originFault = isCookieBorneMethod(verdict.method) ? originFailClass(req, env.CONSOLE_ORIGIN) : null;
+  const originFault = isCookieBorneMethod(verdict.method) || (verdict.method === "access" && req.headers.has("origin")) ? originFailClass(req, env.CONSOLE_ORIGIN) : null;
   if (originFault !== null) {
     logAuthFailure(verdict.method, "regenerate recovery codes: cross-origin request rejected by the CSRF Origin check");
     fireInBackground(recordAuthSignalEdge(scheduler, originFault));
@@ -208,7 +208,7 @@ export async function handleRegenerate(req: Request, env: Env, runtime?: AdminRu
 // invalidate a working set on the operator's say-so alone -- the operator already completed a step-up-gated
 // enrolment ceremony (or their recovery sign-in) to reach this point, and confirm only
 // finalises what that ceremony already produced. No additional step-up is required. CSRF: still a MUTATING
-// cookie-borne request, so the same strict-Origin check applies. A confirm for an email with nothing staged
+// request, so the same Origin rule as regenerate applies. A confirm for an email with nothing staged
 // (already confirmed, none was ever staged, or a later staged mint superseded it) is a harmless 200
 // promoted:false, never a fault: the caller is already signed in and their live set is already correct
 // either way.
@@ -232,7 +232,7 @@ export async function handleConfirmStaged(req: Request, env: Env, runtime?: Admi
     logAuthFailure(verdict.method, "confirm staged recovery codes: caller has no per-user email");
     return new Response(JSON.stringify({ error: "recovery codes are per-user; sign in as a user (passkey or Access) to confirm" }), { status: 403, headers: { "content-type": "application/json" } });
   }
-  const originFault = isCookieBorneMethod(verdict.method) ? originFailClass(req, env.CONSOLE_ORIGIN) : null;
+  const originFault = isCookieBorneMethod(verdict.method) || (verdict.method === "access" && req.headers.has("origin")) ? originFailClass(req, env.CONSOLE_ORIGIN) : null;
   if (originFault !== null) {
     logAuthFailure(verdict.method, "confirm staged recovery codes: cross-origin request rejected by the CSRF Origin check");
     fireInBackground(recordAuthSignalEdge(scheduler, originFault));
@@ -258,6 +258,10 @@ export async function handleConfirmStaged(req: Request, env: Env, runtime?: Admi
 }
 
 
+// LOGOUT_REVOKE_TIMEOUT_MS bounds the wait for the DO revocation. It sits below the console's 3 s sign-out wait,
+// so a DO that never answers still gets the 503 to the console before the console gives up on its own.
+const LOGOUT_REVOKE_TIMEOUT_MS = 2500;
+
 // handleLogout serves POST /admin/auth/logout: clear the session cookie and return ok. CSRF: logout is a
 // MUTATING (state-changing) request on the ambient session cookie, so a foreign page could otherwise
 // force-log-out a signed-in user. Apply the SAME strict-Origin check as every other mutating cookie-borne
@@ -269,8 +273,11 @@ export async function handleConfirmStaged(req: Request, env: Env, runtime?: Admi
 // stateless token carries no per-session row, so the kill is the coarse revocation axis: the DO bumps this
 // identity's per-email epoch + per-subject not-before instant, so the just-logged-out token AND any copy
 // fail closed on their next request. This signs the account out of all its sessions - the correct posture
-// for a logout on an admin console with a 12h TTL. BEST-EFFORT: a missing token, a no-SCHEDULER env, or a
-// DO hiccup must never block the logout itself; the cookie is always cleared and a 200 always returned.
+// for a logout on an admin console with a 12h TTL. A missing token, a no-SCHEDULER env, or a DO hiccup never
+// blocks the logout itself: the cookie is always cleared. The answer says whether the server-side revocation
+// landed: 200 {ok:true} when it did (or there was no session to revoke), 503 {ok:false} when the DO refused,
+// failed or did not answer within LOGOUT_REVOKE_TIMEOUT_MS, so
+// the console can warn that a copy of the session may still work until it expires.
 async function handleLogout(req: Request, env: Env, runtime?: AdminRuntime): Promise<Response> {
   // fireInBackground: see handleRecovery's identical helper above.
   // Load-bearing here in particular -- see the session-termination comment below.
@@ -293,19 +300,33 @@ async function handleLogout(req: Request, env: Env, runtime?: AdminRuntime): Pro
     return new Response(JSON.stringify({ error: "csrf origin check failed" }), { status: 403, headers: { "content-type": "application/json" } });
   }
   const token = readSessionCookie(req);
+  let revoked = true;
   if (token !== null) {
     try {
-      const resp = await schedulerStub(env).fetch(doURL("/passkey/session/logout"), {
-        method: "POST",
-        body: JSON.stringify({ token, sourceIp: req.headers.get("CF-Connecting-IP") }),
-        headers: { "content-type": "application/json" },
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const timedOut = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`no answer within ${LOGOUT_REVOKE_TIMEOUT_MS} ms`)), LOGOUT_REVOKE_TIMEOUT_MS);
       });
+      let resp: Response;
+      try {
+        resp = await Promise.race([
+          schedulerStub(env).fetch(doURL("/passkey/session/logout"), {
+            method: "POST",
+            body: JSON.stringify({ token, sourceIp: req.headers.get("CF-Connecting-IP") }),
+            headers: { "content-type": "application/json" },
+          }),
+          timedOut,
+        ]);
+      } finally {
+        clearTimeout(timer);
+      }
       // THE ONE THAT MATTERS MOST ON THIS LIST. The cookie is cleared unconditionally (correctly: a
       // logout must always LOOK like it worked), so a revocation that did not land leaves the user believing
       // they are signed out while any STOLEN COPY of that session keeps working until its 12h TTL. The DO
       // answering non-2xx is the same silent failure as the fetch throwing, and neither was recorded anywhere.
       // "Was the stolen session actually revoked at logout?" now has an answer in the pack.
       if (!resp.ok) {
+        revoked = false;
         try {
           fireInBackground(recordAuthSignalEdge(schedulerStub(env), "logout-revoke-failed"));
         } catch {
@@ -314,6 +335,7 @@ async function handleLogout(req: Request, env: Env, runtime?: AdminRuntime): Pro
         log("error", `logout session-termination refused (cookie still cleared): status ${resp.status}`);
       }
     } catch (e) {
+      revoked = false;
       try {
         fireInBackground(recordAuthSignalEdge(schedulerStub(env), "logout-revoke-failed"));
       } catch {
@@ -322,8 +344,9 @@ async function handleLogout(req: Request, env: Env, runtime?: AdminRuntime): Pro
       log("error", `logout session-termination skipped (cookie still cleared): ${(e as Error).message}`);
     }
   }
-  return new Response(JSON.stringify({ ok: true }), {
-    status: 200,
+  const body = revoked ? { ok: true } : { ok: false, error: "the cookie is cleared, but the server-side session revocation was not confirmed" };
+  return new Response(JSON.stringify(body), {
+    status: revoked ? 200 : 503,
     headers: { "content-type": "application/json", "set-cookie": sessionClearCookie() },
   });
 }
@@ -344,7 +367,8 @@ async function handleLogout(req: Request, env: Env, runtime?: AdminRuntime): Pro
 // We run the SAME authorise() the main gate uses (with the same passkey-session verifier wiring), so the
 // proof here cannot diverge from the gate; only its method + verified email are forwarded (never trusted
 // as a role). The login ceremonies need none of this and forward nothing extra. A non-null stepUp Response
-// short-circuits the caller (the self-add re-auth challenge).
+// short-circuits the caller (the self-add re-auth challenge, or the 403 for an Access caller whose Origin
+// fails the CSRF Origin rule below).
 async function resolveRegisterAuth(
   req: Request,
   env: Env,
@@ -360,6 +384,19 @@ async function resolveRegisterAuth(
   // that once a first Owner exists; this also shuts it before any first Owner if the token was retired).
   const breakGlassRetired: BreakGlassRetiredResolver = () => breakGlassRetiredViaDO(scheduler);
   const verdict = await authorise(req, env, verifyPasskeySession, breakGlassRetired);
+  // CSRF, the same rule as the main admin gate (router.ts) and the recovery-codes routes above: a cookie-borne
+  // caller (passkey, OIDC, SAML session) must carry an Origin that equals CONSOLE_ORIGIN, and so must an Access
+  // caller whose request carries an Origin header (any value, including "null"). An Access request with no
+  // Origin, a token caller and the unauthenticated invite path skip the check, as they do at the main gate.
+  // The register routes run before that gate, so the rule is applied here.
+  const originFault = verdict.ok && (isCookieBorneMethod(verdict.method) || (verdict.method === "access" && req.headers.has("origin"))) ? originFailClass(req, env.CONSOLE_ORIGIN) : null;
+  if (originFault !== null) {
+    logAuthFailure(verdict.ok ? verdict.method : "access", "register: cross-origin request rejected by the CSRF Origin check");
+    const signal = recordAuthSignalEdge(scheduler, originFault);
+    if (runtime?.waitUntil) runtime.waitUntil(signal);
+    else void signal;
+    return { authExtras: {}, stepUp: new Response(JSON.stringify({ error: "csrf origin check failed" }), { status: 403, headers: { "content-type": "application/json" } }) };
+  }
   // sourceIp is the coarse provenance for the audit events a register ceremony fires (bootstrap-consumed and,
   // on EVERY completed enrolment, recovery-codes-generated). It is read from the edge CF-Connecting-IP header,
   // which is server-supplied: handlePasskey STRIPS any inbound client sourceIp off the body before merging
@@ -388,7 +425,7 @@ async function resolveRegisterAuth(
     authExtras = {
       authMethod: verdict.method,
       ...(typeof verdict.email === "string" && verdict.email.length > 0 ? { authEmail: canonicalEmail(verdict.email) } : {}),
-      bootstrapAuthorised: verdict.method === "token",
+      bootstrapAuthorised: verdict.method === "token", ...(sub === "register/finish" && verdict.method === "passkey" && readSessionCookie(req) !== null ? { authSessionToken: readSessionCookie(req) } : {}), // the DO reads the recovery marker from its own check of this cookie
     };
   }
   // The IP rides on the authorised AND the unauthenticated (invite) register paths alike. Null (no edge header)
@@ -449,7 +486,7 @@ export async function handlePasskey(req: Request, env: Env, sub: string, runtime
   // RECOVERY-CODE SIGN-IN (the ongoing admin break-glass), dispatched HERE under /admin/auth/ (BEFORE the
   // main authorise gate, like the passkey ceremonies): a user who lost their passkey presents a recovery
   // code at the sign-in screen and gets a normal signed session. It is UNAUTHENTICATED by necessity (it IS a
-  // sign-in path) and HARD rate-limited in the DO (per IP + per email, fail closed) + generic on failure, so
+  // sign-in path) and HARD rate-limited in the DO (per IP + per email and source, fail closed) + generic on failure, so
   // an oracle/brute-force gains nothing. See handleRecovery.
   if (sub === "recovery") {
     return handleRecovery(req, env, runtime);
@@ -542,8 +579,8 @@ export async function handlePasskey(req: Request, env: Env, sub: string, runtime
   // keys off the inbound body first (so a forged authMethod:"token"/bootstrapAuthorised:true can never
   // reach the DO), overwrite rp.id/origin from env, and SET the auth facts ONLY from the verified verdict.
   // inviteToken is a legitimate client field (the one-shot capability the DO re-validates), so it is kept.
-  const { rpId: _ci, origin: _co, authMethod: _cm, authEmail: _ce, bootstrapAuthorised: _cb, sourceIp: _cs, ...clientBody } = body;
-  void _ci; void _co; void _cm; void _ce; void _cb; void _cs;
+  const { rpId: _ci, origin: _co, authMethod: _cm, authEmail: _ce, bootstrapAuthorised: _cb, sourceIp: _cs, authSessionToken: _ct, ...clientBody } = body;
+  void _ci; void _co; void _cm; void _ce; void _cb; void _cs; void _ct;
   const forward = { ...clientBody, rpId: oc.rpId, origin: oc.origin, ...authExtras };
   const resp = await scheduler.fetch(doURL(doPath), {
     method: "POST",
@@ -590,7 +627,7 @@ export async function handlePasskey(req: Request, env: Env, sub: string, runtime
     // the response is fully determined, through the runtime-aware fireInBackground, so it can never delay or
     // fail the ceremony. The detail names the account and nothing about the credential.
     if (sub === "register/finish" && setCookie !== null) {
-      type FinishBody = { ok?: unknown; email?: unknown; enrolmentPath?: unknown };
+      type FinishBody = { ok?: unknown; email?: unknown; role?: unknown; enrolmentPath?: unknown; recoveredSession?: unknown };
       let enrolled: FinishBody | null;
       try {
         enrolled = JSON.parse(text) as FinishBody;
@@ -598,7 +635,7 @@ export async function handlePasskey(req: Request, env: Env, sub: string, runtime
         enrolled = null;
       }
       if (enrolled !== null && enrolled.ok === true && typeof enrolled.email === "string" && enrolled.email !== "" && enrolled.enrolmentPath === "self-add") {
-        fireInBackground(routeAuthChangeAlert(env, scheduler, "auth-credential-change", "credential-change", `A new passkey credential was enrolled for ${enrolled.email}.`));
+        fireInBackground(routeCredentialEnrolAlert(env, scheduler, enrolled.email, enrolled.recoveredSession === true, req.headers.get("CF-Connecting-IP"), enrolled.role));
       }
       // An invite redemption is the moment a role grant becomes usable, so it raises the same role-change alert
       // the grant itself raised. Without it, a link sent to the wrong hands enrols in silence.
@@ -658,9 +695,9 @@ async function recordPasskeyOutcome(scheduler: DurableObjectStub, ceremony: Pass
 // JSON.parse or DO hiccup is caught), so the finish response is always returned.
 export async function sessionCookieForFinish(env: Env, scheduler: DurableObjectStub, finishBodyText: string, priorToken?: string | null, client?: { sourceIp?: string | null; userAgent?: string | null }): Promise<string | null> {
   let parsed: unknown;
-  try {
+  try { // nosemgrep: incident-catch-returns-empty -- a finish body that is not JSON issues no session and the finish response is unchanged
     parsed = JSON.parse(finishBodyText);
-  } catch {
+  } catch { // site-fault-waiver: src/admin/router-auth-flow.ts:sessionCookieForFinish:catch:1 -- a finish body that is not JSON issues no session and the finish response is unchanged
     return null;
   }
   if (parsed === null || typeof parsed !== "object") return null;
@@ -668,7 +705,7 @@ export async function sessionCookieForFinish(env: Env, scheduler: DurableObjectS
   if (o.ok !== true) return null; // a failed/!verified ceremony issues no session
   const email = o.email;
   if (typeof email !== "string" || email.length === 0) return null;
-  try {
+  try { // nosemgrep: incident-catch-returns-empty -- the fault is logged here and the caller records passkey-session-mint-failed
     // HARNESS-ONLY: a passkey-session-mint-fail fault, if armed, forces this call down the SAME
     // catch below a real DO hiccup takes, single-shot -- the ceremony is genuinely verified (o.ok===true just
     // above, off the DO's own finish body) and the mint alone is forced to fail, so recordPasskeyOutcome's
@@ -685,7 +722,7 @@ export async function sessionCookieForFinish(env: Env, scheduler: DurableObjectS
     const issued = (await resp.json()) as { ok?: boolean; token?: string };
     if (issued.ok !== true || typeof issued.token !== "string" || issued.token.length === 0) return null;
     return sessionSetCookie(issued.token);
-  } catch (e) {
+  } catch (e) { // site-fault-waiver: src/admin/router-auth-flow.ts:sessionCookieForFinish:catch:2 -- the mint fault is logged here and the caller records passkey-session-mint-failed
     log("error", `passkey session mint skipped (non-critical, login still returned): ${(e as Error).message}`);
     return null;
   }
@@ -732,8 +769,7 @@ export const BOOTSTRAP_SUBJECT = "Set up the first Owner of your Downpipes engin
 // Cloudflare account (set the var at deploy) -> control of that inbox -> first Owner. Cross-site browser
 // abuse is bounded by the shared per-IP auth limiter and refused outright when an Origin header is present
 // and differs from CONSOLE_ORIGIN (tooling without an Origin header passes); abuse therefore degrades to,
-// at most, re-mailing the rightful owner their own link (which also REPLACES the previous one, never
-// multiplying live links).
+// at most, re-mailing the rightful owner their own link (the same live link, never a second one).
 export async function sendBootstrapLink(env: Env, scheduler: DurableObjectStub, req: Request, runtime?: AdminRuntime): Promise<Response> {
   // fireInBackground: see handleRecovery's identical helper above.
   const fireInBackground = (task: Promise<unknown>): void => {
@@ -769,7 +805,7 @@ export async function sendBootstrapLink(env: Env, scheduler: DurableObjectStub, 
   const fromRaw = typeof env.INVITE_EMAIL_FROM === "string" && env.INVITE_EMAIL_FROM.trim().length > 0 ? env.INVITE_EMAIL_FROM : env.EMAIL_FROM;
   const fromV = isCustomDomainAddress(fromRaw);
   if (!fromV.ok) return skip("from-not-configured");
-  // Mint (or REPLACE) the single first-Owner invite. The DO enforces the empty-table + unconsumed-latch
+  // Mint (or reuse) the single first-Owner invite. The DO enforces the empty-table + unconsumed-latch
   // preconditions atomically; a null token means the path is closed (an Owner exists or once existed).
   let token: string | null = null;
   try {
@@ -792,7 +828,7 @@ export async function sendBootstrapLink(env: Env, scheduler: DurableObjectStub, 
     "",
     link,
     "",
-    "Opening it asks this device for a passkey; completing that makes you the Owner and issues your recovery codes. The link works once, only for this address, and only while the engine still has no Owner; it expires in 24 hours, and requesting a new link replaces it.",
+    "Opening it asks this device for a passkey; completing that makes you the Owner and issues your recovery codes. The link works once, only for this address, and only while the engine still has no Owner; it expires in 24 hours, and requesting a link again while it is valid sends the same link.",
     "If you did not expect this email, you can ignore it. The link is only ever sent to the owner address pinned at deploy time, and pressing the button that sent it grants nothing to the presser.",
   ].join("\n");
   // The branded HTML twin carries the same sentences and the set-up link as a button; the raw link stays
@@ -802,7 +838,7 @@ export async function sendBootstrapLink(env: Env, scheduler: DurableObjectStub, 
     heading: "Set up the first Owner",
     paragraphs: [
       `This Downpipes engine has no Owner yet. The link below sets up its first Owner, bound to this address (${ownerV.address}).`,
-      "Opening it asks this device for a passkey; completing that makes you the Owner and issues your recovery codes. The link works once, only for this address, and only while the engine still has no Owner; it expires in 24 hours, and requesting a new link replaces it.",
+      "Opening it asks this device for a passkey; completing that makes you the Owner and issues your recovery codes. The link works once, only for this address, and only while the engine still has no Owner; it expires in 24 hours, and requesting a link again while it is valid sends the same link.",
       "If you did not expect this email, you can ignore it. The link is only ever sent to the owner address pinned at deploy time, and pressing the button that sent it grants nothing to the presser.",
     ],
     cta: { label: "Set up the first Owner", url: link },

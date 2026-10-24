@@ -206,8 +206,8 @@ export const AUDIT_ACTIONS = [
   // operator-attested free text (bounded, redaction class of the restore reason), never a secret. When the
   // policy is OFF this event is never written and the trail is byte-identical to before.
   "change-recorded",
-  // break-glass admin token lifecycle (single-use bootstrap + in-app disposal). bootstrap-consumed records
-  // the ONE legitimate use of the break-glass token (or the first Access/passkey Owner claim): the moment
+  // break-glass admin token lifecycle (first-Owner claim + in-app retire). bootstrap-consumed records
+  // the first-Owner claim, by the break-glass token or by the first Access/passkey Owner: the moment
   // the FIRST Owner row is created, latched so no later bootstrap can mint a second Owner. break-glass-token-
   // retired records the OWNER-ONLY in-app retire that makes the engine stop honouring the ADMIN_TOKEN bearer
   // (no redeploy). Both reuse the field-less access-policy target (who + when, never a value).
@@ -306,7 +306,7 @@ export const AUDIT_ACTIONS = [
   // passkey-invite-enrol: a passkey was enrolled through a registration invite, so a new way in now exists for
   // the invited address. The actor is the enrolling member (method passkey). Target: the field-less-secret
   // `role` kind, naming the member and the role the enrolment resolved to. Never the invite token or any key.
-  "passkey-invite-enrol",
+  "passkey-invite-enrol", "passkey-recovery-enrol", "passkey-recovery-enrol-notice", // passkey-recovery-enrol: a passkey enrolled from a recovery-code session (target `role`); passkey-recovery-enrol-notice: whether the other Owners were emailed (target `role` with `notice`: state, reason, counts); an ordinary passkey session writes neither
   // signin-factor-revoke: an operator removed EVERY way one person can
   // authenticate, across all three sign-in stores at once -- their WebAuthn credentials, their banked recovery
   // codes and their outstanding registration invites. It is deliberately NOT three audit rows, because the
@@ -564,7 +564,7 @@ export type AuditTarget =
   // expiresAt (from engine 0.3.7) is the grant's self-revoke moment, in canonical ISO form, on a role-change
   // that set a time-boxed grant. Absent means a standing grant. It lets the trail say until when an elevation
   // runs; a later lapse to viewer is a read-time fact and writes no row of its own.
-  | { kind: "role"; email: string; role: Role; expiresAt?: string }
+  | { kind: "role"; email: string; role: Role; expiresAt?: string; notice?: { state: "sent" | "partial" | "skipped" | "failed"; reason?: string; owners: number; sent: number; skipped: number; failed: number } }
   // grouprole carries only the IdP group NAME, the mapped role and, for a mapping scoped to one IdP, its
   // connId (a connection id); never a secret. The group name is the customer's own directory data, redaction-
   // safe like a downpipe id. role is the closed Role union. connId tells a scoped and a global mapping apart.

@@ -6,6 +6,8 @@
 // point. Run: node test/validate-attach.ts.
 
 import { bindingFromSource, looksLikeThisEngine, planAttach, planChange, verifyAfter, attachSources, detachSources, type LiveBinding } from "../src/admin/attach.ts";
+import { checkTokenWindow } from "../src/admin/cf-api.ts";
+import { readJsonObjectOrEmpty, readJsonOrNull } from "../src/util/json-body.ts";
 import { verdictReached } from "./lib/verdict-guard.ts";
 
 let failures = 0;
@@ -707,6 +709,30 @@ console.log("-- readDeployedBindings (post-write): a failed re-read reports the 
   let threw = "";
   try { await attachSources("tok", "acct1", "downpipe-engine", [{ type: "kv", binding: "SRC_KV_postfail", namespaceId: "n" }], postReadFailStub); } catch (e) { threw = (e as Error).message; }
   ok("a failed post-write re-read reports the quiet post-write-check message (no full diagnosis)", /re-read the engine's settings for the post-write check/.test(threw) && !/different Cloudflare account/.test(threw));
+}
+
+console.log("-- checkTokenWindow: a verify body that is not JSON leaves the window unchecked, and says so --");
+{
+  const htmlStub = (async () => new Response("<html>502 Bad Gateway</html>", { status: 502 })) as typeof fetch;
+  const notJson = await checkTokenWindow("tok", "acctH", htmlStub);
+  ok("a verify body that is not JSON gives no problem and the window-unreadable cause", notJson.problem === null && notJson.cause === "window-unreadable");
+  const throwStub = (async () => { throw new Error("egress fault"); }) as typeof fetch;
+  const threwOut = await checkTokenWindow("tok", "acctT", throwStub);
+  ok("a verify call that throws gives the same cause, so both unchecked states read alike", threwOut.problem === null && threwOut.cause === "window-unreadable" && threwOut.cause === notJson.cause);
+  const goodStub = (async () => new Response(JSON.stringify({ success: true, result: { id: "tid", status: "active" } }), { status: 200 })) as typeof fetch;
+  const good = await checkTokenWindow("tok", "acctG", goodStub);
+  ok("control, a readable active token gives no problem and no cause", good.problem === null && good.cause === undefined);
+}
+
+console.log("-- readJsonOrNull and readJsonObjectOrEmpty: a body that is not JSON is told apart from an empty one --");
+{
+  ok("readJsonOrNull: a body that is not JSON reads as null", (await readJsonOrNull(new Response("<html>"))) === null);
+  ok("readJsonOrNull: a JSON body is returned whole", JSON.stringify(await readJsonOrNull(new Response('{"success":true}'))) === '{"success":true}');
+  ok("readJsonOrNull: a JSON null stays null", (await readJsonOrNull(new Response("null"))) === null);
+  ok("readJsonObjectOrEmpty: a body that is not JSON reads as an object with no fields", Object.keys(await readJsonObjectOrEmpty(new Response("<html>"))).length === 0);
+  ok("readJsonObjectOrEmpty: an array body reads as an object with no fields", Object.keys(await readJsonObjectOrEmpty(new Response("[1,2]"))).length === 0);
+  ok("readJsonObjectOrEmpty: a JSON null body reads as an object with no fields", Object.keys(await readJsonObjectOrEmpty(new Response("null"))).length === 0);
+  ok("readJsonObjectOrEmpty: an object body is returned whole", (await readJsonObjectOrEmpty(new Response('{"sessionId":"s1"}'))).sessionId === "s1");
 }
 
 verdictReached(failures);

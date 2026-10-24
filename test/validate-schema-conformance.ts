@@ -108,6 +108,12 @@ if (downpipeRepo) {
       gate: "schema-conformance (live cross-check)",
       consequence: "the no-drift claim would be about an older canonical schema than the published one",
       exit: (code: number) => {
+        // Exit 1 is a finding (a release-tag pin behind a newer release tag), not a refusal.
+        if (code === 1) {
+          console.log("FAIL downpipe pin bump owed: the pinned release tag is older than the newest one (see above)");
+          verdictReached(1);
+          process.exit(1);
+        }
         verdictSkipped(`REFUSED, exit ${code}: the downpipe checkout at DOWNPIPE_REPO is behind its own origin/main, so nothing was concluded`);
         process.exit(code);
       },
