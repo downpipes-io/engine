@@ -28,6 +28,7 @@ import { hexEncode } from "../crypto/bytes.ts";
 import { sha384 } from "../crypto/primitives.ts";
 import type { ArtefactMeta, DeployDriver, GuardMessages, HealthGate, StepLog } from "./update-types.ts";
 import { decideKeep, msg, readBaseline, verifyAndGuard } from "./update-types.ts";
+import { deployRollbackTarget, NOT_CHECKED_TEXT, type RollbackDriver, type RollbackIdentity } from "./update-rollback-deploy.ts";
 import { compareSemver, isEngineCompatible } from "./updates.ts";
 
 export interface RampInput {
@@ -63,6 +64,7 @@ export interface RampResult {
   percentage?: number; // the live percentage the new version is serving (on "ramp-pending")
   steps: StepLog[];
   reason?: string;
+  uploadedSha384?: string; // the SHA-384 of the bytes uploaded as toVersion (recorded against that version id)
 }
 
 // rampPercentageValid bounds the opt-in ramp percentage to a real partial split (1..99 integer). 100 is not
@@ -169,7 +171,7 @@ async function rampUploadAndGate(
     return base({ outcome: "refused", fromVersion, toVersion, reason: `the gradual ramp could not be started; your engine is unchanged (still 100% on the prior version): ${msg(e)}` });
   }
 
-  return base({ outcome: "ramp-pending", fromVersion, toVersion, percentage: input.percentage, reason: `version ${rec} is now serving ${input.percentage}% of live traffic; verification is PENDING (a separate check must confirm the ramped slice is healthy before it can be trusted). Promote it to 100% or roll it back once verified. Note: a ramp serves real traffic, not an isolated preview.` });
+  return base({ outcome: "ramp-pending", fromVersion, toVersion, percentage: input.percentage, uploadedSha384: hexEncode(await sha384(input.artefact)), reason: `version ${rec} is now serving ${input.percentage}% of live traffic; verification is PENDING (a separate check must confirm the ramped slice is healthy before it can be trusted). Promote it to 100% or roll it back once verified. Note: a ramp serves real traffic, not an isolated preview.` });
 }
 
 // RampSettleArgs carries phase-1's facts (the DO's pending-ramp record) into phase 2.
@@ -177,6 +179,7 @@ export interface RampSettleArgs {
   fromVersion: string; // the rollback target (100% prior)
   toVersion: string; // the uploaded + ramped version being verified
   recommendedVersion: string; // the semver this pending record is about (NOT a Cloudflare version id)
+  fromDigest?: string; // the SHA-384 the engine recorded for fromVersion, when it has one
 }
 
 // RampSettleOutcome (phase 2, settleAfterRamp):
@@ -212,6 +215,10 @@ export interface RampSettleResult {
   canaryVerdict?: CanaryLiveness;
   steps: StepLog[];
   reason?: string;
+  // Set when the rollback re-uploaded the prior code (see SettleResult in update-apply.ts); fromVersion then
+  // names the new version id that is live.
+  rollbackIdentity?: RollbackIdentity;
+  liveSha384?: string;
 }
 
 // settleAfterRamp is the ramp's phase 2. It MUST be invoked by a genuinely separate request from the one
@@ -226,7 +233,7 @@ export interface RampSettleResult {
 // there is no evidence the ramped code is unhealthy, only that this call could not observe it. Rollback
 // remains the safe direction regardless of which slice was measured, so it is never gated on self-identity.
 // Never throws (fail-safe).
-export async function settleAfterRamp(driver: Pick<DeployDriver, "deployVersion">, gate: HealthGate, args: RampSettleArgs): Promise<RampSettleResult> {
+export async function settleAfterRamp(driver: RollbackDriver, gate: HealthGate, args: RampSettleArgs): Promise<RampSettleResult> {
   const steps: StepLog[] = [];
   const log = (step: string, ok: boolean, detail?: string): void => {
     steps.push({ step, ok, ...(detail !== undefined ? { detail } : {}) });
@@ -288,12 +295,13 @@ export async function settleAfterRamp(driver: Pick<DeployDriver, "deployVersion"
   const rollbackReason = baselineRegression && decision.keep ? `the canary regressed from alive to ${canaryVerdict} on the ramped version` : decision.reason;
   log("decision", false, rollbackReason);
   try {
-    await driver.deployVersion(fromVersion);
-    log("rollback", true, `rolled back to 100% ${fromVersion}`);
-    return base({ outcome: "rolled-back", reason: `the ramped version ${rec} did not pass verification (${rollbackReason}); the whole deployment was rolled back to 100% on the prior version. Nothing was lost and no backup or restore was affected.` });
+    const d = await deployRollbackTarget(driver, fromVersion, args.fromDigest, log);
+    log("rollback", true, `rolled back to 100% ${d.liveVersion}`);
+    const via = d.usedFallback ? ` A secret had changed since that version was live, so its code was uploaded as new version ${d.liveVersion} that keeps the current secrets. ${d.identity === "not-checked" ? NOT_CHECKED_TEXT : `Identity of the prior code: ${d.identity}.`}` : "";
+    return base({ outcome: "rolled-back", fromVersion: d.liveVersion, ...(d.identity !== undefined ? { rollbackIdentity: d.identity } : {}), ...(d.liveSha384 !== undefined ? { liveSha384: d.liveSha384 } : {}), reason: `the ramped version ${rec} did not pass verification (${rollbackReason}); the whole deployment was rolled back to 100% on the prior version. Nothing was lost and no backup or restore was affected.${via}` });
   } catch (e) {
     log("rollback", false, msg(e));
     // A live traffic split still routes to the suspect version even when the enum says "rolled-back".
-    return base({ outcome: "rollback-failed-still-split", reason: `the ramped version ${rec} did not pass verification AND the rollback to 100% prior FAILED (${msg(e)}); the deployment is STILL SPLIT and a share of live traffic is still reaching ${rec}. Re-deploy version ${fromVersion} from the Cloudflare dashboard. Your DATA and RECOVERY are unaffected (archives immutable; restore out-of-band).` });
+    return base({ outcome: "rollback-failed-still-split", reason: `the ramped version ${rec} did not pass verification AND the rollback to 100% prior FAILED (${msg(e)}); the deployment is STILL SPLIT and a share of live traffic is still reaching ${rec}. Use Roll back in the console to try again. Your DATA and RECOVERY are unaffected (archives immutable; restore out-of-band).` });
   }
 }

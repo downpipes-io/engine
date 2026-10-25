@@ -383,9 +383,9 @@ export interface RoleInvite {
 // read when present (it is the human-facing label the invite names).
 export function parseRoleEntry(bodyText: string): RoleInvite | null {
   let parsed: unknown;
-  try {
+  try { // nosemgrep: incident-catch-returns-empty -- an unreadable roles body carries no invite and the route forwards it unchanged
     parsed = JSON.parse(bodyText);
-  } catch {
+  } catch { // site-fault-waiver: src/admin/router-sources.ts:parseRoleEntry:catch:1 -- an unreadable roles body carries no invite and the route forwards it unchanged
     return null;
   }
   if (parsed === null || typeof parsed !== "object") return null;
@@ -412,7 +412,7 @@ export const MEMBER_INVITE_EMAILED_NOTICE = "This member enrolled before, so the
 export const MEMBER_INVITE_WITHHELD_NOTICE = "This member enrolled before, so a new set-up link goes only to their own address, and it could not be emailed. The member can sign in with a banked recovery code, which leads to passkey set-up. Otherwise set up invite email and change their role again to send a fresh link.";
 export function withholdMemberInvite(bodyText: string, sent: boolean): string | null {
   let parsed: unknown;
-  try {
+  try { // nosemgrep: incident-catch-returns-empty -- the fault is recorded as a site fault
     parsed = JSON.parse(bodyText);
   } catch (e) {
     // The DO answers /roles with JSON. A body that is not JSON carries no invite token, and the null return
@@ -551,9 +551,9 @@ function matchActionPath(method: string, sub: string, prefix: string): { id: str
   const idRaw = m[1]!;
   const action = m[2] as "approve" | "reject";
   let id: string;
-  try {
+  try { // nosemgrep: incident-catch-returns-empty -- an undecodable path segment matches no action route
     id = decodeURIComponent(idRaw);
-  } catch {
+  } catch { // site-fault-waiver: src/admin/router-sources.ts:matchActionPath:catch:1 -- an undecodable path segment matches no action route
     return null;
   }
   if (id.length === 0) return null;

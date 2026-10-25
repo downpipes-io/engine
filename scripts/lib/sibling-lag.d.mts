@@ -8,6 +8,8 @@ export interface MeasuredSibling {
   present: boolean;
   head: string | null;
   behind: number | null;
+  /** The release tag HEAD sits on and the newest fetched one, when HEAD is behind main and on a release tag. */
+  pin: { tag: string; newest: string } | null;
 }
 
 /**

@@ -44,8 +44,13 @@
  * run carrying the SAME formatVersion label, so a replica walk could only fail again, and the union is what
  * makes every member non-fallback by construction. The category is the sole carrier of the distinction; the
  * message is never classified on.
+ *
+ * WHY THE FIFTH MEMBER EXISTS. "usage" is an input the operator can correct before any archive byte is judged: a
+ * pinned fingerprint that is not a complete signer fingerprint, or a destination that holds no bundled
+ * signer.pub for the pin to check. It is the Go reference's usage class (exit 6), as against "integrity" for a
+ * bundled signer that fails the pin (exit 2). It stays non-fallback, like every member here.
  */
-export type IntegrityCategory = "integrity" | "freshness" | "freshness-unverifiable" | "format-unsupported";
+export type IntegrityCategory = "integrity" | "freshness" | "freshness-unverifiable" | "format-unsupported" | "usage";
 
 // A non-enumerable brand so an instance is recognised even across module-realm boundaries (a second
 // copy of this module, or a structuredClone), where `instanceof` alone can miss. isIntegrityFailure
@@ -118,6 +123,15 @@ export function formatUnsupportedError(message: string): RunIntegrityError {
 }
 
 /**
+ * usageError builds a usage-category RunIntegrityError: the operator's input cannot be used (a malformed
+ * signer fingerprint pin, or no bundled signer.pub to check a pin against). Same shape and non-fallback posture
+ * as integrityError; the category carries the Go reference's usage class apart from a failed verification.
+ */
+export function usageError(message: string): RunIntegrityError {
+  return new RunIntegrityError(message, "usage");
+}
+
+/**
  * isIntegrityFailure reports whether a caught value is a structured reader integrity/freshness
  * failure, i.e. a NON-fallback fault. It is realm-tolerant: it accepts a genuine instanceof, the
  * non-enumerable brand, or a duck-typed object carrying name "RunIntegrityError" with a category, so
@@ -128,7 +142,7 @@ export function isIntegrityFailure(e: unknown): e is RunIntegrityError {
   if (typeof e !== "object" || e === null) return false;
   const rec = e as Record<string, unknown>;
   if (rec[BRAND] === true) return true;
-  return rec.name === "RunIntegrityError" && (rec.category === "integrity" || rec.category === "freshness" || rec.category === "freshness-unverifiable" || rec.category === "format-unsupported");
+  return rec.name === "RunIntegrityError" && (rec.category === "integrity" || rec.category === "freshness" || rec.category === "freshness-unverifiable" || rec.category === "format-unsupported" || rec.category === "usage");
 }
 
 /**
@@ -149,5 +163,6 @@ export function integrityCategoryOf(e: unknown): IntegrityCategory | null {
   if (cat === "freshness") return "freshness";
   if (cat === "freshness-unverifiable") return "freshness-unverifiable";
   if (cat === "format-unsupported") return "format-unsupported";
+  if (cat === "usage") return "usage";
   return "integrity";
 }

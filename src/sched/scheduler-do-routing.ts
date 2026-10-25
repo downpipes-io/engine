@@ -315,11 +315,16 @@ export function RoutingMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
         const b = (await req.json().catch((e: unknown) => {
           noteSiteFault("sched.runlog-route-body", e);
           return {};
-        })) as { oldVerifier?: unknown };
+        })) as { oldVerifier?: unknown; pending?: unknown };
         const v = decodeVerifier(b.oldVerifier);
         if (v === null) return this.jsonStatus({ error: "oldVerifier must be the two public halves of the outgoing signer" }, 400);
+        // pending lists every destination the re-key will hand over; absent means none.
+        const begunPending = b.pending ?? [];
+        if (!Array.isArray(begunPending) || !begunPending.every((p): p is string => typeof p === "string")) {
+          return this.jsonStatus({ error: "pending must be a list of destination ids" }, 400);
+        }
         if ((await readRekeyHandover(this.state.storage)) !== null) return this.jsonStatus({ error: "a re-key hand-over is still open" }, 409);
-        await beginRekeyHandover(this.state.storage, encodeVerifier(v), Date.now());
+        await beginRekeyHandover(this.state.storage, encodeVerifier(v), Date.now(), begunPending);
         return this.json({ ok: true });
       }
       case "POST /rekey-handover/settle": {
@@ -493,7 +498,9 @@ export function RoutingMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
       case "GET /push":
         return this.json(await this.getSiemPushView());
       case "GET /push-config":
-        return this.json({ record: await this.getSiemPushRecordRaw() });
+        // egressAllowlist rides beside the record so the drain screens the stored target against the account's
+        // CURRENT operator allowlist at send time, from the same read.
+        return this.json({ record: await this.getSiemPushRecordRaw(), egressAllowlist: await this.getEgressAllowlist() });
       case "POST /push": {
         const caller = decodeCaller(req.headers.get(CALLER_HEADER));
         const body = (await req.json()) as { endpoint?: unknown; format?: unknown; authHeaderName?: unknown; authHeaderValue?: unknown; enabled?: unknown; sink?: unknown; authInUrl?: unknown; s3Target?: unknown; syslog?: unknown };
@@ -541,7 +548,7 @@ export function RoutingMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
       case "GET /otlp-push":
         return this.json(await this.getOtlpPushView());
       case "GET /otlp-push-config":
-        return this.json({ record: await this.getOtlpPushRecordRaw() });
+        return this.json({ record: await this.getOtlpPushRecordRaw(), egressAllowlist: await this.getEgressAllowlist() });
       case "POST /otlp-push": {
         const caller = decodeCaller(req.headers.get(CALLER_HEADER));
         const body = (await req.json()) as { endpoint?: unknown; authHeaderName?: unknown; authHeaderValue?: unknown; enabled?: unknown };

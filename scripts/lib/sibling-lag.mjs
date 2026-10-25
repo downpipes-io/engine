@@ -50,7 +50,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { behindOriginMain, requireFreshSiblings } from "../sibling-freshness.mjs";
+import { behindOriginMain, releasePin, requireFreshSiblings } from "../sibling-freshness.mjs";
 
 /**
  * The short HEAD sha of a checkout, or null when that cannot be read.
@@ -84,8 +84,9 @@ function headSha(repoPath) {
 export function siblingLag(name, path) {
   const p = typeof path === "string" && path !== "" ? path : null;
   const present = p !== null && existsSync(p);
-  if (!present) return { name, path: p, present: false, head: null, behind: null };
-  return { name, path: p, present: true, head: headSha(p), behind: behindOriginMain(p) };
+  if (!present) return { name, path: p, present: false, head: null, behind: null, pin: null };
+  const behind = behindOriginMain(p);
+  return { name, path: p, present: true, head: headSha(p), behind, pin: behind !== null && behind > 0 ? releasePin(p) : null };
 }
 
 /**
@@ -102,8 +103,18 @@ export function siblingLagLine(s, opts = {}) {
   const lead = opts.bare === true ? "" : `sibling  ${s.name} `;
   if (!s.present) return `${lead}NOT PRESENT at ${s.path ?? "(no path resolved)"}`;
   const head = s.head === null ? "HEAD unreadable" : `HEAD ${s.head}`;
+  // A release-tag pin is graded against the newest release tag (sibling-freshness.mjs header), so say that
+  // rather than "BEHIND", which is what made the 12 Oct log read as a stale checkout.
+  const pinned =
+    s.pin == null
+      ? null
+      : s.pin.tag === s.pin.newest
+        ? `pinned at ${s.pin.tag}, its newest release tag (${s.behind} commit(s) on main after it are not lag)`
+        : `pinned at ${s.pin.tag}, newest release tag ${s.pin.newest}: PIN BUMP OWED`;
   const lag =
-    s.behind === null
+    pinned !== null
+      ? pinned
+      : s.behind === null
       ? "lag UNKNOWN (no origin/main ref, which is not the same as up to date)"
       : s.behind === 0
         ? "0 commit(s) behind its own origin/main"
@@ -132,7 +143,7 @@ export function reportSiblings(siblings, opts = {}) {
   // another's. A bare list of siblings in a 300-member chain log is unattributable.
   log(`note  ${gate} graded against the sibling checkout(s) below, and its verdict is a function of them:`);
   for (const s of measured) log(`  ${siblingLagLine(s)}`);
-  const stale = measured.filter((s) => typeof s.behind === "number" && s.behind > 0);
+  const stale = measured.filter((s) => typeof s.behind === "number" && s.behind > 0 && s.pin == null);
   if (stale.length > 0) {
     log(`      ${stale.length} of those is behind its own origin/main, so any verdict below is about THAT tree,`);
     log("      not about the sibling's main. Fast-forward it and run again before recording this result.");

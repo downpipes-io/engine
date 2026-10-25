@@ -1,4 +1,5 @@
-// Resolve hook for `npm run lint:circular`. It gives madge's parser the TypeScript 6 compiler API.
+// Resolve hook for `npm run lint:circular` and `npm run test:mutation`. It gives madge's parser and
+// StrykerJS the TypeScript 6 compiler API.
 //
 // WHY. The "typescript" package is 7.x. Its root export holds only `version` and `versionMajorMinor`,
 // because the 7.x line ships no JavaScript compiler API. madge parses .ts files through
@@ -13,7 +14,11 @@
 // typescript (filing-cabinet, precinct and dependency-tree each nest a 5.x copy) still gets that copy.
 // The result is the resolution madge had when the root package was 6.x.
 //
+// StrykerJS core needs the same: its tsconfig preprocessor imports "typescript" and calls
+// parseConfigFileTextToJson, and it declares no typescript dependency that an npm override could redirect.
+//
 // Usage: node --import ./scripts/madge-ts6-resolve.mjs node_modules/madge/bin/cli.js <madge args>
+//        node --import ./scripts/madge-ts6-resolve.mjs node_modules/@stryker-mutator/core/bin/stryker.js run stryker.config.json
 
 import { registerHooks } from "node:module";
 import { pathToFileURL } from "node:url";

@@ -669,12 +669,12 @@ else
   # Cloudflare Email Sending has no inbox to receive the link, and must not be deadlocked):
   #   1) email link  - needs Cloudflare Email Sending; pins BOOTSTRAP_OWNER_EMAIL, the
   #      console's "Email me the set-up link" mails a 24h single-use first-Owner invite there.
-  #   2) admin token - no email; a one-time break-glass bearer pasted into the console at
-  #      sign-in claims the first Owner while the role table is still empty.
+  #   2) admin token - no email; a break-glass bearer, valid until retired, pasted into the console
+  #      at sign-in, claims the first Owner while the role table is still empty.
   echo ""
   echo "First-Owner set-up. Choose how you will claim the first Owner account:"
   echo "  1) Email link  (needs Cloudflare Email Sending)"
-  echo "  2) Admin token (no email; one-time break-glass bearer)"
+  echo "  2) Admin token (no email; break-glass bearer, valid until retired)"
   printf "Enter 1 or 2 [2]: "
   read -r BOOTSTRAP_CHOICE
 
@@ -691,14 +691,14 @@ else
   fi
 
   if [ "$BOOTSTRAP_CHOICE" != "1" ]; then
-    # Default / fallback: the no-email break-glass bootstrap. Generate a one-time token, set it
+    # Default / fallback: the no-email break-glass path. Generate a token, set it
     # as ADMIN_TOKEN, and print it ONCE (it is never echoed by wrangler and there is no copy to
     # recover later). While the role table is empty this bearer claims the first Owner; after that
     # it is a standing break-glass credential and should be retired.
     ADMIN_TOKEN_VALUE="$(openssl rand -base64 32)"
     printf "%s" "$ADMIN_TOKEN_VALUE" | npx wrangler secret put ADMIN_TOKEN
     echo ""
-    echo "One-time first-Owner admin token (shown ONCE, not stored anywhere you can read back):"
+    echo "First-Owner admin token (shown ONCE, not stored anywhere you can read back):"
     echo ""
     echo "    $ADMIN_TOKEN_VALUE"
     echo ""
@@ -706,7 +706,7 @@ else
     echo "sign-in on the sign-in page, and paste this token. While no Owner exists it claims the"
     echo "first Owner; you then enrol a passkey."
     echo ""
-    echo "POSTURE: this is a ONE-TIME bootstrap credential, not a steady-state login. Once an Owner"
+    echo "POSTURE: this token does not expire. It stays valid until you retire it. Once an Owner"
     echo "with a way back in exists (recovery codes, or a second Owner), retire it in the console"
     echo "(Security Centre > Retire break-glass token) or delete the secret"
     echo "(npx wrangler secret delete ADMIN_TOKEN). Leaving it live lets anyone with the string take admin."

@@ -27,15 +27,20 @@ Open the run against `archive/` with the identity and the signer.
 
 A positive vector opens, and each listed record restores to the bytes in `valueB64`.
 A negative vector fails: at `open` the run does not open; at `restore` the run opens
-but restoring the record fails. Either way it fails with `exitCode` (2 unverified,
+but restoring the record fails; at `signer` the reader refuses the bundled `signer.pub`
+under `options.signerFingerprint` and never opens the run (SPEC.md 9.1). Either way it fails with `exitCode` (2 unverified,
 3 incomplete, 4 plaintext, 5 stale, 6 usage).
 
 Optional fields extend this for the broader corpus:
 
 - `runId`: the run to open (defaults to the primary run id).
 - `options`: the reader options the vector needs, any of `allowStale`,
-  `allowUnverified`, `minRunlogIndex` and `checkRecoveryBundle`. Absent means verified
-  mode with no pins and no bundle check.
+  `allowUnverified`, `minRunlogIndex`, `checkRecoveryBundle` and `signerFingerprint`.
+  Absent means verified mode with no pins and no bundle check. `signerFingerprint` pins
+  the signer by the fingerprint on the recovery sheet: the reader reads the bundled
+  `signer.pub` and uses it only if its fingerprint equals this value (SPEC.md 9.1). The
+  vector's own `signer.pub` file is then not used to open the run. `allowStale`
+  acknowledges the run's age only (a non-latest run, or a log maximum below `minRunlogIndex`).
 - `labels`: honest restore-receipt labels to assert (`signatureResult`,
   `breakGlassVerified`, `recoveryBundleVerified`); a label is asserted only when present.
 - `segCount`: the number of `.seg` objects the archive must contain, proving the dedup
@@ -67,7 +72,15 @@ Negative (SPEC.md 14.3): `truncated-final-chunk`, `reordered-chunks`, `flipped-t
 `forged-capsule-wrap`, `mutated-recipient-fingerprint`, `shard-hash-mismatch`,
 `wrong-merkle-root`, `incomplete-record-count`, `absent-signature`, `bad-signature`,
 `unknown-signer`, `non-canonical-json`, `count-over-2pow53`, `in-range-count-as-string`,
-`stale-run`, `runlog-rollback`, `absent-runlog`, `recovery-bundle-tampered`.
+`null-count`, `stale-run`, `runlog-rollback`, `absent-runlog`, `recovery-bundle-tampered`.
+
+Signer pin (SPEC.md 9.1): `bundled-signer-pinned` (positive), `bundled-signer-replaced`
+(exit 2) and `bundled-signer-absent` (exit 6).
+
+Numeric and version forms: `leading-zero-count`, `negative-count`, `non-integer-count` and
+`unimplemented-minor`.
+
+The archive vectors are copied from the reader commit named in `VECTORS_COMMIT`.
 
 Deterministic known-answer: `kem-combiner-kat`, `crypto-kat`, `mlkem-kat`, `mldsa-kat`.
 
@@ -100,7 +113,7 @@ Three points carry the corpus past easy mistakes:
   would otherwise swallow it on a clean checkout while the directory looks complete
   locally. The repository `.gitignore` negates `*.key` (and `*.pem`/`*.age`) under this
   corpus path so a plain `git add` tracks each fixture; real keys elsewhere stay ignored.
-- `count-over-2pow53` and `in-range-count-as-string` are signed over the edited bytes,
+- `count-over-2pow53`, `in-range-count-as-string` and `null-count` are signed over the edited bytes,
   not byte-flipped after signing. The signature gate runs before the count check, so a
   post-sign flip would exit 2 instead of the intended 6; the generator emits the
   non-canonical count form and re-signs those exact bytes.

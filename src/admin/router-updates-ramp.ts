@@ -156,7 +156,7 @@ export async function handleRampStart(a: RampRouteArgs): Promise<Response> {
       // rampVersion above just shifted live traffic to the new version (cf-deploy.ts's ramp
       // is the same deployments-endpoint cutover as promote), the same self-redeploy that resets this DO.
       stage = "persist"; // the SPLIT is live: traffic is already reaching the ramped version
-      const pendingWritten = await recordBookkeepingAfterSelfDeploy(env, "/update-pending", { fromVersion: r.fromVersion, toVersion: r.toVersion, recommendedVersion: r.recommendedVersion, percentage: r.percentage ?? percentage, promotedAt: Date.now(), promotedBy: caller.email ?? null, ...(art.sequence !== undefined ? { channelSeq: art.sequence } : {}), ...(art.issuedAt !== undefined ? { channelIssuedAt: art.issuedAt } : {}), ...(art.artefact.sha384 ? { artefactSha384: art.artefact.sha384 } : {}) });
+      const pendingWritten = await recordBookkeepingAfterSelfDeploy(env, "/update-pending", { fromVersion: r.fromVersion, toVersion: r.toVersion, recommendedVersion: r.recommendedVersion, ...(r.uploadedSha384 ? { uploadedSha384: r.uploadedSha384 } : {}), percentage: r.percentage ?? percentage, promotedAt: Date.now(), promotedBy: caller.email ?? null, ...(art.sequence !== undefined ? { channelSeq: art.sequence } : {}), ...(art.issuedAt !== undefined ? { channelIssuedAt: art.issuedAt } : {}), ...(art.artefact.sha384 ? { artefactSha384: art.artefact.sha384 } : {}) });
       const audited = await recordAuditAfterSelfDeploy(env, caller, sourceIp, "update-promoted", { kind: "engine-state", field: "engineVersion", detail: `gradual ramp ${r.fromVersion} -> ${r.toVersion} at ${r.percentage ?? percentage}% (${r.recommendedVersion}); awaiting verification (see /update/ramp/settle)` });
       if (!pendingWritten || !audited) {
         return jsonResponse({ ...r, reason: "the gradual ramp went live but could not be fully recorded; check GET /admin/update/status and GET /admin/audit before trying again." });
@@ -189,7 +189,7 @@ export async function handleRampSettle(a: RampRouteArgs): Promise<Response> {
     const body = (await req.json()) as { token?: unknown };
     const token = typeof body.token === "string" ? body.token.trim() : "";
     const recResp = await scheduler.fetch(doURL("/update-status"), { method: "GET" });
-    const rec = (await recResp.json()) as { pending: null | { fromVersion: string; toVersion: string; recommendedVersion: string; percentage?: number; artefactSha384?: string } };
+    const rec = (await recResp.json()) as { pending: null | { fromVersion: string; toVersion: string; recommendedVersion: string; percentage?: number; artefactSha384?: string }; versionDigests?: Record<string, string> };
     if (!rec.pending || typeof rec.pending.percentage !== "number") {
       // "We kept trying to settle the ramp overnight." Every settle guard here returned a bare 400 and
       // recorded nothing at all, so the pack showed an armed-or-expired pending record and ZERO evidence that
@@ -236,12 +236,12 @@ export async function handleRampSettle(a: RampRouteArgs): Promise<Response> {
     const hgate = makeHealthGate(env, scheduler, pending.recommendedVersion);
     // settleAfterRamp can DEPLOY (its rollback to 100% prior), so from here "nothing was changed" is unsafe.
     stage = "deploy-driver";
-    const s = await settleAfterRamp(driver, hgate, { fromVersion: pending.fromVersion, toVersion: pending.toVersion, recommendedVersion: pending.recommendedVersion });
+    const s = await settleAfterRamp(driver, hgate, { fromVersion: pending.fromVersion, toVersion: pending.toVersion, recommendedVersion: pending.recommendedVersion, ...(rec.versionDigests?.[pending.fromVersion] ? { fromDigest: rec.versionDigests[pending.fromVersion] } : {}) });
     if (s.outcome === "inconclusive") {
       // Nothing changed: the pending stays armed so the caller can simply retry (a fresh dispatch has
       // its own chance of landing on the ramped slice). Not an audited state transition.
       //
-      // This is the counter's ONLY producer, deliberately. "The ramp has been pending verification
+      // This is the counter's ONLY producer for a ramp. "The ramp has been pending verification
       // for two days, how many settle attempts were inconclusive?" is the question that separates a ramp that
       // is STUCK (the dispatch never lands on the ramped slice, so no attempt can ever conclude) from a ramp
       // NOBODY HAS TRIED TO SETTLE, and the two demand opposite answers: unpick the split by hand, or press
@@ -250,9 +250,9 @@ export async function handleRampSettle(a: RampRouteArgs): Promise<Response> {
       // byte-identical pack: an armed pending record, and no evidence any attempt was ever made.
       //
       // The state this counter NAMES is "the settle ran and the pending is STILL ARMED", which is true on this
-      // branch and on no other: every other outcome below consumes the pending. That is why the plain settle no
-      // longer bumps it (it always concludes, so its bump was a routine, concluded settle incrementing the
-      // stuck-ramp signal).
+      // branch and on the plain settle's new-version guard (router-updates.ts): every other outcome consumes the
+      // pending. That is why a plain settle that decides does not bump it (a routine, concluded settle would
+      // increment the still-armed signal).
       await noteUpdateAttempt(scheduler, "settle-inconclusive");
       return jsonResponse(s);
     }
@@ -260,7 +260,7 @@ export async function handleRampSettle(a: RampRouteArgs): Promise<Response> {
     // own rollback), the same self-redeploy that resets this DO; "applied" deploys nothing here but
     // shares this call site, so both follow-up writes always use the self-redeploy-safe helpers.
     stage = "persist";
-    const settledWritten = await recordBookkeepingAfterSelfDeploy(env, "/update-settled", { outcome: s.outcome, recommendedVersion: s.recommendedVersion, fromVersion: s.fromVersion, toVersion: s.toVersion, ...(s.canaryVerdict ? { canaryVerdict: s.canaryVerdict } : {}), ...(s.canaryBaseline ? { canaryBaseline: s.canaryBaseline } : {}), ...(s.canaryBaselineReadFailed ? { canaryBaselineReadFailed: true } : {}), at: Date.now(), by: caller.email ?? null, ...(s.reason ? { reason: s.reason } : {}), ...(pending.artefactSha384 ? { artefactSha384: pending.artefactSha384 } : {}), ...(s.outcome === "applied" && typeof pending.percentage === "number" ? { percentage: pending.percentage } : {}) });
+    const settledWritten = await recordBookkeepingAfterSelfDeploy(env, "/update-settled", { outcome: s.outcome, recommendedVersion: s.recommendedVersion, fromVersion: s.fromVersion, toVersion: s.toVersion, ...(s.rollbackIdentity ? { rollbackIdentity: s.rollbackIdentity } : {}), ...(s.liveSha384 ? { liveSha384: s.liveSha384 } : {}), ...(s.canaryVerdict ? { canaryVerdict: s.canaryVerdict } : {}), ...(s.canaryBaseline ? { canaryBaseline: s.canaryBaseline } : {}), ...(s.canaryBaselineReadFailed ? { canaryBaselineReadFailed: true } : {}), at: Date.now(), by: caller.email ?? null, ...(s.reason ? { reason: s.reason } : {}), ...(pending.artefactSha384 ? { artefactSha384: pending.artefactSha384 } : {}), ...(s.outcome === "applied" && typeof pending.percentage === "number" ? { percentage: pending.percentage } : {}) });
     const audited = await recordAuditAfterSelfDeploy(env, caller, sourceIp, s.outcome === "applied" ? "update-applied" : "update-rolled-back", { kind: "engine-state", field: "engineVersion", detail: `gradual ramp settle: ${s.fromVersion} -> ${s.outcome === "applied" ? s.toVersion : s.fromVersion} (canary ${s.canaryVerdict ?? "unknown"}, baseline ${s.canaryBaseline ?? "unknown"}${s.canaryBaselineReadFailed ? " unread" : ""})${pending.artefactSha384 ? `; sha384 ${pending.artefactSha384}` : ""}` });
     if (!settledWritten || !audited) {
       return jsonResponse({ ...s, reason: "the gradual ramp was settled but could not be fully recorded; check GET /admin/update/status and GET /admin/audit before trying again." });

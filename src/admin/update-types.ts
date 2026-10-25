@@ -154,6 +154,26 @@ export function decideKeep(_baseline: import("../canary/types.ts").CanaryLivenes
   return { keep: true, reason: `the canary could not complete a flight in the post-deploy window (${verdict}) and the self-check was inconclusive (the same Durable Object reset the swap causes); keeping the verified new version -- the hourly canary will confirm it, or roll it back and alert if it proves unhealthy` };
 }
 
+// DeployRefusal is the error a driver throws when Cloudflare refuses a deployment. It carries the numeric
+// Cloudflare error codes so the rollback can tell "a secret changed since that version was live" (10220)
+// from any other refusal without reading prose.
+export class DeployRefusal extends Error {
+  readonly codes: number[];
+  constructor(message: string, codes: number[]) {
+    super(message);
+    this.name = "DeployRefusal";
+    this.codes = codes;
+  }
+}
+
+// CF_SECRET_CHANGED is the Cloudflare code for a deployment of an older version that is refused because a
+// secret changed after that version was live.
+export const CF_SECRET_CHANGED = 10220;
+
+export function isSecretChangedRefusal(e: unknown): boolean {
+  return e instanceof DeployRefusal && e.codes.includes(CF_SECRET_CHANGED);
+}
+
 // msg normalises a thrown value to a redaction-safe string. Shared by every orchestration module.
 export function msg(e: unknown): string {
   return e instanceof Error ? e.message : String(e);

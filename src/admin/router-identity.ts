@@ -175,7 +175,7 @@ async function requireLiveBreakGlassToken(req: Request, env: Env, scheduler: Dur
 async function lockoutRefusalIfLastSignInPath(env: Env, scheduler: DurableObjectStub, connId: string, runtime?: AdminRuntime): Promise<Response | null> {
   if (connId.length === 0) return null;
   let pf: { lastEnabledConnection?: boolean; passkeyOwnerEnrolled?: boolean; recoveryReady?: boolean };
-  try {
+  try { // nosemgrep: incident-catch-returns-empty -- the fault is recorded as lockout-guard-failopen
     const resp = await scheduler.fetch(doURL("/idp/conn/removal-preflight"), { method: "POST", body: JSON.stringify({ connId }), headers: { "content-type": "application/json" } });
     pf = (await resp.json()) as typeof pf;
   } catch {
@@ -807,8 +807,8 @@ export async function handleIdentity(ctx: RouterCtx): Promise<Response | null> {
       // replacement). Reuse the token already on the request when present (it is stable across the session and
       // a session slide does not rotate it) so the console's cached value keeps matching; otherwise mint a
       // fresh one. It is returned in the body AND set as the readable __Host- cookie in the same response, so
-      // the console reads one and the browser holds the other. The token/access methods carry no ambient
-      // cookie a foreign page could ride, so they get neither (mirroring the Origin guard's exemption).
+      // the console reads one and the browser holds the other. The token and access methods are not cookie-borne
+      // here, so they get neither (mirroring the Origin guard's scope).
       if (isCookieBorneMethod(caller.method)) {
         const existing = readCsrfCookie(req);
         const csrf = existing !== null && existing.length > 0 ? existing : mintCsrfToken();

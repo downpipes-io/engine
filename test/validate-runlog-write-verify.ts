@@ -488,6 +488,18 @@ async function main(): Promise<void> {
     const junkBody = await junk.get(RUNLOG);
     const direct = await messageOf(() => verifyRunlogForWrite(junk, junkBody, v));
     ok(`verifyRunlogForWrite refuses it the same way (${direct.reason})`, direct.reason === "unparsable");
+    // A correctly signed RUNLOG line that holds a count field as JSON null is refused on load as unparsable: the
+    // run stops, nothing is re-signed, and the stored bytes are unchanged.
+    const nullLine = utf8(`{"index":1,"runId":"${R(1)}","downpipeId":"${DP}","time":"2026-10-02T04:00:00.000Z","recordCount":null,"prevRunId":null,"status":"active"}\n`);
+    const nulled = new MemoryDestination();
+    await signedAt(nulled, nullLine);
+    const sigBefore = Buffer.from((await nulled.get(RUNLOG_SIG))!.body).toString("hex");
+    const n = await messageOf(() => appendRunlog(nulled, signer, entryAt(2, R(2))));
+    ok(`a signed RUNLOG line with a null recordCount is refused as unparsable (${n.reason})`, n.reason === "unparsable");
+    ok("...and nothing is re-signed or rewritten", Buffer.compare(Buffer.from((await nulled.get(RUNLOG))!.body), Buffer.from(nullLine)) === 0 && Buffer.from((await nulled.get(RUNLOG_SIG))!.body).toString("hex") === sigBefore);
+    const nullIndex = new MemoryDestination();
+    await signedAt(nullIndex, utf8(`{"index":null,"runId":"${R(1)}","downpipeId":"${DP}","time":"t","recordCount":1,"prevRunId":null,"status":"active"}\n`));
+    ok("...and a null index is refused the same way", (await messageOf(() => appendRunlog(nullIndex, signer, entryAt(2, R(2))))).reason === "unparsable");
     // CONTROL: a signed, parsable one passes.
     const okd = new MemoryDestination();
     await signedAt(okd, good.runlog);

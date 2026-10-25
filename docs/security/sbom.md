@@ -60,9 +60,9 @@ Because the range is already exact, a plain `npm install` cannot move the resolv
 
 ### 4.1 TypeScript repos (engine and console)
 
-Tool: `@cyclonedx/cyclonedx-npm`, major version 4 (CycloneDX schema 1.6, JSON output)
+Tool: `@cyclonedx/cyclonedx-npm`, version 4.2.1 (CycloneDX schema 1.6, JSON output)
 
-Each repo has a `scripts/generate-sbom.sh` that runs the tool as `npx --yes @cyclonedx/cyclonedx-npm@4`, so no install step is needed. See `engine/scripts/generate-sbom.sh` and `console/scripts/generate-sbom.sh`.
+Each repo has a `scripts/generate-sbom.sh` that runs the tool through `npx --yes`, so no install step is needed. See `engine/scripts/generate-sbom.sh` and `console/scripts/generate-sbom.sh`. Each script pins the exact version (`@cyclonedx/cyclonedx-npm@4.2.1`) and passes `--output-reproducible`. That flag drops the random serial number and the wall-clock timestamp, so two builds of one commit give the same SBOM bytes.
 
 The script passes `--package-lock-only`, so the tool reads `package-lock.json` and produces a CycloneDX BOM. The script also passes `--omit dev`, which limits the inventory to the runtime dependencies (the three `@noble` libraries and `@noble/ciphers`). That is the appropriate scope for an SBOM representing the deployed artefact.
 

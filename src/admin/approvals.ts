@@ -31,6 +31,7 @@ import { canonicalJSON } from "../format/canonjson.ts";
 import type { GovernanceRefusalReason } from "../sched/sched-fault-ledger.ts";
 // The plan hash binds the resolved cf-config surface allow-list, which is derived from the live
 // registry so that adding a writer re-arms outstanding approvals automatically.
+import { cfIdFault } from "../sources/cf-config-core.ts";
 import { CF_CONFIG_SURFACES } from "../sources/cf-config-surfaces.ts";
 import { PROVEN_WRITE_SURFACES } from "../sources/cf-config-write-generated.ts";
 import { selectorPrefixFault } from "../sources/selector.ts";
@@ -340,8 +341,23 @@ export function restoreTargetFault(target: unknown): string | null {
 
 // restoreRequestFault is the request-shape check the restore routes run before the role gate: the selector
 // prefixes (selectorPrefixFault), then the target shape (restoreTargetFault). It returns the 400 text or null.
-export function restoreRequestFault(req: Pick<RestoreRequest, "include" | "exclude" | "target">): string | null {
-  return selectorPrefixFault(req.include ?? [], req.exclude ?? []) ?? restoreTargetFault(req.target);
+export function restoreRequestFault(req: Pick<RestoreRequest, "include" | "exclude" | "target"> & Partial<Pick<RestoreRequest, "cfConfig" | "mediaRestore">>): string | null {
+  return selectorPrefixFault(req.include ?? [], req.exclude ?? []) ?? restoreTargetFault(req.target) ?? restoreCloudflareIdFault(req);
+}
+
+// restoreCloudflareIdFault refuses a cfConfig or mediaRestore leg whose accountId or zoneId is not a
+// Cloudflare id (32 lower-case hex). These ids go into Cloudflare API paths. The account id must be present;
+// the empty string marks a disabled leg.
+function restoreCloudflareIdFault(req: Partial<Pick<RestoreRequest, "cfConfig" | "mediaRestore">>): string | null {
+  for (const leg of ["cfConfig", "mediaRestore"] as const) {
+    const v: unknown = req[leg];
+    if (v === undefined || v === null) continue;
+    if (typeof v !== "object" || Array.isArray(v)) return `${leg} must be an object`;
+    const o = v as Record<string, unknown>;
+    const f = cfIdFault(`${leg}.accountId`, o.accountId, true) ?? (leg === "cfConfig" ? cfIdFault("cfConfig.zoneId", o.zoneId) : null);
+    if (f !== null) return f;
+  }
+  return null;
 }
 
 // restorePlanBinding builds the PlanBinding from a restore request. It is the only builder: restorePlanHash

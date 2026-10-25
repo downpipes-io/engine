@@ -91,10 +91,10 @@ export function crossAccountRefusalReason(legs: CrossAccountWarning[]): string {
 // permission to proceed quietly.
 export function originZoneFrom(identityBytes: Uint8Array | null): string | null {
   if (identityBytes === null) return null;
-  try {
+  try { // nosemgrep: incident-catch-returns-empty -- null means not verifiable and the caller then makes the operator confirm
     const v = JSON.parse(new TextDecoder().decode(identityBytes)) as { zoneId?: unknown };
     return typeof v.zoneId === "string" && v.zoneId !== "" ? v.zoneId : null;
-  } catch {
+  } catch { // site-fault-waiver: src/admin/restore-cross-account.ts:originZoneFrom:catch:1 -- null means not verifiable and the caller then makes the operator confirm
     return null;
   }
 }

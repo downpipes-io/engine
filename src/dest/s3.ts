@@ -420,9 +420,9 @@ export class S3Destination implements Destination {
   // isolate memory via its error response. Swallowed to "" on any hiccup (a bound-exceeded read included),
   // exactly as the unbounded resp.text().catch(() => "") this replaces already did on a network fault.
   private async errorBodyOf(resp: Response): Promise<string> {
-    try {
+    try { // nosemgrep: incident-catch-returns-empty -- an unreadable error body is left out of the message and the failure it explains is already raised
       return new TextDecoder().decode(await drainResponseBounded(resp, MAX_DEST_TEXT_BYTES, "s3 error body"));
-    } catch {
+    } catch { // site-fault-waiver: src/dest/s3.ts:S3Destination.errorBodyOf:catch:1 -- an unreadable error body is left out of the message and the failure it explains is already raised
       return "";
     }
   }

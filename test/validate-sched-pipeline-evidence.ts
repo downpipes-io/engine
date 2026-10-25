@@ -543,24 +543,21 @@ async function testDeadAuthSignalProducers(): Promise<void> {
     scanClean("people-screen authSignals", sig);
   }
 
-  // --- invite-redeem-refused-token-mismatch. The bootstrap slot is ONE fixed key that minting OVERWRITES, so
-  // re-sending the first-Owner link silently invalidates every earlier one. The owner clicks the link in the
-  // older email, is told it is invalid, and a perfectly valid invite is sitting in the slot. That is not an
-  // absent invite and not an expired one: it is its own remedy ("open the newest email").
+  // --- invite-redeem-refused-token-mismatch. A live first-Owner invite is found and the presented secret is
+  // not it (a mistyped or altered link). That is not an absent invite and not an expired one: it is its own
+  // remedy ("open the link from the latest email").
   // THE REAL ENTRY POINT: peekBootstrapInvite, which register/begin calls with the token from the link.
   {
     const { storage, stub } = makeScheduler();
     const first = await stub.mintBootstrapInvite("owner@example.com", Date.now());
-    check("bootstrap invite: the first link mints (behaviour unchanged)", typeof first === "string" && first.length > 0);
-    const second = await stub.mintBootstrapInvite("owner@example.com", Date.now()); // the RE-SEND overwrites the slot
-    check("bootstrap invite: the re-send mints a NEW link (behaviour unchanged)", typeof second === "string" && second !== first);
-    const stale = await stub.peekBootstrapInvite(first as string, Date.now());
-    check("bootstrap invite: the SUPERSEDED link is still refused (behaviour unchanged)", stale === null);
-    const live = await stub.peekBootstrapInvite(second as string, Date.now());
+    check("bootstrap invite: the first link mints", typeof first === "string" && first.length > 0);
+    const wrong = await stub.peekBootstrapInvite(`${first as string}x`, Date.now());
+    check("bootstrap invite: a presented secret that is not the live one is refused", wrong === null);
+    const live = await stub.peekBootstrapInvite(first as string, Date.now());
     check("bootstrap invite: the current link still works (the recorder did not fire on a legitimate redeem)", live === "owner@example.com");
 
     const sig = await authSignals(storage);
-    check("the superseded first-Owner link is recorded as a TOKEN MISMATCH (not an absent invite)", (sig["invite-redeem-refused-token-mismatch"]?.count ?? 0) === 1);
+    check("the wrong first-Owner secret is recorded as a TOKEN MISMATCH (not an absent invite)", (sig["invite-redeem-refused-token-mismatch"]?.count ?? 0) === 1);
     vocabClean("bootstrap-invite authSignals", sig, AUTH_SIGNAL_SET);
     scanClean("bootstrap-invite authSignals", sig);
   }

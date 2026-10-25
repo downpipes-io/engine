@@ -35,7 +35,7 @@ export function makeRunlogReader(caches: RunlogReaderCaches, signer: Signer): Ru
       const b = caches.runlogBodies.get(key) ?? null;
       return b !== null && b.length === 0 ? "absent" : b;
     }
-    try {
+    try { // nosemgrep: incident-catch-returns-empty -- the fault is recorded as a site fault
       const rl = await dest.get(RUNLOG_KEY);
       caches.runlogBodies.set(key, rl ? rl.body : new Uint8Array(0));
       return rl ? rl.body : "absent";

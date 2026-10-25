@@ -9,7 +9,9 @@
 
 import { sweepOidcStates, sweepSamlRequests } from "../admin/oidc-store.ts";
 import type { PasskeyChallenge } from "../admin/passkey.ts";
+import { ENGINE_VERSION } from "../format/version.ts";
 import { log } from "../log.ts";
+import { closeSealFaultSpans, openSealFaultSpans, SEAL_FAULT_SPANS_KEY, type SealFaultSpans } from "../seal/seal-fault-spans.ts";
 import { flushAuditFolds } from "./audit-fold.ts";
 import { isValidTimeZone, nextFireAfter, parseCron } from "./cron.ts";
 import { allDestinationIds, failedDestinationOf, gapBelowSeed, nextReplAnchors, setHeldAbove } from "./destinations.ts";
@@ -19,6 +21,7 @@ import { readRunlogIndexHeld, runlogSeedHold } from "./runlog-seed.ts";
 import { classifyReplicationReason, isMalformedDestList, recordAlertingHealth, recordCompletionDiagnostics, recordContractFault, recordDestResolveFallback } from "./sched-fault-ledger.ts";
 import { deferPastBlackoutsResolved, jitteredCadence, scheduleTimeZone } from "./schedule-window.ts";
 import { sweepOidcGroups } from "./oidc-groups-record.ts";
+import { sweepRateWindows } from "./rate-window-sweep.ts";
 import { ALARM_MIN_DELAY_MS, CONFIG_SCHEMA_VERSION, type CompleteRunReq, type DestReplState, DO_LIST_MAX_PAGES, DO_LIST_PAGE, type DownpipeConfig, type DownpipeSchedule, type DownpipeState, DUE_INDEX_HEALTH_KEY, DUE_INDEX_PREFIX, DUE_RECONCILE_TICK_KEY, INFLIGHT_LEASE_MS, migrateOrRejectConfig, OIDC_GROUPS_PREFIX, PASSKEY_CHALLENGE_PREFIX, pad16, RECONCILE_EVERY_TICKS, REPL_REASON_SITES, type ReplReasonSite, RING_CAP, type RunHistoryEntry, SCHED_HEALTH_KEY, type SchedulerDOCtor, SEEN_ASSERTION_PREFIX, STATE_REFUSED_PREFIX, STATE_REFUSED_READ_CAP, STEPUP_TOKEN_PREFIX, STORAGE_FAULT_KEY, StateRefusedError, TICK_LEASE_MS, TICK_OUTCOME_KEY } from "./scheduler-do-base.ts";
 import { appendTickOutcome, classifyStorageFault, EMPTY_SCHED_HEALTH, EMPTY_STORAGE_FAULTS, newULID, nowMillisISO, type StorageFaultCounter, schedHealthView, stateRefusalView, type TickOutcome, type TickReport } from "./scheduler-helpers.ts";
 import type { BlackoutResolve, CronResolve, CronResolveClass, SchedHealthCounters, StateRefusal } from "./types.ts";
@@ -638,6 +641,7 @@ export function SchedulerCoreMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
         ...(prev?.holdsFrom !== undefined ? { holdsFrom: prev.holdsFrom } : {}),
         lastOk: r.ok,
         lastAttemptAt: Date.now(),
+        engineVersion: ENGINE_VERSION,
       };
       const gap = r.seedRing !== undefined && typeof r.index === "number" && gapBelowSeed(r.seedRing, r.destinationId, next.holdsIndex, r.index);
       if (r.ok && r.runId && typeof r.index === "number" && r.index > next.holdsIndex && !gap) {
@@ -656,6 +660,24 @@ export function SchedulerCoreMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
       if (!r.ok && r.reason && (REPL_REASON_SITES as readonly string[]).includes(r.reasonSite ?? "")) next.reasonSite = r.reasonSite as ReplReasonSite;
       map[r.destinationId] = next;
       await this.state.storage.put(key, map);
+      // Replication back to ok closes the fault spans for this destination: clearedAt says the fault stopped.
+      // A span covers every downpipe that posted it, so the other downpipes it lists are read first: a span
+      // stays open while any of them still records a failed attempt on this destination. The reads happen only
+      // when an open span exists for the destination, which is the recovery after a fault, not the steady state.
+      if (r.ok) {
+        const spans = await this.state.storage.get<SealFaultSpans>(SEAL_FAULT_SPANS_KEY);
+        const open = openSealFaultSpans(spans, r.destinationId, next.lastAttemptAt);
+        if (open.length > 0) {
+          const stillFailing = new Set<string>();
+          for (const other of new Set(open.flatMap((s) => s.downpipeIds ?? []))) {
+            if (other === id) continue;
+            const theirs = (await this.state.storage.get<Record<string, DestReplState>>(`repl:${other}`))?.[r.destinationId];
+            if (theirs !== undefined && theirs.lastOk !== true) stillFailing.add(other);
+          }
+          const closed = closeSealFaultSpans(spans, r.destinationId, next.lastAttemptAt, stillFailing);
+          if (closed !== undefined) await this.state.storage.put(SEAL_FAULT_SPANS_KEY, closed);
+        }
+      }
     }
 
     // acquireTickLease is the cron driver's SINGLE-FLIGHT guard. drive() (the scheduled() body) takes it
@@ -800,6 +822,8 @@ export function SchedulerCoreMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
         // Stamp a bare group list with migratedAt and delete it 14 days later. Delete a group record not refreshed for 90 days.
         // Remove once the migration window has closed: the bare group-list form is read only during it.
         await sweepOidcGroups(this.state.storage, OIDC_GROUPS_PREFIX, nowMs);
+        // Fixed-window rate counters (ratelimit: and recovery-rate:) whose window has ended, and malformed rows.
+        await sweepRateWindows(this.state.storage, nowMs);
         // Session ref and single-revocation rows past their exp.
         await this.sweepSessionRecords(nowMs);
         await flushAuditFolds(this.state, (d) => this.appendAudit(d)); // pending refused-attempt counts (audit-fold.ts)

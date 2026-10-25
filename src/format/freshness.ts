@@ -365,9 +365,9 @@ export interface ChainAnomaly {
  * other way. Never throws: an anomaly must be recorded even if the digest cannot be computed.
  */
 export async function runlogDigestField(bytes: Uint8Array): Promise<{ digest?: string }> {
-  try {
+  try { // nosemgrep: incident-catch-returns-empty -- an anomaly is recorded without its digest when the digest cannot be computed
     return { digest: hexEncode(await sha384(bytes)).slice(0, 12) };
-  } catch {
+  } catch { // site-fault-waiver: src/format/freshness.ts:runlogDigestField:catch:1 -- an anomaly is recorded without its digest when the digest cannot be computed
     return {};
   }
 }

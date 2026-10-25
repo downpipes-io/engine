@@ -9,7 +9,9 @@ import type { Destination } from "../dest/types.ts";
 import type { Env } from "../env.d.ts";
 import { loadSigner, sealRecipientsFor } from "../keys-env.ts";
 import { REASON_DESTINATION_ACCESS } from "../restore-reasons.ts";
-import { accountInDiscoveryScope, type DiscoveryScopeConfig } from "../sched/config-validate.ts";
+import { accountInDiscoveryScope, ENV_ONLY_SCOPE_REFUSAL, type DiscoveryScopeConfig } from "../sched/config-validate.ts";
+import { engineScopeAccount } from "../sched/engine-scope-account.ts";
+import { zoneRefused } from "../sources/zone-account.ts";
 import type { DownpipeConfig, DownpipeState } from "../sched/scheduler-do.ts";
 import { effectiveCfConfigSelector } from "../sources/cf-config-discovery.ts";
 import type { Selector } from "../sources/types.ts";
@@ -296,16 +298,20 @@ export async function cfConfigToken(
   // wrong account. Fetched separately from the token above: accountsSeen/selected are not part of
   // resolveDiscoveryToken's return, which every OTHER caller of it only ever needed the token from (kept
   // that way so the token resolution stays the ONE shared place, per its own header comment). A null
-  // discovery config (env/IaC-only token) is a no-op (accountInDiscoveryScope), matching the fallback above.
+  // discovery config (env/IaC-only token) allows only the engine's own account (accountInDiscoveryScope).
   const accountId = state.config.source.accountId;
   if (typeof accountId === "string" && accountId !== "") {
     const cfg = ((await (await scheduler.fetch(doURL("/sources/discovery-config"), { method: "GET" })).json()) as { config?: DiscoveryScopeConfig | null }).config ?? null;
-    if (!accountInDiscoveryScope(accountId, cfg)) {
+    if (!accountInDiscoveryScope(accountId, cfg, cfg === null ? await engineScopeAccount(env, scheduler) : null)) {
       // TYPED so the pack can say "this run failed because its account is outside the discovery scope"
       // rather than "run failed". NO name rides: the only candidate label here is the customer's account id,
       // which this evidence deliberately never carries (the code alone is the remedy).
-      throw new ConfigFaultError("account-scope-excluded", `accountId "${accountId}" is not one of the discovery-selected Cloudflare accounts; ask the owner to re-select it under Sources`);
+      throw new ConfigFaultError("account-scope-excluded", cfg === null ? `accountId "${accountId}" is outside the discovery scope: ${ENV_ONLY_SCOPE_REFUSAL}` : `accountId "${accountId}" is not one of the discovery-selected Cloudflare accounts; ask the owner to re-select it under Sources`);
     }
+  }
+  // The zone must belong to the same account: the zone surfaces read /zones/<zoneId> with the account-wide token.
+  if (token !== null && state.config.source.type === "cf-config" && (await zoneRefused(token, state.config.source))) {
+    throw new ConfigFaultError("account-scope-excluded", "the zoneId is not a zone of the source's account; ask the owner to correct the zone under Sources");
   }
   return token ?? undefined;
 }

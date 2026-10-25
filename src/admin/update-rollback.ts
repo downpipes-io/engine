@@ -9,6 +9,7 @@
 import type { CanaryLiveness } from "../canary/types.ts";
 import type { DeployDriver, HealthGate, StepLog } from "./update-types.ts";
 import { liveSingleVersion, msg } from "./update-types.ts";
+import { deployRollbackTarget, NOT_CHECKED_TEXT, type RollbackIdentity } from "./update-rollback-deploy.ts";
 import { isEngineCompatible } from "./updates.ts";
 
 // PAIRED_ROLLBACK_COPY is the exact, normative one-line copy the console shows
@@ -46,6 +47,9 @@ export interface StandaloneRollbackArgs {
   // The caller (the router) reads it from the persisted update lifecycle record; the orchestration does not
   // invent it. An empty/absent value yields a clean "no-target" (never a blind deploy).
   toVersion: string;
+  // recordedDigest is the SHA-384 the engine recorded for the target version, when it has one. It is used only
+  // when Cloudflare refuses the plain deploy because a secret changed (see update-rollback-deploy.ts).
+  recordedDigest?: string;
 }
 
 export interface StandaloneRollbackResult {
@@ -55,6 +59,12 @@ export interface StandaloneRollbackResult {
   canaryVerdict?: CanaryLiveness;
   steps: StepLog[];
   reason?: string;
+  // liveVersion is the version id that is live after a rollback: the target, or a new version holding the
+  // target's code when a secret changed since the target was live.
+  liveVersion?: string;
+  // identity is present only when the prior code was re-uploaded; liveSha384 is the digest of that code.
+  identity?: RollbackIdentity;
+  liveSha384?: string;
 }
 
 // runStandaloneRollback reverts the engine to a RECORDED known-good version, independent of any in-flight
@@ -122,14 +132,17 @@ export async function runStandaloneRollback(driver: DeployDriver, gate: HealthGa
     return base({ outcome: "already", fromVersion, reason: `the engine is already running version ${toVersion}; nothing was changed.` });
   }
 
-  // 3. Deploy the known-good version (atomic). A failure leaves the prior version live (clean no-op).
+  // 3. Deploy the known-good version (atomic). A failure leaves the prior version live (clean no-op). When
+  //    Cloudflare refuses because a secret changed, the prior code goes live as a new version instead.
+  let deployed: Awaited<ReturnType<typeof deployRollbackTarget>>;
   try {
-    await driver.deployVersion(toVersion);
-    log("deploy-known-good", true, toVersion);
+    deployed = await deployRollbackTarget(driver, toVersion, args.recordedDigest, log);
   } catch (e) {
-    log("deploy-known-good", false, msg(e));
     return base({ outcome: "failed", fromVersion, reason: `could not roll back to version ${toVersion} (the previously-live version is still serving; Cloudflare deploys are atomic, so nothing was half-applied): ${msg(e)}` });
   }
+  const identityNote = deployed.identity === "not-checked" ? ` ${NOT_CHECKED_TEXT}` : deployed.identity !== undefined ? ` Identity of the prior code: ${deployed.identity}.` : "";
+  const via = deployed.usedFallback ? `a secret changed since that version was live, so its code was uploaded as new version ${deployed.liveVersion} that keeps the current secrets.${identityNote} ` : "";
+  const landed: Partial<StandaloneRollbackResult> = { liveVersion: deployed.liveVersion, ...(deployed.identity !== undefined ? { identity: deployed.identity } : {}), ...(deployed.liveSha384 !== undefined ? { liveSha384: deployed.liveSha384 } : {}) };
 
   // 4. Canary-verify the rollback landed healthy on the NOW-LIVE known-good code. This must run on the
   //    now-live version (the router calls it over its service binding after the deploy, exactly like settle).
@@ -142,9 +155,9 @@ export async function runStandaloneRollback(driver: DeployDriver, gate: HealthGa
     log("canary-verify", false, `the canary flight errored after the rollback: ${msg(e)}`);
   }
   if (canaryVerdict === "alive") {
-    return base({ outcome: "reverted", fromVersion, canaryVerdict, reason: `rolled back to the known-good version ${toVersion}; the canary sings on it. Your data and backups were never affected.` });
+    return base({ outcome: "reverted", fromVersion, canaryVerdict, ...landed, reason: `${via}rolled back to the known-good version ${toVersion}; the canary sings on it. Your data and backups were never affected.` });
   }
   // The rollback deployed but the canary could not confirm it. We do NOT auto-re-roll (rolling a known-good
   // rollback forward again is not obviously safer); surface it honestly for the operator. Data/recovery safe.
-  return base({ outcome: "reverted-unverified", fromVersion, canaryVerdict, reason: `rolled back to version ${toVersion}, but the canary could not confirm it healthy (${canaryVerdict}); investigate from the console. Your DATA and RECOVERY are unaffected (archives are immutable and restore is out-of-band).` });
+  return base({ outcome: "reverted-unverified", fromVersion, canaryVerdict, ...landed, reason: `${via}rolled back to version ${toVersion}, but the canary could not confirm it healthy (${canaryVerdict}); investigate from the console. Your DATA and RECOVERY are unaffected (archives are immutable and restore is out-of-band).` });
 }

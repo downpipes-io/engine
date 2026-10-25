@@ -192,9 +192,9 @@ export function passkeyOriginAndRpId(env: Env): { origin: string; rpId: string }
   const origin = typeof env.CONSOLE_ORIGIN === "string" ? env.CONSOLE_ORIGIN.trim() : "";
   if (origin.length === 0) return null;
   let host: string;
-  try {
+  try { // nosemgrep: incident-catch-returns-empty -- an unparseable origin gives null and the passkey routes then fail closed with 501
     host = new URL(origin).hostname;
-  } catch {
+  } catch { // site-fault-waiver: src/admin/router-session.ts:passkeyOriginAndRpId:catch:1 -- an unparseable origin gives null and the passkey routes then fail closed with 501
     return null;
   }
   if (host.length === 0) return null;
@@ -213,7 +213,7 @@ export function passkeyOriginAndRpId(env: Env): { origin: string; rpId: string }
 // silently downgrading to the token path. It NEVER throws (the DO fetch is guarded), so the auth path cannot
 // 500 on a session check.
 export async function verifyPasskeySessionViaDO(scheduler: DurableObjectStub, token: string, onSlide?: (token: string) => void): Promise<{ email: string; subject: string; method: AuthMethod; connId: string | null; tokenFp: string | null; groups: string[] } | null> {
-  try {
+  try { // nosemgrep: incident-catch-returns-empty -- the fault is recorded as session-verify-unavailable and the request is denied
     const resp = await scheduler.fetch(doURL("/passkey/session/verify"), {
       method: "POST",
       body: JSON.stringify({ token }),

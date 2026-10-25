@@ -118,7 +118,7 @@ async function main(): Promise<void> {
   const reqAccess = async (email: string, method: string, path: string, body?: unknown): Promise<Request> =>
     new Request(`https://engine.example${path}`, {
       method,
-      headers: { "cf-access-jwt-assertion": await tokenFor(email), "content-type": "application/json", origin: "https://engine.example" },
+      headers: { "cf-access-jwt-assertion": await tokenFor(email), "content-type": "application/json" },
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
     });
 

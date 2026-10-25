@@ -183,18 +183,18 @@ async function main(): Promise<void> {
       { sourceType: "kv", name: "kv-key", value: utf8("kv-value"), namespace: NS, descriptor: { kvMetadata: { a: "b" }, kvExpiration: 4102444800 } },
       { sourceType: "r2", name: "obj.txt", value: utf8("r2-value"), bucket: "bkt", descriptor: { r2HttpMetadata: { contentType: "text/plain" }, r2CustomMetadata: { cm: "1" } } },
       { sourceType: "d1", name: DB, value: d1Body },
-      { sourceType: "secrets", name: "session-secret", value: utf8("s3cr3t"), account: "acct-1" },
-      { sourceType: "workers", name: "api", value: utf8("export default {}"), account: "acct-1" },
-      { sourceType: "workers", name: "api/settings", value: utf8(JSON.stringify({ bindings: [], reprovisionChecklist: [{ name: "TOKEN", type: "secret_text" }] })), account: "acct-1" },
-      { sourceType: "workers", name: "api/versions", value: utf8(JSON.stringify([])), account: "acct-1" },
-      { sourceType: "workers", name: "api/schedules", value: utf8(JSON.stringify([{ cron: "0 * * * *" }])), account: "acct-1" },
-      { sourceType: "images", name: "img1", value: utf8(JSON.stringify({ id: "img1" })), account: "acct-1" },
-      { sourceType: "images", name: "img1/blob", value: utf8("PNG-BYTES"), account: "acct-1" },
-      { sourceType: "stream", name: "vid1", value: utf8(JSON.stringify({ uid: "vid1" })), account: "acct-1" },
-      { sourceType: "stream", name: "vid1/video.mp4", value: utf8("MP4-BYTES"), account: "acct-1" },
-      { sourceType: "stream", name: "vid1/captions/en", value: utf8("WEBVTT"), account: "acct-1" },
-      { sourceType: "artifacts", name: "ns/repo", value: utf8(JSON.stringify({ repo: "r" })), account: "acct-1" },
-      { sourceType: "artifacts", name: "ns/repo/blob/abc", value: utf8("git-object"), account: "acct-1" },
+      { sourceType: "secrets", name: "session-secret", value: utf8("s3cr3t"), account: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1" },
+      { sourceType: "workers", name: "api", value: utf8("export default {}"), account: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1" },
+      { sourceType: "workers", name: "api/settings", value: utf8(JSON.stringify({ bindings: [], reprovisionChecklist: [{ name: "TOKEN", type: "secret_text" }] })), account: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1" },
+      { sourceType: "workers", name: "api/versions", value: utf8(JSON.stringify([])), account: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1" },
+      { sourceType: "workers", name: "api/schedules", value: utf8(JSON.stringify([{ cron: "0 * * * *" }])), account: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1" },
+      { sourceType: "images", name: "img1", value: utf8(JSON.stringify({ id: "img1" })), account: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1" },
+      { sourceType: "images", name: "img1/blob", value: utf8("PNG-BYTES"), account: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1" },
+      { sourceType: "stream", name: "vid1", value: utf8(JSON.stringify({ uid: "vid1" })), account: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1" },
+      { sourceType: "stream", name: "vid1/video.mp4", value: utf8("MP4-BYTES"), account: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1" },
+      { sourceType: "stream", name: "vid1/captions/en", value: utf8("WEBVTT"), account: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1" },
+      { sourceType: "artifacts", name: "ns/repo", value: utf8(JSON.stringify({ repo: "r" })), account: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1" },
+      { sourceType: "artifacts", name: "ns/repo/blob/abc", value: utf8("git-object"), account: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1" },
     ],
     windowStart: "2026-06-07T00:00:00.000Z",
     windowEnd: "2026-06-07T00:00:01.000Z",
@@ -260,7 +260,7 @@ async function main(): Promise<void> {
 
   // ---- APPLY, with a media token ----
   const up = uploaderDouble();
-  const applied = (await runRestoreUnderTest(env(), { runId: RUN, confirm: true, mediaRestore: { token: "edit", accountId: "acct-1" } }, null, { mediaUploaderFactory: () => up.uploader })) as RestoreResult;
+  const applied = (await runRestoreUnderTest(env(), { runId: RUN, confirm: true, mediaRestore: { token: "edit", accountId: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1" } }, null, { mediaUploaderFactory: () => up.uploader })) as RestoreResult;
   console.log("\nAPPLY with a media edit token:");
   console.log(`    ok=${applied.ok} restored=${applied.recordsRestored} failures=${applied.failures.length}`);
   console.log(`    mediaRestored: ${JSON.stringify(applied.mediaRestored ?? [])}`);

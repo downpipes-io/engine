@@ -11,7 +11,7 @@ import { LICENCE_SHAPE_REFUSAL } from "../admin/licence.ts";
 import { compareSemver } from "../admin/updates.ts";
 import { SELECTABLE_TOKEN_SOURCE_TYPES } from "./config-validate.ts";
 import { recordAdminRefusal, recordConfigCoercion, recordRefusal } from "./sched-fault-ledger.ts";
-import { AuthError, DISCOVERY_KEY, type DiscoveryAccountSeen, type DiscoveryConfig, ENGINE_ACCOUNT_VERIFIED_KEY, LICENCE_ACTIVATION_REFUSAL_KEY, LICENCE_KEY, type LicenceActivationRefusalState, type LicenceTokenRecord, type SchedulerDOCtor, UPDATE_HISTORY_CAP, UPDATE_KEY, type UpdateLast, type UpdatePending, type UpdateRecord, type VerifiedEngineAccount } from "./scheduler-do-base.ts";
+import { AuthError, DISCOVERY_KEY, type DiscoveryAccountSeen, type DiscoveryConfig, ENGINE_ACCOUNT_VERIFIED_KEY, LICENCE_ACTIVATION_REFUSAL_KEY, LICENCE_KEY, type LicenceActivationRefusalState, type LicenceTokenRecord, type SchedulerDOCtor, UPDATE_HISTORY_CAP, UPDATE_KEY, UPDATE_VERSION_DIGEST_CAP, type UpdateLast, type UpdatePending, type UpdateRecord, type VerifiedEngineAccount } from "./scheduler-do-base.ts";
 
 // CF_API_TOKEN_RE is the single shape check for a pasted Cloudflare API token: the printable
 // token-character set, bounded 20..300. Named at module scope so the bound is not an opaque inline
@@ -56,7 +56,7 @@ function stickyUpdateFields(rec: UpdateRecord): Partial<UpdateRecord> {
     ...(rec.lastConsole != null ? { lastConsole: rec.lastConsole } : {}),
     ...(rec.history != null ? { history: rec.history } : {}),
     ...(rec.lastChannelSeq != null ? { lastChannelSeq: rec.lastChannelSeq } : {}),
-    ...(rec.lastChannelIssuedAt != null ? { lastChannelIssuedAt: rec.lastChannelIssuedAt } : {}),
+    ...(rec.lastChannelIssuedAt != null ? { lastChannelIssuedAt: rec.lastChannelIssuedAt } : {}), ...(rec.versionDigests != null ? { versionDigests: rec.versionDigests } : {}),
   };
 }
 
@@ -307,7 +307,7 @@ export function AccountConfigMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
     // setDiscoveryAccounts (an operator HANDING the engine a credential or a choice), this is the engine
     // recording a fact it just proved to ITSELF against the live Cloudflare API; the caller is the
     // router's own post-write bookkeeping (observeAttachSideEffects, the update-apply "promoted" arms),
-    // never a request body an outside caller controls. NEVER OVERWRITTEN once set: the account a running
+    // never a request body an outside caller controls. NEVER OVERWRITTEN once set (a deploy-var record naming another account excepted, as the live CF_ACCOUNT_ID wins): the account a running
     // Worker script lives in cannot change under it, so a second call (every later attach/apply) is a
     // cheap idempotent no-op, not a new audit row each time. A blank/malformed accountId is dropped
     // silently (accountId stays null in the return; nothing is stored) rather than refused with a throw,
@@ -316,9 +316,9 @@ export function AccountConfigMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
     async recordVerifiedEngineAccount(req: { accountId?: unknown; via?: unknown }): Promise<{ accountId: string | null }> {
       const accountId = typeof req.accountId === "string" ? req.accountId.trim() : "";
       if (accountId === "") return { accountId: null };
-      const via: VerifiedEngineAccount["via"] = req.via === "update-apply" ? "update-apply" : "attach";
+      const via: VerifiedEngineAccount["via"] = req.via === "update-apply" ? "update-apply" : req.via === "deploy-var" ? "deploy-var" : "attach";
       const existing = await this.getVerifiedEngineAccount();
-      if (existing !== null) return { accountId: existing.accountId }; // already proven; never overwritten
+      if (existing !== null && !(via === "deploy-var" && existing.accountId.toLowerCase() !== accountId.toLowerCase())) return { accountId: existing.accountId }; // kept; only a different CF_ACCOUNT_ID replaces it
       const record: VerifiedEngineAccount = { accountId, verifiedAt: Date.now(), via };
       await this.state.storage.put(ENGINE_ACCOUNT_VERIFIED_KEY, record);
       // actorMethod "engine" (AuditActorMethod's widening for exactly this shape, see audit-types.ts and
@@ -461,7 +461,7 @@ export function AccountConfigMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
       // stale queued-console intent on a superseded pending goes with it: the new pending carries its OWN
       // consoleQueued when its apply asked for the console). The sticky fields (floors + freshness watermark
       // + console history) are carried forward, then the freshness pair is advanced (later-wins spread).
-      const next: UpdateRecord = { pending: p, last: rec.last, ...(rec.lastAlertedVersion != null ? { lastAlertedVersion: rec.lastAlertedVersion } : {}), ...stickyUpdateFields(rec), ...advance };
+      const next: UpdateRecord = { pending: p, last: rec.last, ...(rec.lastAlertedVersion != null ? { lastAlertedVersion: rec.lastAlertedVersion } : {}), ...stickyUpdateFields(rec), ...advance, ...withVersionDigest(rec, p.toVersion, p.uploadedSha384) };
       await this.state.storage.put(UPDATE_KEY, next);
       return next;
     }
@@ -542,6 +542,7 @@ export function AccountConfigMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
         ...stickyUpdateFields(rec),
         ...floorFields,
         ...advance,
+        ...(last.outcome === "rolled-back" ? withVersionDigest(rec, last.fromVersion, last.liveSha384) : {}),
         ...(abortedConsoleRecord !== undefined ? { lastConsole: abortedConsoleRecord } : {}),
         history: abortedConsoleRecord !== undefined ? [...history, abortedConsoleRecord].slice(-UPDATE_HISTORY_CAP) : history,
       };
@@ -623,4 +624,13 @@ export function AccountConfigMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
       return { shouldAlert: true };
     }
   };
+}
+
+// withVersionDigest returns the digest map with versionId -> sha384 added (newest last), bounded to the cap.
+// An empty id or digest changes nothing.
+function withVersionDigest(rec: UpdateRecord, versionId: unknown, digest: unknown): Partial<UpdateRecord> {
+  if (typeof versionId !== "string" || versionId.trim() === "" || typeof digest !== "string" || digest.trim() === "") return {};
+  const { [versionId]: _drop, ...rest } = rec.versionDigests ?? {};
+  const entries = Object.entries({ ...rest, [versionId]: digest.trim().toLowerCase() }).slice(-UPDATE_VERSION_DIGEST_CAP);
+  return { versionDigests: Object.fromEntries(entries) };
 }

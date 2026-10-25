@@ -21,6 +21,7 @@ import type { AuthMethod, Role } from "../src/admin/identity.ts";
 import { fetchConfigEvents } from "../src/admin/support-sections-audit.ts";
 import { fetchDestResolution } from "../src/admin/support-sections-config.ts";
 import { fetchReplication } from "../src/admin/support-sections-seal.ts";
+import { joinDestResolution } from "../src/admin/support-dest-join.ts";
 import { applyDestIoTimeouts, projectDestIoTimeouts } from "../src/dest/dest-io-attribution.ts";
 import { DestIo, flushDestIo, pendingDestIoTimeouts, resetPendingDestIo } from "../src/dest/dest-io.ts";
 import type { Env } from "../src/env.d.ts";
@@ -174,6 +175,64 @@ async function main(): Promise<void> {
   const rows = repl?.["dp-removed"] ?? [];
   ok("a not-configured row names target-resolution as its site", rows.find((r) => r.id === "gone")?.reasonSite === "target-resolution");
   ok("an out-of-vocabulary site is dropped at the DO", rows.find((r) => r.id === s3Id)?.reason === "unreachable" && rows.find((r) => r.id === s3Id)?.reasonSite === undefined);
+
+  console.log("-- F2. a stored row that cannot be projected is counted, and an HTTP error reply is a read fault --");
+  const destStub = (status: number, body: unknown): DurableObjectStub => ({ fetch: async () => new Response(JSON.stringify(body), { status }) }) as unknown as DurableObjectStub;
+  const goodRow = { id: "good", endpointHost: "s3.example.com", bucket: "b1", addressing: "path" };
+  const badRow = { id: "bad", endpointHost: "s3.example.com", bucket: "a/b", addressing: "vhost" };
+  const healthyDr = (await fetchDestResolution(R2_ENV, destStub(200, { destinations: [goodRow] }))) as Record<string, unknown>;
+  ok("control, every row projects: no destinationRowsDropped and no destinationsUnavailable", healthyDr.destinationRowsDropped === undefined && healthyDr.destinationsUnavailable === undefined);
+  const droppedDr = (await fetchDestResolution(R2_ENV, destStub(200, { destinations: [goodRow, badRow] }))) as Record<string, unknown>;
+  ok("one row that cannot be projected is counted: destinationRowsDropped is 1", droppedDr.destinationRowsDropped === 1);
+  ok("the count carries no bucket name, and the projected list holds only the row that projects", !JSON.stringify(droppedDr).includes("a/b") && (droppedDr.destinations as unknown[]).length === 1);
+  const faultDr = (await fetchDestResolution(R2_ENV, destStub(500, { error: "internal error", errorId: "e1" }))) as Record<string, unknown>;
+  ok("a JSON 500 from the roster read is destinationsUnavailable, not an empty roster", faultDr.destinationsUnavailable === true);
+
+  console.log("-- H. the current resolution is joined onto each red row, replica fault and span --");
+  {
+    // The recorded case: destination "deploy" is red and faulting as not-configured while its current resolution is ok.
+    const resolution = [
+      { id: "deploy", stored: true, namedBy: 1, branch: "deploy-env-binding", ok: true },
+      { id: "gone", stored: false, namedBy: 1, branch: "missing", ok: false, reason: "not-configured", cause: "build-threw" },
+    ];
+    const parts = {
+      downpipes: [{ id: "dp1", replication: { destinations: [
+        { id: "deploy", ok: false, reason: "not-configured" },
+        { id: "gone", ok: false, reason: "not-configured" },
+        { id: "unlisted", ok: false, reason: "unreachable" },
+        { id: "origin", ok: true },
+      ] } }, { id: "dp2" }],
+      sealFaults: [
+        { kind: "replica-target-fault", destinationId: "deploy", replicaReason: "not-configured" },
+        { kind: "replica-target-fault", destinationId: "unlisted", replicaReason: "unreachable" },
+        { kind: "replica-target-fault", replicaReason: "unreachable" },
+        { kind: "lease-lost-abandon", destinationId: "deploy" },
+      ],
+      sealFaultSpans: { spans: [
+        { kind: "replica-target-fault", destinationId: "deploy", reason: "not-configured", count: 2 },
+        { kind: "replica-target-fault", destinationId: "unlisted", reason: "unreachable", count: 1 },
+        { kind: "lease-lost-abandon", count: 1 },
+      ], overflow: 0 },
+    };
+    const before = JSON.stringify(parts);
+    const out = joinDestResolution({ resolution }, parts);
+    const dests = (out.downpipes[0] as { replication: { destinations: Array<Record<string, unknown>> } }).replication.destinations;
+    const sf = out.sealFaults as Array<Record<string, unknown>>;
+    const sp = (out.sealFaultSpans as { spans: Array<Record<string, unknown>> }).spans;
+    const want = { branch: "deploy-env-binding", ok: true };
+    ok("the red replication row for deploy carries the ok resolution beside it", JSON.stringify(dests[0]!.resolution) === JSON.stringify(want));
+    ok("the replica-target-fault row for deploy carries the same resolution", JSON.stringify(sf[0]!.resolution) === JSON.stringify(want));
+    ok("the span for deploy carries the same resolution", JSON.stringify(sp[0]!.resolution) === JSON.stringify(want));
+    ok("a refused resolution carries its closed reason and no cause", JSON.stringify(dests[1]!.resolution) === JSON.stringify({ branch: "missing", ok: false, reason: "not-configured" }));
+    ok("an id absent from the list reads not-listed on a row, a fault and a span", dests[2]!.resolution === "not-listed" && sf[1]!.resolution === "not-listed" && sp[1]!.resolution === "not-listed");
+    ok("a replica fault with no destination id reads not-listed", sf[2]!.resolution === "not-listed");
+    ok("a green replication row gets no resolution", !("resolution" in dests[3]!));
+    ok("a non-replica fault row gets none, and a span with no destination id gets none", !("resolution" in sf[3]!) && !("resolution" in sp[2]!));
+    ok("a downpipe with no replication block is unchanged", JSON.stringify(out.downpipes[1]) === JSON.stringify({ id: "dp2" }));
+    ok("the join leaves its input untouched", JSON.stringify(parts) === before);
+    const none = joinDestResolution({}, parts);
+    ok("with no resolution list (the section faulted) no row gets a claim", JSON.stringify(none) === before);
+  }
 
   console.log("-- G. redaction over the whole section --");
   noSentinel("destResolution", dr2);

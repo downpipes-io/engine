@@ -4,8 +4,7 @@
 // sibling ./scheduler-do-passkey-invites.ts (PasskeyInvitesMixin), kept in its own file so neither module
 // exceeds the size guardrail. Both layer over a base whose `this` is SchedulerDOSurface, so the ceremonies
 // issue + single-use consume challenges, resolve the registration authority and bootstrap the first Owner
-// through `this` (the login ceremony reaches the bounding helpers here through `this` too). The
-// account-takeover fix (the BOUND email is derived from the proof, never the client field), the single-use
+// through `this` (the login ceremony reaches the bounding helpers here through `this` too). The account-takeover fix (the BOUND email is derived from the proof, never the client field), the single-use
 // invite/challenge consumption, the empty-table + bootstrap-latch checks, the clone-detection signCount
 // persistence and the recovery-code mint on enrolment all hold across both files: dispatch and `this`
 // binding are identical, and no storage key, route, status code, response body or auth gate differs
@@ -14,6 +13,7 @@
 import { webauthnFaultOf } from "../admin/diag-records.ts";
 import { passkeySubject, type Role, type RoleEntry, roleSubjectKey } from "../admin/identity.ts";
 import { CHALLENGE_TTL_MS, excludeCredentialsFor, type PasskeyCred, PasskeyError, type PasskeyUser, PUBKEY_CRED_PARAMS, errId as passkeyErrId, randomChallengeB64, userHandleFor, type VerifiedRegistration, verifyRegistration } from "../admin/passkey.ts";
+import { verifySessionClassified } from "../admin/session.ts";
 import { rosterRefusesEnrolment } from "../admin/signin-factors.ts";
 import { b64urlDecode, b64urlEncode } from "../crypto/bytes.ts";
 import { log } from "../log.ts";
@@ -398,9 +398,9 @@ export function PasskeyMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
   // success, and ONLY on the bootstrap path writes the Owner `role:` entry. The verified identity is the
   // BOUND email; the response carries it plus whether the caller was bootstrapped.
   async passkeyRegisterFinish(
-    body: { email?: unknown; credential?: unknown; rpId?: unknown; origin?: unknown; displayName?: unknown; inviteToken?: unknown; authMethod?: unknown; authEmail?: unknown; bootstrapAuthorised?: unknown; sourceIp?: unknown },
+    body: { email?: unknown; credential?: unknown; rpId?: unknown; origin?: unknown; displayName?: unknown; inviteToken?: unknown; authMethod?: unknown; authEmail?: unknown; bootstrapAuthorised?: unknown; sourceIp?: unknown; authSessionToken?: unknown },
   ): Promise<
-    | { ok: true; email: string; bootstrapped: boolean; role: Role; recoveryCodes: string[]; recoveryCodesPending: boolean; enrolmentPath: "bootstrap" | "invite" | "self-add" }
+    | { ok: true; email: string; bootstrapped: boolean; role: Role; recoveryCodes: string[]; recoveryCodesPending: boolean; enrolmentPath: "bootstrap" | "invite" | "self-add"; recoveredSession?: true }
     | { ok: false; reason: string; errorId?: string }
   > {
     // The coarse source IP for the bootstrap-consumed + recovery-codes-generated audit events on this
@@ -573,6 +573,25 @@ export function PasskeyMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
           target: { kind: "role", email, role },
         });
       }
+      // A self-add made from a session that a recovery code minted turns a spent single-use code into a standing
+      // passkey. The session's own recovery marker (the one step-up reads) says so; it is read from the cookie the
+      // DO verifies here, so the router's word is not trusted. An ordinary passkey session carries no marker.
+      let recoveredSession = false;
+      if (auth.path === "self-add" && typeof body.authSessionToken === "string") {
+        const verified = await verifySessionClassified(await this.sessionSigningKey(), body.authSessionToken, now);
+        recoveredSession = !("fault" in verified) && verified.recovered && verified.email === email;
+      }
+      if (recoveredSession) {
+        await this.appendAudit({
+          actorSubject: subject,
+          actorEmail: email,
+          actorMethod: "passkey",
+          sourceIp,
+          action: "passkey-recovery-enrol",
+          outcome: "success",
+          target: { kind: "role", email, role },
+        });
+      }
       // RECOVERY CODES: a completed enrolment mints a fresh single-use set for THIS email and returns the
       // plaintext ONCE for display (the router passes it straight back to the client; it is never stored or
       // returned again). A bootstrap or invite enrolment has NO prior record to protect, so it mints straight
@@ -608,7 +627,7 @@ export function PasskeyMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
       // enrolmentPath is the DO's PROVEN classification of this enrolment (bootstrap | invite | self-add), so the
       // router can gate the credential-change alert on a fact the DO established rather than on
       // recoveryCodesPending, which is a recovery-code state and says nothing about who enrolled (V6.3.7).
-      return { ok: true, email, bootstrapped, role, recoveryCodes, recoveryCodesPending, enrolmentPath: auth.path };
+      return { ok: true, email, bootstrapped, role, recoveryCodes, recoveryCodesPending, enrolmentPath: auth.path, ...(recoveredSession ? { recoveredSession: true as const } : {}) };
     } catch (e) {
       const res = this.coarsePasskeyError("register/finish", e);
       await recordCeremonyError(this.state.storage, "register/finish", e instanceof PasskeyError ? e.reason : null, res.errorId);

@@ -96,7 +96,7 @@ import { isValidRunId } from "../format/ulid.ts";
 import { callerHeaders, gate, jsonError, jsonResponse, rateLimited, recordAudit } from "./router-core.ts";
 import { doURL, type RouterCtx } from "./router-helpers.ts";
 import { recordAuditAccepted } from "./router-audit.ts";
-import { callerCan } from "./identity.ts";
+import { callerCan } from "./identity.ts"; import { readJsonObjectOrEmpty } from "../util/json-body.ts";
 
 // RETENTION_PRUNE_MAX_RUNS bounds how many runs one candidate/apply call can carry, mirroring the
 // ATTEST_VERIFY_BATCH_MAX cap on the sibling attend route: a single request must not be able to fan out an
@@ -401,7 +401,7 @@ export async function handleRetentionPrune(ctx: RouterCtx): Promise<Response | n
     case "POST /retention-prune/candidate": {
       const denied = gate(caller, "restore.verify");
       if (denied) return denied;
-      const body = (await req.json().catch(() => ({}))) as { downpipeId?: unknown };
+      const body = (await readJsonObjectOrEmpty(req)) as { downpipeId?: unknown };
       const downpipeId = typeof body.downpipeId === "string" ? body.downpipeId : "";
       if (downpipeId === "") return jsonError("downpipeId required", 400);
       const limited = await rateLimited(scheduler, caller);
@@ -446,7 +446,7 @@ export async function handleRetentionPrune(ctx: RouterCtx): Promise<Response | n
     case "POST /retention-prune/request": {
       const denied = gate(caller, "restore.request");
       if (denied) return denied;
-      const body = (await req.json().catch(() => ({}))) as { downpipeId?: unknown; reason?: unknown };
+      const body = (await readJsonObjectOrEmpty(req)) as { downpipeId?: unknown; reason?: unknown };
       const downpipeId = typeof body.downpipeId === "string" ? body.downpipeId : "";
       if (downpipeId === "") return jsonError("downpipeId required", 400);
       const limited = await rateLimited(scheduler, caller);
@@ -491,7 +491,7 @@ export async function handleRetentionPrune(ctx: RouterCtx): Promise<Response | n
         await recordAudit(scheduler, caller, sourceIp, "retention-prune", "denied", { kind: "downpipe", id: "" });
         return denied;
       }
-      const body = (await req.json().catch(() => ({}))) as { downpipeId?: unknown; batch?: unknown; previewOnly?: unknown };
+      const body = (await readJsonObjectOrEmpty(req)) as { downpipeId?: unknown; batch?: unknown; previewOnly?: unknown };
       const downpipeId = typeof body.downpipeId === "string" ? body.downpipeId : "";
       if (downpipeId === "") return jsonError("downpipeId required", 400);
       const batch = Array.isArray(body.batch) ? body.batch : [];

@@ -42,6 +42,17 @@ import { checkUpdates, loadVerifiedChannel, normaliseRiskClass, RISK_CLASSES } f
 // in one place rather than buried in the handler body.
 const SETTLE_TTL_MS = 60 * 60 * 1000;
 
+// SETTLE_VERSION_WAIT_MS bounds how long the atomic settle waits for the promoted version to answer. For
+// some seconds after a promote the platform can still route a request to the previous version's code, and
+// that code can prove nothing about the promoted build. Inside this window a settle answered by any version
+// other than the pending's recommendedVersion decides nothing and changes nothing. After it, the settle
+// decides as it does on the promoted version, so a pending verification never stays armed for want of a
+// matching version.
+export const SETTLE_VERSION_WAIT_MS = 15 * 60 * 1000;
+// The fixed parts of that answer, named so a client can be checked against them.
+export const SETTLE_INCONCLUSIVE_OUTCOME = "inconclusive";
+export const SETTLE_INCONCLUSIVE_REASON = "old-version-answering";
+
 // resolveTrustedRampTarget supplies verifyAndGuard's record-rollback-target step with the
 // ONE split shape it may safely trust instead of refusing forever: a still-live, already-settled ramp
 // awaiting its documented promote-to-100% (a plain POST /update/apply). Called ONLY after
@@ -180,7 +191,7 @@ export async function handleUpdates(ctx: RouterCtx): Promise<Response | null> {
       // console can show what is actually protected next to what the licence grants. computeEstateRollup
       // is independently fail-safe (a DO or aggregation fault resolves to null, never a throw); the .catch
       // here is belt-and-braces so an estate problem can never turn a healthy licence read into a failure.
-      const estate = await computeEstateRollup(scheduler).catch(() => null);
+      const estate = await computeEstateRollup(scheduler).catch(() => null /* site-fault-waiver: src/admin/router-updates.ts:handleUpdates:catch-promise:1 -- computeEstateRollup already resolves its own faults to null and the licence read does not depend on the estate */); // nosemgrep: incident-catch-returns-empty -- computeEstateRollup already resolves its own faults to null
       return new Response(JSON.stringify({ ...status, estate }), { headers: { "content-type": "application/json" } });
     }
     // POST /licence ACTIVATES (token) or CLEARS (token:null) the assurance licence FROM THE CONSOLE, no
@@ -529,7 +540,7 @@ export async function handleUpdates(ctx: RouterCtx): Promise<Response | null> {
           // audit detail (the hash-chained audit alone then answers "which content hash was promoted",
           // even if the lifecycle record is later superseded).
           stage = "persist"; // the promote LANDED: the engine is live on the new version from here on
-          const pendingWritten = await recordBookkeepingAfterSelfDeploy(env, "/update-pending", { fromVersion: p.fromVersion, toVersion: p.toVersion, recommendedVersion: p.recommendedVersion, ...(p.canaryBaseline ? { canaryBaseline: p.canaryBaseline } : {}), ...(p.canaryBaselineReadFailed ? { canaryBaselineReadFailed: true } : {}), riskClass, promotedAt: Date.now(), promotedBy: caller.email ?? null, sourceBindingsBefore, ...(art.sequence !== undefined ? { channelSeq: art.sequence } : {}), ...(art.issuedAt !== undefined ? { channelIssuedAt: art.issuedAt } : {}), ...(art.artefact.sha384 ? { artefactSha384: art.artefact.sha384 } : {}), ...(p.readback !== undefined ? { readback: p.readback } : {}) });
+          const pendingWritten = await recordBookkeepingAfterSelfDeploy(env, "/update-pending", { fromVersion: p.fromVersion, toVersion: p.toVersion, recommendedVersion: p.recommendedVersion, ...(p.canaryBaseline ? { canaryBaseline: p.canaryBaseline } : {}), ...(p.canaryBaselineReadFailed ? { canaryBaselineReadFailed: true } : {}), riskClass, promotedAt: Date.now(), promotedBy: caller.email ?? null, sourceBindingsBefore, ...(art.sequence !== undefined ? { channelSeq: art.sequence } : {}), ...(art.issuedAt !== undefined ? { channelIssuedAt: art.issuedAt } : {}), ...(art.artefact.sha384 ? { artefactSha384: art.artefact.sha384 } : {}), ...(p.uploadedSha384 ? { uploadedSha384: p.uploadedSha384 } : {}), ...(p.readback !== undefined ? { readback: p.readback } : {}) });
           const audited = await recordAuditAfterSelfDeploy(env, caller, sourceIp, "update-promoted", { kind: "engine-state", field: "engineVersion", detail: `${p.fromVersion} -> ${p.toVersion} (${p.recommendedVersion}); pending canary verification${art.artefact.sha384 ? `; sha384 ${art.artefact.sha384}` : ""}` });
           // Persisting the verified engine account here matters: the promote above just proved this accountId
           // owns this engine's script (planAndPromote's driver reads /accounts/{accountId}/workers/scripts/
@@ -601,7 +612,7 @@ export async function handleUpdates(ctx: RouterCtx): Promise<Response | null> {
           return jsonError(compReq.error, 400);
         }
         const recResp = await scheduler.fetch(doURL("/update-status"), { method: "GET" });
-        const rec = (await recResp.json()) as { pending: null | { fromVersion: string; toVersion: string; recommendedVersion: string; canaryBaseline?: string; canaryBaselineReadFailed?: boolean; riskClass?: string; promotedAt?: number; sourceBindingsBefore?: string[]; percentage?: number; consoleQueued?: QueuedConsole | null; artefactSha384?: string; readback?: { verdict: string; mode: string; deployedSha384?: string; detail?: string } }; floors?: { console?: string } };
+        const rec = (await recResp.json()) as { pending: null | { fromVersion: string; toVersion: string; recommendedVersion: string; canaryBaseline?: string; canaryBaselineReadFailed?: boolean; riskClass?: string; promotedAt?: number; sourceBindingsBefore?: string[]; percentage?: number; consoleQueued?: QueuedConsole | null; artefactSha384?: string; readback?: { verdict: string; mode: string; deployedSha384?: string; detail?: string } }; floors?: { console?: string }; versionDigests?: Record<string, string> };
         if (!rec.pending) {
           await noteUpdateGuardRefusal(scheduler, caller, sourceIp, "no-pending");
           await noteUpdateAttempt(scheduler, "settle-refused");
@@ -618,6 +629,27 @@ export async function handleUpdates(ctx: RouterCtx): Promise<Response | null> {
           await noteUpdateGuardRefusal(scheduler, caller, sourceIp, "ramp-shaped");
           await noteUpdateAttempt(scheduler, "settle-refused");
           return jsonError("this pending verification is a gradual ramp; use the ramp settle call instead. Nothing was changed.", 400);
+        }
+        // NEW-VERSION GUARD. ENGINE_VERSION is fixed in each build, so it names the code that is answering THIS
+        // request. When it is not the version this pending promoted, the canary and the self-check below would
+        // grade the previous build: an alive flight would record the update as applied and a dead one would roll
+        // back a build that was never tested. So the settle answers "inconclusive": no record, no audit row, no
+        // deploy, and the pending stays armed for the next request. It sits before the fault hook, the
+        // dual-control gate and the token check, so a request the previous version answers consumes none of
+        // them. Rollback is not gated by this: POST /update/rollback reads its target from the armed pending.
+        // A pending with no promotedAt, or one older than the wait, takes the path below unchanged.
+        if (ENGINE_VERSION !== pending.recommendedVersion && typeof pending.promotedAt === "number" && Date.now() - pending.promotedAt <= SETTLE_VERSION_WAIT_MS) {
+          await noteUpdateAttempt(scheduler, "settle-inconclusive");
+          return jsonResponse({
+            phase: "settle",
+            outcome: SETTLE_INCONCLUSIVE_OUTCOME,
+            recommendedVersion: pending.recommendedVersion,
+            fromVersion: pending.fromVersion,
+            toVersion: pending.toVersion,
+            runningVersion: ENGINE_VERSION,
+            steps: [{ step: "version-identity", ok: false, detail: `version ${ENGINE_VERSION} answered this request, not the promoted version ${pending.recommendedVersion}; nothing was decided or changed` }],
+            reason: SETTLE_INCONCLUSIVE_REASON,
+          });
         }
         // Multi-component: the apply may have QUEUED the console component behind this engine settle
         // (engine-first, engine-settled sequencing). Held in locals here because the engine's settled
@@ -656,7 +688,7 @@ export async function handleUpdates(ctx: RouterCtx): Promise<Response | null> {
         const probe = await probeSettleVerdict(decisionGate);
         const liveVerdict: CanaryLiveness = probe.verdict;
         const liveSelfCheck: boolean = probe.selfCheckOk;
-        // NOISE. This route does NOT bump update-settle-inconclusive: bumping on any non-alive/non-dead
+        // NOISE. This decision does NOT bump update-settle-inconclusive: bumping on any non-alive/non-dead
         // verdict here would fire on the documented POST-SWAP TOLERANCE case, where
         // decideKeep KEEPS, this settle records the outcome "applied" and CLEARS the pending -- a routine,
         // CONCLUDED settle, not the counter's documented meaning (posture-counters.ts) of "the settle could
@@ -665,8 +697,8 @@ export async function handleUpdates(ctx: RouterCtx): Promise<Response | null> {
         //
         // The verdict is not lost: this settle's canaryVerdict, selfCheckOk and the per-attempt settleTrace
         // are persisted into the settled record and projected into updates.last, where an inconclusive-looking
-        // flight on a KEPT build is legible as what it is. The counter's one producer is the ramp settle's
-        // inconclusive branch (router-updates-ramp.ts), the one path that genuinely leaves the pending armed.
+        // flight on a KEPT build is legible as what it is. The counter's producers are the two answers that leave
+        // the pending armed: the ramp settle's inconclusive branch and the new-version guard above.
         const decision = decideKeep(liveBaseline, liveVerdict, liveSelfCheck);
         const memoGate: HealthGate = {
           baseline: async () => liveBaseline,
@@ -804,7 +836,7 @@ export async function handleUpdates(ctx: RouterCtx): Promise<Response | null> {
         // settleAfterPromote can DEPLOY (its own auto-rollback), so from here the "nothing was changed"
         // sentence in the catch below is not safe to believe.
         stage = "deploy-driver";
-        const s = await settleAfterPromote(driver, memoGate, { fromVersion: pending.fromVersion, toVersion: pending.toVersion, recommendedVersion: pending.recommendedVersion, canaryBaseline: liveBaseline });
+        const s = await settleAfterPromote(driver, memoGate, { fromVersion: pending.fromVersion, toVersion: pending.toVersion, recommendedVersion: pending.recommendedVersion, canaryBaseline: liveBaseline, ...(rec.versionDigests?.[pending.fromVersion] ? { fromDigest: rec.versionDigests[pending.fromVersion] } : {}) });
         // A "rolled-back" outcome above just redeployed fromVersion (settleAfterPromote's own
         // auto-rollback), the same self-redeploy that resets this DO; "applied" deploys nothing here but
         // shares this call site, so both follow-up writes always use the self-redeploy-safe helpers (a
@@ -817,9 +849,10 @@ export async function handleUpdates(ctx: RouterCtx): Promise<Response | null> {
         // or roll back" even across a self-redeploy reset. setUpdateSettled REPLACES `last` wholesale, so
         // this write must carry s.confirmationPending forward too (an "applied" outcome the canary itself
         // never sang alive on) -- otherwise this second, always-runs write would silently clobber the
-        // persist-first write's own confirmationPending with an absent field.
+        // persist-first write's own confirmationPending with an absent field. The same holds for the reason:
+        // settleAfterPromote returns none on a keep, so the keep reason comes from the decision.
         stage = "persist";
-        const settledWritten = await recordBookkeepingAfterSelfDeploy(env, "/update-settled", { outcome: s.outcome, recommendedVersion: s.recommendedVersion, fromVersion: s.fromVersion, toVersion: s.toVersion, ...(s.canaryVerdict ? { canaryVerdict: s.canaryVerdict } : {}), ...baselineFields, selfCheckOk: liveSelfCheck, settleTrace, ...(s.confirmationPending ? { confirmationPending: true } : {}), at: Date.now(), by: caller.email ?? null, ...(s.reason ? { reason: s.reason } : {}), ...(pending.artefactSha384 ? { artefactSha384: pending.artefactSha384 } : {}), ...(pending.readback !== undefined ? { readback: pending.readback } : {}) });
+        const settledWritten = await recordBookkeepingAfterSelfDeploy(env, "/update-settled", { outcome: s.outcome, recommendedVersion: s.recommendedVersion, fromVersion: s.fromVersion, toVersion: s.toVersion, ...(s.rollbackIdentity ? { rollbackIdentity: s.rollbackIdentity } : {}), ...(s.liveSha384 ? { liveSha384: s.liveSha384 } : {}), ...(s.canaryVerdict ? { canaryVerdict: s.canaryVerdict } : {}), ...baselineFields, selfCheckOk: liveSelfCheck, settleTrace, ...(s.confirmationPending ? { confirmationPending: true } : {}), at: Date.now(), by: caller.email ?? null, reason: s.reason ?? decision.reason, ...(pending.artefactSha384 ? { artefactSha384: pending.artefactSha384 } : {}), ...(pending.readback !== undefined ? { readback: pending.readback } : {}) });
         const audited = await recordAuditAfterSelfDeploy(env, caller, sourceIp, s.outcome === "applied" ? "update-applied" : "update-rolled-back", { kind: "engine-state", field: "engineVersion", detail: `${s.fromVersion} -> ${s.outcome === "applied" ? s.toVersion : s.fromVersion} (canary ${s.canaryVerdict ?? "unknown"}, baseline ${liveBaseline}${baselineFields.canaryBaselineReadFailed ? " unread" : ""}, self-check ${liveSelfCheck ? "ok" : "inconclusive"}): ${(s.reason ?? decision.reason).slice(0, 240)}${pending.artefactSha384 ? `; sha384 ${pending.artefactSha384}` : ""}` });
         // The response carries the probe's per-attempt steps ahead of the settle's own (the operator sees
         // the retries that tolerated -- or failed to clear -- the post-swap window), on every return path.
@@ -915,7 +948,9 @@ export async function handleUpdates(ctx: RouterCtx): Promise<Response | null> {
       // the eventual confirmation can arrive) WITHOUT first attempting an apply. UpdateRecord otherwise
       // carries no destination field at all, so it is added here rather than duplicated onto a second endpoint.
       const rec = (await resp.json()) as Record<string, unknown>;
-      return jsonResponse({ ...rec, destinationConfigured: await destinationConfigured(env, scheduler) });
+      // runningVersion (ADDITIVE): the version of the code answering this read, so a client waiting on a
+      // pending verification can tell when the promoted version has started to answer.
+      return jsonResponse({ ...rec, destinationConfigured: await destinationConfigured(env, scheduler), runningVersion: ENGINE_VERSION });
     }
     // ---- the STANDALONE one-click rollback (revert to the recorded known-good version) --------------
     // A first-class, ALWAYS-AVAILABLE revert, independent of an in-flight apply. It reverts to the prior live

@@ -88,7 +88,7 @@ async function main(): Promise<void> {
     handleAdmin(
       new Request(`https://engine.example${path}`, {
         method,
-        headers: { "cf-access-jwt-assertion": await signer.tokenFor(email), "content-type": "application/json", origin: "https://engine.example" },
+        headers: { "cf-access-jwt-assertion": await signer.tokenFor(email), "content-type": "application/json" },
         ...(method === "GET" ? {} : { body: JSON.stringify(body ?? {}) }),
       }),
       env(),

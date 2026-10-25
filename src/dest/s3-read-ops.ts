@@ -40,14 +40,14 @@ export interface ReadIO {
 // derive the closed S3 <Code> (closedS3Code, an allow-list) and the Object-Lock-complaint boolean the fault
 // ring records. Fail-safe: any hiccup (including an over-cap body) yields "".
 async function readS3ErrorBody(resp: Response): Promise<string> {
-  try {
+  try { // nosemgrep: incident-catch-returns-empty -- an unreadable error body is left out of the message and the failure it explains is already raised
     const cl = resp.headers.get("content-length");
     if (cl !== null) {
       const advertised = Number(cl);
       if (Number.isFinite(advertised) && advertised > MAX_DEST_TEXT_BYTES) return ""; // an oversized/hostile error body -- do not buffer
     }
     return new TextDecoder().decode(await drainResponseBounded(resp, MAX_DEST_TEXT_BYTES, "s3 error body"));
-  } catch {
+  } catch { // site-fault-waiver: src/dest/s3-read-ops.ts:readS3ErrorBody:catch:1 -- an unreadable error body is left out of the message and the failure it explains is already raised
     return "";
   }
 }

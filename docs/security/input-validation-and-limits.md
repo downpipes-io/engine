@@ -41,8 +41,8 @@ campaign" binds the whole account, and is checked one request or one campaign at
 | Mutating admin requests per window | 120 per 60 s | per subject (one shared `token` bucket for the bare-token break-glass) | `RATE_LIMIT_MAX_PER_WINDOW` at `src/sched/scheduler-do-limits.ts:659` |
 | Unauthenticated `/admin/auth/*` ceremony requests | 30 per 60 s | per IP | `AUTH_RATE_LIMIT_MAX_PER_WINDOW` at `src/sched/scheduler-do-limits.ts:673` |
 | Bare `ADMIN_TOKEN` compares | 10 per 60 s | per IP | `ADMIN_TOKEN_RATE_LIMIT_MAX_PER_WINDOW` at `src/sched/scheduler-do-limits.ts:682` |
-| Recovery-code attempts | 5 per 60 s | per IP | `RECOVERY_RATE_MAX_PER_IP` at `src/sched/scheduler-do-limits.ts:742` |
-| Recovery-code attempts | 5 per 60 s | per email | `RECOVERY_RATE_MAX_PER_EMAIL` at `src/sched/scheduler-do-limits.ts:743` |
+| Recovery-code attempts | 5 per 60 s | per IP | `RECOVERY_RATE_MAX_PER_IP` at `src/sched/scheduler-do-limits.ts:747` |
+| Recovery-code attempts | 5 per 60 s | per email and source group | `RECOVERY_RATE_MAX_PER_EMAIL` at `src/sched/scheduler-do-limits.ts:748` |
 | Body size on `/admin/auth/*` before sign-in | 64 KiB | per request | `PRE_AUTH_MAX_BODY_BYTES` at `src/admin/inbound-body.ts:16` |
 | Body size on the SAML ACS POST | 512 KiB | per request | `SAML_ACS_MAX_BODY_BYTES` at `src/admin/inbound-body.ts:22` |
 | Audit-feed pulls | 120 per 60 s | per ingest client id | `INGEST_PULL_RATE_LIMIT_MAX_PER_WINDOW` at `src/admin/support-ingest.ts:231` |
@@ -55,14 +55,14 @@ campaign" binds the whole account, and is checked one request or one campaign at
 | Retention keepDays | 1 to 36500 | per downpipe | `RETENTION_MAX_KEEP_DAYS` at `src/sched/config-validate.ts:112` |
 | Groups carried from one token | 200 | per subject | `GROUPS_MAX` at `src/admin/groups-bounds.ts:9` |
 | Group name length | 256 | per subject | `GROUP_NAME_MAX` at `src/admin/groups-bounds.ts:14` |
-| Restore reason length | 1000 | per request | `REASON_MAX_LEN` at `src/sched/scheduler-do-records.ts:379` |
-| Drill-evidence note length | 1000 | per request | `NOTE_MAX_LEN` at `src/sched/scheduler-do-records.ts:380` |
-| Restore approval lifetime | 24 h | per request | `APPROVAL_TTL_MS` at `src/admin/approvals.ts:150` |
+| Restore reason length | 1000 | per request | `REASON_MAX_LEN` at `src/sched/scheduler-do-records.ts:380` |
+| Drill-evidence note length | 1000 | per request | `NOTE_MAX_LEN` at `src/sched/scheduler-do-records.ts:381` |
+| Restore approval lifetime | 24 h | per request | `APPROVAL_TTL_MS` at `src/admin/approvals.ts:151` |
 | Prune approval lifetime | 24 h | per request | `PRUNE_APPROVAL_TTL_MS` at `src/admin/prune-approvals.ts:84` |
 | Dry-run preview rows | 50 | per request | `SAMPLE_CAP` at `src/admin/restore-sinks.ts:142` |
 | In-account restore records | 200 | per request | `MAX_IN_ACCOUNT_RESTORE_RECORDS` at `src/admin/restore-sinks.ts:157` |
 | In-account restore records, keep live keys (`onExisting: "skip"`) | 160 | per request | `MAX_IN_ACCOUNT_SKIP_RESTORE_RECORDS` at `src/admin/restore-sinks.ts:163` |
-| Run-history ring | 50 runs | per downpipe | `RING_CAP` at `src/sched/scheduler-do-limits.ts:749` |
+| Run-history ring | 50 runs | per downpipe | `RING_CAP` at `src/sched/scheduler-do-limits.ts:754` |
 | Audit chain entries retained | 10000 | account-global | `AUDIT_CAP` at `src/admin/audit.ts:95` |
 | Recovery-code failure entries per minute | 2, plus one overflow entry per outcome | account-global | `RECOVERY_FOLD_ROWS_PER_WINDOW` at `src/sched/audit-fold.ts:65` |
 | Router denied entries per minute | 2 | account-global | `DENIED_FOLD_ROWS_PER_WINDOW` at `src/sched/audit-fold.ts:67` |
@@ -70,14 +70,14 @@ campaign" binds the whole account, and is checked one request or one campaign at
 | Recovery-code and failed sign-in entries per hour, together | 20, plus one recovery overflow entry per outcome | account-global | `SIGN_IN_FOLD_ROWS_PER_HOUR` at `src/sched/audit-fold.ts:72` |
 | Router denied entries per hour | 9, plus one `denied-overflow` entry | account-global | `DENIED_FOLD_ROWS_PER_HOUR` at `src/sched/audit-fold.ts:73` |
 | Audit page size | 500 | per request | `AUDIT_PAGE_MAX` at `src/admin/audit.ts:271` |
-| Drill-evidence rows retained | 500 | account-global | `DRILL_EVIDENCE_CAP` at `src/sched/scheduler-do-records.ts:331` |
+| Drill-evidence rows retained | 500 | account-global | `DRILL_EVIDENCE_CAP` at `src/sched/scheduler-do-records.ts:332` |
 | Config-history versions retained | 2000 | account-global | `CONFIG_HISTORY_CAP` at `src/admin/config-history.ts:70` |
-| Downpipes per fleet drill | 5000 | account-global, per campaign | `FLEET_DRILL_MAX` at `src/sched/scheduler-do-limits.ts:760` |
+| Downpipes per fleet drill | 5000 | account-global, per campaign | `FLEET_DRILL_MAX` at `src/sched/scheduler-do-limits.ts:765` |
 | Change number length | 64 | per request | `CHANGE_NUMBER_MAX` at `src/admin/change-ref.ts:37` |
 | Change reason length | 500 | per request | `CHANGE_REASON_MAX` at `src/admin/change-ref.ts:38` |
 | STS session duration | 900 to 43200 s | per destination | `STS_DURATION_MAX` at `src/dest/factory-validators.ts:134` |
 | In-flight run lease | 30 min | per downpipe | `INFLIGHT_LEASE_MS` at `src/sched/scheduler-do-records.ts:169` |
-| RUNLOG lock lease | 30 s | per destination | `RUNLOG_LEASE_MS` at `src/sched/scheduler-do-records.ts:550` |
+| RUNLOG lock lease | 30 s | per destination | `RUNLOG_LEASE_MS` at `src/sched/scheduler-do-records.ts:551` |
 | Webhook POST timeout | 5 s | per delivery | `WEBHOOK_TIMEOUT_MS` at `src/notify/types.ts:889` |
 | Same-state re-alert interval | 1 h | per downpipe | `ALERT_COOLDOWN_MS` at `src/notify.ts:40` |
 
@@ -85,7 +85,7 @@ campaign" binds the whole account, and is checked one request or one campaign at
 
 ## 1. Downpipe Configuration (`validateConfig`)
 
-`validateConfig` at `src/sched/config-validate.ts:460-466` runs six section validators in order:
+`validateConfig` at `src/sched/config-validate.ts:463-469` runs six section validators in order:
 identity, destinations, restore-test cadence, retention, schedule, source. The first failing
 section throws, and the DO maps the throw to a 400 with the message as the body. The order is
 fixed, so a config with two faults reports the identity fault first.
@@ -205,59 +205,76 @@ fixed, so a config with two faults reports the identity fault first.
   validator branch stays in the code and is unreachable through a stored config.
 - The refusal message is built from the same list, so it can never name a set the check does not
   enforce: `source.type must be kv/r2/secrets/d1/cf-config/workers/stream/images`
-  (`SELECTABLE_SOURCE_TYPES` at `src/sched/config-validate.ts:353`).
+  (`SELECTABLE_SOURCE_TYPES` at `src/sched/config-validate.ts:356`).
 
 ### 1.10 Source binding (`source.binding` for `kv`, `r2`, `d1`)
 
-- `bindingOK` at `src/sched/config-validate.ts:359`: a string matching `^[A-Za-z0-9_]{1,64}$`
+- `bindingOK` at `src/sched/config-validate.ts:362`: a string matching `^[A-Za-z0-9_]{1,64}$`
   that is not in `RESERVED_BINDINGS` (section 1.13).
 - Violation throws `source.binding must be 1 to 64 chars of [A-Za-z0-9_]` at
-  `src/sched/config-validate.ts:422`.
+  `src/sched/config-validate.ts:425`.
 
 ### 1.11 Secrets source (`source.secrets`)
 
-For `type === "secrets"` (`validateSource` at `src/sched/config-validate.ts:348`):
+For `type === "secrets"` (`validateSource` at `src/sched/config-validate.ts:351`):
 
 - `secrets` must be a non-empty array, else `a secrets source needs a non-empty secrets list` at
-  `src/sched/config-validate.ts:366`.
+  `src/sched/config-validate.ts:369`.
 - At most `MAX_SECRETS_PER_SOURCE` = `5000` at `src/sched/config-validate.ts:81` entries, else
   `a secrets source must not exceed 5000 secrets` (`MAX_SECRETS_PER_SOURCE` at
-  `src/sched/config-validate.ts:371`). An oversized list is refused, not truncated.
+  `src/sched/config-validate.ts:374`). An oversized list is refused, not truncated.
 - Each entry needs a `name` of 1 to 256 characters and a `binding` that passes `bindingOK`, else
   `each secret needs a 1 to 256 char name and a 1 to 64 char [A-Za-z0-9_] binding` at
-  `src/sched/config-validate.ts:375`.
+  `src/sched/config-validate.ts:378`.
 - `storeId`, when present, must match `resId` (`^[A-Za-z0-9_-]{1,128}$`, `resId` at
-  `src/sched/config-validate.ts:363`), else
-  `each secret's storeId must be a Secrets Store store id` at `src/sched/config-validate.ts:378`.
+  `src/sched/config-validate.ts:366`), else
+  `each secret's storeId must be a Secrets Store store id` at `src/sched/config-validate.ts:381`.
 - `accountId`, when present, must be hex, else
-  `secrets accountId must be a Cloudflare account id (hex)` at `src/sched/config-validate.ts:383`.
+  `secrets accountId must be a Cloudflare account id (hex)` at `src/sched/config-validate.ts:386`.
   It names the account the wiring reader reads with the discovery token, so it gets the scope check
   in 1.12.
 
 ### 1.12 Token-read sources (`cf-config`, `workers`, `stream`, `images`)
 
 These sources read the Cloudflare REST API with the engine's read-only discovery token and carry
-no binding. `cfId` at `src/sched/config-validate.ts:388` accepts `^[a-f0-9]{1,64}$`, case
+no binding. `cfId` at `src/sched/config-validate.ts:391` accepts `^[a-f0-9]{1,64}$`, case
 insensitive.
 
 - `cf-config`: `accountId` is required
   (`a cf-config source needs an accountId (a zoneId alone cannot be crawled)` at
-  `src/sched/config-validate.ts:390`) and must be hex
+  `src/sched/config-validate.ts:393`) and must be hex
   (`cf-config accountId must be a Cloudflare account id (hex)` at
-  `src/sched/config-validate.ts:393`); `zoneId`, when present, must be hex
-  (`cf-config zoneId must be a Cloudflare zone id (hex)` at `src/sched/config-validate.ts:392`).
-- `workers`: `a workers source needs an accountId` at `src/sched/config-validate.ts:399`;
-  `workers accountId must be a Cloudflare account id (hex)` at `src/sched/config-validate.ts:400`.
-- `stream`: `a stream source needs an accountId` at `src/sched/config-validate.ts:406`;
-  `stream accountId must be a Cloudflare account id (hex)` at `src/sched/config-validate.ts:407`.
-- `images`: `an images source needs an accountId` at `src/sched/config-validate.ts:413`;
-  `images accountId must be a Cloudflare account id (hex)` at `src/sched/config-validate.ts:414`.
-- The account named by a token-read source must be one the Owner's discovery config covers
-  (`accountInDiscoveryScope` at `src/sched/config-validate.ts:338-343`), which is the cross-account
-  confused-deputy guard applied at the write site. The save path applies it to a `secrets` source's
-  optional `accountId` too (`isApiDiscoverySourceType` at `src/sched/scheduler-do.ts:440`).
+  `src/sched/config-validate.ts:396`); `zoneId`, when present, must be hex
+  (`cf-config zoneId must be a Cloudflare zone id (hex)` at `src/sched/config-validate.ts:395`).
+- `workers`: `a workers source needs an accountId` at `src/sched/config-validate.ts:402`;
+  `workers accountId must be a Cloudflare account id (hex)` at `src/sched/config-validate.ts:403`.
+- `stream`: `a stream source needs an accountId` at `src/sched/config-validate.ts:409`;
+  `stream accountId must be a Cloudflare account id (hex)` at `src/sched/config-validate.ts:410`.
+- `images`: `an images source needs an accountId` at `src/sched/config-validate.ts:416`;
+  `images accountId must be a Cloudflare account id (hex)` at `src/sched/config-validate.ts:417`.
+- The account named by a token-read source must be one the Owner's discovery config covers, or, when
+  no discovery config is set, the engine's own account (`accountInDiscoveryScope` at
+  `src/sched/config-validate.ts:339-346`), which is the cross-account confused-deputy guard applied at
+  the write site. The save path applies it to a `secrets` source's
+  optional `accountId` too (`isApiDiscoverySourceType` at `src/sched/scheduler-do.ts:439`).
+- With no discovery config, the engine's own account is `CF_ACCOUNT_ID` when it is set, else the account the
+  scheduler holds as verified (`engineScopeAccount` at `src/sched/engine-scope-account.ts:15`). `CF_ACCOUNT_ID`
+  always wins. Every mutating request and every tick hands it to the scheduler
+  (`recordEnvEngineAccount` at `src/sched/engine-scope-account.ts:30`), and a value that names a different
+  account than the stored one replaces the stored one (`recordVerifiedEngineAccount` at
+  `src/sched/scheduler-do-account-config.ts:316`), so the Worker's check and the scheduler's check name the
+  same account after the variable changes. An attach or an update never replaces a stored account. The
+  refusal for an account outside this scope names `CF_ACCOUNT_ID` and the Owner discovery token
+  (`ENV_ONLY_SCOPE_REFUSAL` at `src/sched/config-validate.ts:475`).
+- A resume from the signed export applies the discovery config before the downpipes
+  (`applyResumeDiscovery` at `src/sched/scheduler-do-control-plane.ts:454`), so an API source on an
+  account the Owner selected passes the scope check on the way back.
+- A `cf-config` source's `zoneId` must belong to the source's `accountId`. When a discovery token is set,
+  the Worker looks the zone up before it forwards a save, and the run path and the discovery pass look it
+  up again. A zone of another account, a zone the token cannot read, or a reply without an owning account
+  refuses the save, fails the run or skips the discovery tick.
 - The Secrets Store wiring reader applies the same predicate to every account it reads, at crawl
-  time (`candidateAccounts` at `src/sources/secrets-wiring.ts:209`). With no account named, it
+  time (`candidateAccounts` at `src/sources/secrets-wiring.ts:213`). With no account named, it
   probes only the discovery config's selected (else seen) accounts, and never lists the accounts the
   token can see. An account outside the scope records the wiring as `unknown`.
 
@@ -278,7 +295,7 @@ restore is refused before any write. A string that is not a binding name (`BINDI
 `src/admin/restore-sinks.ts:351-353` reads a binding only as an own property of the environment, so
 a name such as `constructor` is not present either.
 
-Before any planning, `restoreTargetFault` at `src/admin/approvals.ts:331` refuses a `target` that
+Before any planning, `restoreTargetFault` at `src/admin/approvals.ts:332` refuses a `target` that
 is not an object, or whose `binding`, `namespaceId` or `bucketName` is present but is not a
 non-empty string. `POST /admin/restore`, `/restore/request` and `/restore/verify` return 400 for it
 through `restoreRequestFault` at `src/admin/router-restore.ts:198`,
@@ -289,30 +306,48 @@ binding is not a string or does not match the plan's target (`restoreTargetFault
 `src/sched/scheduler-do-restore-approval.ts:243`), and refuses to approve a stored record whose
 plan target is malformed (`restoreTargetFault` at `src/sched/scheduler-do-restore-approval.ts:385`).
 
+A restore request that carries a Cloudflare account id or zone id (`cfConfig.accountId`,
+`cfConfig.zoneId` or `mediaRestore.accountId`) must give exactly 32 lower-case hex characters. The empty
+string marks a disabled leg: nothing is planned for it and nothing is sent. A `cfConfig` or `mediaRestore`
+object without an `accountId` is refused. The check is `cfIdFault` at `src/sources/cf-config-core.ts:351`,
+called by `restoreCloudflareIdFault` at `src/admin/approvals.ts:351` through `restoreRequestFault`.
+`POST /admin/restore`, `/restore/request` and `/restore/verify` return 400 for a refused id before the role
+gate and before any request goes to Cloudflare. `/restore/attest` does not run this check, because it
+writes nothing to Cloudflare.
+
+The writers check again, so a caller that reaches `runRestore` without the routes is refused too. The
+configuration writers build their paths from `cfWriteIds` at `src/sources/cf-config-core.ts:367`, which
+refuses an account id that is not 32 lower-case hex, refuses an absent zone id for a zone-scoped surface,
+and URL-encodes each id. The media uploads take the account id through `cfRequireId` at
+`src/sources/cf-config-core.ts:359`. The call is `cfRequireId` at `src/admin/restore-apply.ts:572`. A refused
+id sends no request. A restore apply lists the record in `failures` with the reason "the restore request has
+no valid Cloudflare account id or zone id for this surface". A dry-run lists the record out of band
+(`skipped`) with the same reason, and previews no change for it.
+
 ### 1.14 Per-type resource ids
 
-`resId` at `src/sched/config-validate.ts:363` (`^[A-Za-z0-9_-]{1,128}$`) bounds the optional
+`resId` at `src/sched/config-validate.ts:366` (`^[A-Za-z0-9_-]{1,128}$`) bounds the optional
 native ids recorded for re-attach, checked only when present:
 
-- `source.databaseId must be a Cloudflare database id` at `src/sched/config-validate.ts:425`.
-- `source.namespaceId must be a Cloudflare KV namespace id` at `src/sched/config-validate.ts:428`.
-- `source.bucketName must be a Cloudflare R2 bucket name` at `src/sched/config-validate.ts:429`.
+- `source.databaseId must be a Cloudflare database id` at `src/sched/config-validate.ts:428`.
+- `source.namespaceId must be a Cloudflare KV namespace id` at `src/sched/config-validate.ts:431`.
+- `source.bucketName must be a Cloudflare R2 bucket name` at `src/sched/config-validate.ts:432`.
 
 ### 1.15 `source.includeContent`
 
 - When present it must be a boolean (`source.includeContent must be a boolean` at
-  `src/sched/config-validate.ts:434`).
+  `src/sched/config-validate.ts:437`).
 - It is accepted only on `stream`, `images` and `artifacts`; on any other type it throws
   `source.includeContent is only valid for stream/images/artifacts` at
-  `src/sched/config-validate.ts:436`.
+  `src/sched/config-validate.ts:439`.
 
 ### 1.16 `source.include` and `source.exclude`
 
 - Both must be arrays, else `source.include and source.exclude must be arrays` at
-  `src/sched/config-validate.ts:440`.
+  `src/sched/config-validate.ts:443`.
 - Every entry must be a string, and no entry may be the empty prefix. `selectorPrefixFault` at
   `src/sources/selector.ts:37` returns the reason, and the config validator throws it with a
-  `source.` prefix (`selectorPrefixFault` at `src/sched/config-validate.ts:448`). An empty
+  `source.` prefix (`selectorPrefixFault` at `src/sched/config-validate.ts:451`). An empty
   `exclude` prefix would match every record name and put the whole source out of scope
   (`exclude contains an empty prefix` at `src/sources/selector.ts:46`); an empty `include` prefix
   says nothing (`include contains an empty prefix` at `src/sources/selector.ts:47`); a non-string
@@ -321,7 +356,7 @@ native ids recorded for re-attach, checked only when present:
 ### 1.17 `source.cfConfigMode`
 
 - Optional. When present it must be the literal `auto` or `manual`, else
-  `source.cfConfigMode must be "auto" or "manual"` at `src/sched/config-validate.ts:453`.
+  `source.cfConfigMode must be "auto" or "manual"` at `src/sched/config-validate.ts:456`.
 
 ### 1.18 Bulk create
 
@@ -518,8 +553,8 @@ truncated, and the truncation is counted as `rbac-group-list-truncated` at
 
 The bounds are declared once for the IdP paths (`GROUPS_MAX` = `200` at
 `src/admin/groups-bounds.ts:9`, `GROUP_NAME_MAX` = `256` at `src/admin/groups-bounds.ts:14`) and
-duplicated by value in the DO (`GROUP_NAME_MAX` = `256` at `src/sched/scheduler-do-records.ts:370`,
-`GROUPS_MAX` = `200` at `src/sched/scheduler-do-records.ts:371`), so the DO bounds its own inputs
+duplicated by value in the DO (`GROUP_NAME_MAX` = `256` at `src/sched/scheduler-do-records.ts:371`,
+`GROUPS_MAX` = `200` at `src/sched/scheduler-do-records.ts:372`), so the DO bounds its own inputs
 with no cross-module dependency.
 
 ---
@@ -538,7 +573,7 @@ field against a per-field maximum:
 
 ### 6.1 `REASON_MAX_LEN` (restore-request reason)
 
-`REASON_MAX_LEN` = `1000` at `src/sched/scheduler-do-records.ts:379`. The `reason` of
+`REASON_MAX_LEN` = `1000` at `src/sched/scheduler-do-records.ts:380`. The `reason` of
 `POST /admin/restore/request`:
 
 - Must be a non-empty string after trimming, else `reason required` at
@@ -548,11 +583,11 @@ field against a per-field maximum:
 
 The same bound applies to a prune-approval reason (`REASON_MAX_LEN` at
 `src/sched/scheduler-do-prune-approval.ts:73`) and a posture override reason (`REASON_MAX_LEN` at
-`src/sched/scheduler-do-observability.ts:1188`).
+`src/sched/scheduler-do-observability.ts:1175`).
 
 ### 6.2 `NOTE_MAX_LEN` (drill-evidence note)
 
-`NOTE_MAX_LEN` = `1000` at `src/sched/scheduler-do-records.ts:380`. The `note` of
+`NOTE_MAX_LEN` = `1000` at `src/sched/scheduler-do-records.ts:381`. The `note` of
 `POST /admin/drill-evidence` is optional. When present it must be a string
 (`note must be a string` at `src/sched/scheduler-do-restore-approval.ts:688`) and pass
 `validateFreeText` with `NOTE_MAX_LEN` (`NOTE_MAX_LEN` at
@@ -562,19 +597,19 @@ The same bound applies to a prune-approval reason (`REASON_MAX_LEN` at
 
 ## 7. Approval TTL (`APPROVAL_TTL_MS`)
 
-`APPROVAL_TTL_MS` = `24 * 60 * 60 * 1000` at `src/admin/approvals.ts:150`.
+`APPROVAL_TTL_MS` = `24 * 60 * 60 * 1000` at `src/admin/approvals.ts:151`.
 
 A restore-approval record expires 24 hours after the first recorded dry run of the same plan, not
-24 hours after the request (`approvalAnchorMs` at `src/admin/approvals.ts:215`). Expiry is applied lazily:
-`effectiveStatus` at `src/admin/approvals.ts:443-446` reports `expired` for a record whose
+24 hours after the request (`approvalAnchorMs` at `src/admin/approvals.ts:216`). Expiry is applied lazily:
+`effectiveStatus` at `src/admin/approvals.ts:459-462` reports `expired` for a record whose
 `expiresAt` has passed, without mutating storage. An expired record cannot be approved
-(`the request has expired; raise a new one` at `src/admin/approvals.ts:584`) and cannot authorise
-an apply (`isUsableApproval` at `src/admin/approvals.ts:463-469` requires the effective status
+(`the request has expired; raise a new one` at `src/admin/approvals.ts:600`) and cannot authorise
+an apply (`isUsableApproval` at `src/admin/approvals.ts:479-485` requires the effective status
 `approved`).
 
 A record reserved by an in-flight apply is held for `RESTORE_APPLY_LEASE_MS` = `30 * 60 * 1000`
-at `src/admin/approvals.ts:183`; past the lease the reservation reads as `approved` again
-(`RESTORE_APPLY_LEASE_MS` at `src/admin/approvals.ts:449`).
+at `src/admin/approvals.ts:184`; past the lease the reservation reads as `approved` again
+(`RESTORE_APPLY_LEASE_MS` at `src/admin/approvals.ts:465`).
 
 `PRUNE_APPROVAL_TTL_MS` = `24 * 60 * 60 * 1000` at `src/admin/prune-approvals.ts:84` and
 `PRUNE_APPLY_LEASE_MS` = `30 * 60 * 1000` at `src/admin/prune-approvals.ts:85` give a retention
@@ -606,9 +641,9 @@ prune approval the same two windows (`PRUNE_APPROVAL_TTL_MS` at
 
 ### 9.1 `RING_CAP`
 
-`RING_CAP` = `50` at `src/sched/scheduler-do-limits.ts:749`. The per-downpipe run-history ring holds
+`RING_CAP` = `50` at `src/sched/scheduler-do-limits.ts:754`. The per-downpipe run-history ring holds
 the 50 most recent runs. When a run is appended, the ring is shifted from the front until it is
-within the cap (`hist.length > RING_CAP` at `src/sched/scheduler-do-scheduling.ts:349`). The durable
+within the cap (`hist.length > RING_CAP` at `src/sched/scheduler-do-scheduling.ts:352`). The durable
 record is the signed RUNLOG in the archive.
 
 ### 9.2 `AUDIT_CAP`
@@ -616,7 +651,7 @@ record is the signed RUNLOG in the archive.
 `AUDIT_CAP` = `10000` at `src/admin/audit.ts:95`. The tamper-evident audit chain retained in the DO
 holds at most 10,000 entries. Past the cap the oldest entries are rolled over, not silently
 dropped: the DO records the earliest retained sequence number and the cumulative rolled-over count
-under `AUDIT_ROLLOVER_KEY` at `src/sched/scheduler-do-limits.ts:906`
+under `AUDIT_ROLLOVER_KEY` at `src/sched/scheduler-do-limits.ts:911`
 (`rolledOverCount` at `src/sched/scheduler-do-audit.ts:194`). `GET /admin/audit/verify` surfaces
 the count, and `GET /admin/audit/export` carries the chain head hash so an export is verifiable
 without the live DO.
@@ -714,7 +749,7 @@ References ASVS V13.2.5 and V15.3.2.
 The webhook URL is never written to the tamper-evident audit chain. From engine 0.3.7, a channel
 change that applies at once (config approval off) writes a `notify-channel-change` event. Its target
 carries the closed `changeKind` enum and the channel id only (`recordNotifyApplied` at
-`src/admin/router-ops.ts:89`). While config approval is on, a queued channel change writes
+`src/admin/router-ops.ts:90`). While config approval is on, a queued channel change writes
 `config-change-propose`, and the approval that applies it writes `config-change-approve`. Both carry
 the same closed `changeKind` enum only, and neither writes a `notify-channel-change` event.
 
@@ -727,16 +762,16 @@ with `redirect: "manual"` and never follows a redirect.
 
 ### 11.1 `planHash` must match the recomputed hash
 
-`restorePlanHash` at `src/admin/approvals.ts:315` computes the binding hash from the restore
+`restorePlanHash` at `src/admin/approvals.ts:316` computes the binding hash from the restore
 request's decision-relevant fields (run id, target binding and names, selectors, `maxRecords`,
 record name, destination, `onExisting` and the per-type apply scope) as `sha384:` plus the hex
 SHA-384 of the canonical JSON (`sha384:` at
-`src/admin/approvals.ts:323`). The apply route re-derives the hash from the incoming request and
+`src/admin/approvals.ts:324`). The apply route re-derives the hash from the incoming request and
 looks the approval up by it, so a request whose fields differ from the approved plan finds no
 record and is refused.
 
 The request route also sends the hashed object itself, as `plan`, so the approver can read the
-write target and scope the hash binds. `restorePlanBinding` at `src/admin/approvals.ts:350` builds
+write target and scope the hash binds. `restorePlanBinding` at `src/admin/approvals.ts:366` builds
 it, and `restorePlanHash` hashes the same output, so the two cannot differ. It holds names and ids
 only: the `cfConfig` and `mediaRestore` tokens are never copied. The DO stores `plan` only when it
 hashes to the request's `planHash` and names the same run (`verifiedPlan` at
@@ -769,11 +804,11 @@ token is retired, because the grant could lapse with no identity left to act
 
 ### 11.4 Maker and checker must differ
 
-`canApprove` at `src/admin/approvals.ts:574-584` refuses a self-approval on the subject axis
-(`cannot approve your own request` at `src/admin/approvals.ts:581`) and again on the display-email
-axis (`approverEmail === record.requestedBy` at `src/admin/approvals.ts:580`).
-`isUsableApproval` at `src/admin/approvals.ts:463-469` re-checks at apply time
-(`record.approverSubject === record.requesterSubject` at `src/admin/approvals.ts:467`). Both run
+`canApprove` at `src/admin/approvals.ts:590-600` refuses a self-approval on the subject axis
+(`cannot approve your own request` at `src/admin/approvals.ts:592`) and again on the display-email
+axis (`approverEmail === record.requestedBy` at `src/admin/approvals.ts:596`).
+`isUsableApproval` at `src/admin/approvals.ts:479-485` re-checks at apply time
+(`record.approverSubject === record.requesterSubject` at `src/admin/approvals.ts:483`). Both run
 inside the DO's storage read-modify-write, so the decision is atomic with the write.
 
 ---
@@ -795,7 +830,7 @@ inside the DO's storage read-modify-write, so the decision is atomic with the wr
   pack.
 
 The evidence log holds at most `DRILL_EVIDENCE_CAP` = `500` at
-`src/sched/scheduler-do-records.ts:331` rows. Past the cap the oldest rows are deleted in the same
+`src/sched/scheduler-do-records.ts:332` rows. Past the cap the oldest rows are deleted in the same
 storage turn as the append (`window.size > DRILL_EVIDENCE_CAP` at
 `src/sched/scheduler-do-restore-approval.ts:722`).
 
@@ -806,17 +841,17 @@ storage turn as the append (`window.size > DRILL_EVIDENCE_CAP` at
 `INFLIGHT_LEASE_MS` = `30 * 60 * 1000` at `src/sched/scheduler-do-records.ts:169`.
 
 A triggered run must post `/complete` within 30 minutes. `leased` at
-`src/sched/scheduler-do-scheduling.ts:281-283` treats a downpipe as in flight only while
+`src/sched/scheduler-do-scheduling.ts:284-286` treats a downpipe as in flight only while
 `now - inFlightSince <= INFLIGHT_LEASE_MS`. A run past the lease is treated as crashed: the next
 `trigger` resolves its history row to `abandoned` with the error `abandoned (run lease expired)`
-at `src/sched/scheduler-do-scheduling.ts:340` and allocates a fresh run. This bounds the wedge
+at `src/sched/scheduler-do-scheduling.ts:343` and allocates a fresh run. This bounds the wedge
 time after an evicted or redeployed Worker isolate.
 
 ---
 
 ## 14. RUNLOG Lock Lease
 
-`RUNLOG_LEASE_MS` = `30_000` at `src/sched/scheduler-do-records.ts:550`.
+`RUNLOG_LEASE_MS` = `30_000` at `src/sched/scheduler-do-records.ts:551`.
 
 Each destination's RUNLOG has its own write lock, and a lock is held for at most 30 seconds.
 `acquireRunlogLock` at
@@ -859,7 +894,7 @@ The admin API implements anti-automation rate limiting aligned with OWASP ASVS V
 holds six fixed-window limits. Each is a counter in the scheduler Durable Object under its own
 key namespace, so the buckets never collide. `rateCheck` at `src/sched/scheduler-do.ts:813` is the
 counter for four of them. The recovery-code limiter has its own `recoveryRateCheck` at
-`src/sched/scheduler-do-recovery.ts:552` in the same shape, for its per-IP and per-email limits.
+`src/sched/scheduler-do-recovery.ts:565` in the same shape, for its per-IP and per-email-and-source limits.
 The consolidated contextual model (each
 attribute with its threshold and its action) is `docs/security/identity-sessions-and-files.md`
 section 2.6; this section is the limiter reference, and its fail posture per surface (section 17.7)
@@ -943,20 +978,20 @@ limiters (sections 17.2 and this section); V6.3.1 (controls against credential s
 password brute force) covers this section and the recovery-code and audit-feed limiters
 (sections 17.4 and 17.5).
 
-### 17.4 Per-IP and per-email limits on recovery codes
+### 17.4 Per-IP and per-email-and-source limits on recovery codes
 
-`RECOVERY_RATE_WINDOW_MS` = `60_000` at `src/sched/scheduler-do-limits.ts:741`,
-`RECOVERY_RATE_MAX_PER_IP` = `5` at `src/sched/scheduler-do-limits.ts:742` and
-`RECOVERY_RATE_MAX_PER_EMAIL` = `5` at `src/sched/scheduler-do-limits.ts:743`.
+`RECOVERY_RATE_WINDOW_MS` = `60_000` at `src/sched/scheduler-do-limits.ts:746`,
+`RECOVERY_RATE_MAX_PER_IP` = `5` at `src/sched/scheduler-do-limits.ts:747` and
+`RECOVERY_RATE_MAX_PER_EMAIL` = `5` at `src/sched/scheduler-do-limits.ts:748`.
 
 A recovery-code sign-in must pass both buckets (`recoveryRateAllow` at
-`src/sched/scheduler-do-recovery.ts:519`): the email bucket `email:<canonical email>` (a malformed
-email spends the shared `email:_invalid` bucket) and the IP bucket `ip:<source group>` (section 17.3)
-(`recoveryRateAllow` at `src/sched/scheduler-do-recovery.ts:367`). A request with no source IP skips
-the IP bucket and still spends the email bucket. The buckets live in the
-`recovery-rate:` namespace (`RECOVERY_RATE_PREFIX` at `src/sched/scheduler-do-limits.ts:740`). The
+`src/sched/scheduler-do-recovery.ts:523`): the email bucket `email:<canonical email>:<source group>` (a malformed
+email spends `email:_invalid:<source group>`) and the IP bucket `ip:<source group>` (section 17.3)
+(`recoveryRateAllow` at `src/sched/scheduler-do-recovery.ts:370`). A request with no source IP skips
+the IP bucket and spends the email bucket with the group `none`. There is no cap per email across sources. The buckets live in the
+`recovery-rate:` namespace (`RECOVERY_RATE_PREFIX` at `src/sched/scheduler-do-limits.ts:745`). The
 limiter fails closed: a storage fault denies the attempt (`recovery-limiter-unavailable` at
-`src/sched/scheduler-do-recovery.ts:542`). A bucket that refuses an attempt does not increment its own counter, so a
+`src/sched/scheduler-do-recovery.ts:549`). A bucket that refuses an attempt does not increment its own counter, so a
 caller cannot extend their own lockout past one window.
 
 ### 17.5 Per-client limit on the audit-feed pull
@@ -983,7 +1018,7 @@ Two surfaces answer differently rather than through this builder. The break-glas
 (`adminTokenThrottledResponse` at `src/admin/router-core.ts:344`) advertises the full window rather
 than the time remaining. The recovery-code sign-in answers a generic 401 `unauthorised` with no
 `Retry-After` at all (`unauthorised` at `src/admin/router-auth-flow.ts:82`), because a back-off
-signal on the per-email bucket would tell an unauthenticated caller that recovery is being
+signal on the per-email-and-source bucket would tell an unauthenticated caller that recovery is being
 attempted on that address. `retryAfterMs` in the DO verdict is the time remaining in the current
 window (`retryAfterMs` at `src/sched/scheduler-do.ts:830`); a refused request does not increment
 the counter, so only admitted requests count toward the window cap (`retryAfterMs` at
@@ -996,7 +1031,7 @@ the counter, so only admitted requests count toward the window cap (`retryAfterM
 | Authenticated mutating routes | `rateLimited` | fail open: the request is admitted and `limiter-verdict-malformed` is recorded | `limiter-verdict-malformed` at `src/admin/router-core.ts:368`, `limiter-verdict-malformed` at `src/admin/router-core.ts:387` |
 | Unauthenticated sign-in ceremonies | `authRateLimited` | fail closed: 429, recording `auth-limiter-verdict-malformed` on an answered-but-broken limiter and `auth-limiter-unavailable` on a thrown round trip | `auth-limiter-verdict-malformed` at `src/admin/router-core.ts:708`, `auth-limiter-unavailable` at `src/admin/router-core.ts:723` |
 | Bare-token compare | `adminTokenRateLimitedViaDO` | fail closed: blocked, recording `admin-token-ratelimited-malformed` on an answered-but-broken limiter and `admin-token-ratelimited-unavailable` on a thrown round trip | `admin-token-ratelimited-malformed` at `src/admin/router-session.ts:366`, `admin-token-ratelimited-unavailable` at `src/admin/router-session.ts:376` |
-| Recovery-code sign-in | `recoveryRateAllow` | fail closed: denied, recording `recovery-limiter-unavailable` | `recovery-limiter-unavailable` at `src/sched/scheduler-do-recovery.ts:542` |
+| Recovery-code sign-in | `recoveryRateAllow` | fail closed: denied, recording `recovery-limiter-unavailable` | `recovery-limiter-unavailable` at `src/sched/scheduler-do-recovery.ts:549` |
 | Audit-feed pull | `ingestPullRateLimited` | fail open, matching the per-subject limiter | `ingestPullRateLimited` at `src/admin/support-ingest.ts:246` |
 
 The per-caller and audit-feed limiters fail open because each guards a verified operator's own
@@ -1027,7 +1062,7 @@ retained chain stays verifiable from its first retained version.
 - A change number longer than 64 characters, measured after control characters are stripped and
   the text trimmed (`changeNumberExceedsMax` at `src/admin/change-ref.ts:66-68`), is refused with
   `CHANGE_NUMBER_TOO_LONG` at `src/admin/change-ref.ts:44` (`CHANGE_NUMBER_TOO_LONG` at
-  `src/admin/router.ts:559`), so the operator sees which field to shorten.
+  `src/admin/router.ts:560`), so the operator sees which field to shorten.
 - The reason is cleaned and cut to 500 characters (`normaliseChangeText` at
   `src/admin/change-ref.ts:89-92`), never refused.
 
@@ -1047,10 +1082,10 @@ duration must be an integer in that range, else
 
 ## 21. Fleet Drill Cap
 
-`FLEET_DRILL_MAX` = `5000` at `src/sched/scheduler-do-limits.ts:760`. One fleet-drill campaign may
+`FLEET_DRILL_MAX` = `5000` at `src/sched/scheduler-do-limits.ts:765`. One fleet-drill campaign may
 enqueue at most 5000 downpipes; a larger selection is refused with
 `fleet drill exceeds the 5000-downpipe cap; narrow it with a downpipeIds subset`
-(`FLEET_DRILL_MAX` at `src/sched/scheduler-do-observability.ts:623`).
+(`FLEET_DRILL_MAX` at `src/sched/scheduler-do-observability.ts:610`).
 
 ---
 
@@ -1198,7 +1233,7 @@ chunked body with no `Content-Length` is refused as soon as it passes the cap.
 
 - `PRE_AUTH_MAX_BODY_BYTES` = `64 * 1024` at `src/admin/inbound-body.ts:16` bounds the
   recovery-code sign-in (`readBoundedRequestText` at `src/admin/router-auth-flow.ts:55`) and the
-  passkey ceremonies (`readBoundedRequestText` at `src/admin/router-auth-flow.ts:517`). An
+  passkey ceremonies (`readBoundedRequestText` at `src/admin/router-auth-flow.ts:554`). An
   over-cap body gets 413 and never reaches the Durable Object.
 - `SAML_ACS_MAX_BODY_BYTES` = `512 * 1024` at `src/admin/inbound-body.ts:22` bounds the SAML
   ACS form POST (`readBoundedRequestText` at `src/admin/router-idp-web.ts:234`). An over-cap

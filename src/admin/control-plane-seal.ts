@@ -106,7 +106,7 @@ export function serialiseSealedControlPlaneExport(s: SealedControlPlaneExport): 
 // artefact: null where it has no canonical form (a non-integer configVersion, a lone surrogate), instead of a
 // throw. Such an artefact can never be one the signer signed.
 export function sealedControlPlaneExportBytesOrNull(s: SealedControlPlaneExport): Uint8Array | null {
-  try {
+  try { // nosemgrep: incident-catch-returns-empty -- the site fault waiver at the handler gives the reason
     return serialiseSealedControlPlaneExport(s);
   } catch (e) {
     // site-fault-waiver: src/admin/control-plane-seal.ts:sealedControlPlaneExportBytesOrNull:catch:1 -- an artefact with no canonical form was never signed, and every caller records the altered-artefact refusal for the null

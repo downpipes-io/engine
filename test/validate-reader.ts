@@ -44,6 +44,9 @@ import { dirname, join } from "node:path";
 
 import { openRun, attestKeyless, type ObjectStore, type KeylessAttestation, type Run } from "../src/format/reader.ts";
 import { parseIdentity, parseVerifier } from "../src/crypto/keys.ts";
+import { bundledSigner } from "../src/format/bundle.ts";
+import { integrityCategoryOf, usageError } from "../src/format/integrity-error.ts";
+import { REASON_USAGE } from "../src/restore-reasons.ts";
 import { identityFingerprint, recipientFingerprint, recipientSetHash } from "../src/crypto/capsule.ts";
 import type { HybridRecipientPrivate, HybridRecipientPublic } from "../src/crypto/kem.ts";
 import { hybridSign, type HybridVerifier } from "../src/crypto/sign.ts";
@@ -135,9 +138,9 @@ interface VectorLabels {
 interface VectorExpect {
   mode: "positive" | "negative";
   runId?: string | null;
-  options?: { allowStale?: boolean; minRunlogIndex?: number; checkRecoveryBundle?: boolean } | null;
+  options?: { allowStale?: boolean; minRunlogIndex?: number; checkRecoveryBundle?: boolean; signerFingerprint?: string } | null;
   records?: Array<{ name: string; valueB64: string }>;
-  phase?: "open" | "restore";
+  phase?: "open" | "restore" | "signer";
   exitCode?: number;
   labels?: VectorLabels;
   // segCount is the number of .seg objects the archive must contain. It proves the
@@ -271,9 +274,27 @@ async function assertPositiveLabels(label: string, archiveDir: string, identity:
 async function assertPositive(label: string, dir: string, expect: VectorExpect): Promise<void> {
   const archiveDir = join(dir, "archive");
   const store = new DirStore(archiveDir);
-  const { identity, verifier } = await loadKeys(dir);
+  const keys = await loadKeys(dir);
+  const identity = keys.identity;
+  let verifier = keys.verifier;
   const runId = expect.runId ?? DEFAULT_RUN_ID;
   const opts = buildOpts(expect.options ?? null);
+
+  // A vector that names a signer fingerprint (SPEC 9.1) opens under the signer the pin resolves from the
+  // bundled signer.pub, with the recovery-bundle check on, as the reader's CLI does. Nothing else about
+  // the open changes.
+  const pin = expect.options?.signerFingerprint;
+  if (pin !== undefined) {
+    try {
+      verifier = await bundledSigner(store, pin);
+    } catch (e) {
+      ok(`${label}: the pinned bundled signer resolves`, false);
+      console.log(`       resolve threw: ${(e as Error).message}`);
+      return;
+    }
+    ok(`${label}: the pinned bundled signer resolves`, true);
+    opts.checkRecoveryBundle = true;
+  }
 
   let run: Run;
   try {
@@ -324,6 +345,11 @@ async function assertNegativeRejected(label: string, dir: string, expect: Vector
   // options block, forcing verifyFreshness on for exit-5 (stale) vectors.
   const opts: OpenOpts = buildOpts(expect.options ?? null, expect.exitCode === 5);
 
+  if (expect.phase === "signer") {
+    await assertSignerPhaseRejected(label, store, expect);
+    return;
+  }
+
   if (expect.phase !== "restore") {
     let threw = false;
     let thrownErr: unknown;
@@ -365,6 +391,36 @@ async function assertNegativeRejected(label: string, dir: string, expect: Vector
 
   if (restoreThrew && restoreErr !== undefined) {
     assertErrorClass(label, restoreErr, expect);
+  }
+}
+
+// assertSignerPhaseRejected drives a "signer"-phase negative: the operator pins a signer fingerprint
+// (options.signerFingerprint) and the bundled signer.pub must be refused, so the run is never opened (the
+// reader has no key to open it with). An absent copy is a usage refusal (exit 6); a copy whose fingerprint
+// is not the pin is an unverified refusal (exit 2). The two are told apart by what the refusal names, so a
+// stub that throws one error for both fails one of them.
+async function assertSignerPhaseRejected(label: string, store: ObjectStore, expect: VectorExpect): Promise<void> {
+  const pin = expect.options?.signerFingerprint;
+  ok(`${label}: a signer-phase vector names options.signerFingerprint`, typeof pin === "string" && pin !== "");
+  if (typeof pin !== "string" || pin === "") return;
+  let threw = false;
+  let thrownErr: unknown;
+  try {
+    await bundledSigner(store, pin);
+  } catch (e) {
+    threw = true;
+    thrownErr = e;
+  }
+  ok(`${label}: bundled signer refused under the pin (expected: exit ${expect.exitCode ?? "?"}, ${exitCodeLabel(expect.exitCode)})`, threw);
+  if (!threw) return;
+  const msg = (thrownErr instanceof Error ? thrownErr.message : String(thrownErr)).toLowerCase();
+  const category = integrityCategoryOf(thrownErr);
+  if (expect.exitCode === 6) {
+    ok(`${label}: exit 6 refusal says the destination has no signer.pub and carries the usage category`, looksLikeUsageError(msg) && msg.includes("has no signer.pub") && category === "usage");
+  } else if (expect.exitCode === 2) {
+    ok(`${label}: exit 2 refusal names the fingerprint mismatch and carries the integrity category`, msg.includes("fingerprint") && !looksLikeUsageError(msg) && category === "integrity");
+  } else {
+    ok(`${label}: a signer-phase vector declares exit 2 or 6`, false);
   }
 }
 
@@ -1117,6 +1173,19 @@ async function runKeylessStructuralAttestation(): Promise<void> {
     });
     await assertKeyless("signed completeness config-missing", store, RID, kit.verifier, { allowStale: true }, {
       signatureValid: true, complete: false, notRolledBack: false, reasonHas: ["engine not fully configured"], downpipeIdNull: false,
+    });
+  }
+
+  // The usage reason bucket: a usage-category RunIntegrityError maps to REASON_USAGE by its CATEGORY. The
+  // message is the bundle's own absent-signer wording, which mentions a missing signer.pub, so a prose net
+  // reading it would say "object missing" (a replica-fallback reason). The category must win.
+  {
+    const root = oneShardSignedRoot(kit, RID);
+    const store = faultShardGet(kit, RID, root, () => {
+      throw usageError("usage: the destination has no signer.pub, so the signer fingerprint has nothing to check; object signer.pub is missing");
+    });
+    await assertKeyless("signed completeness usage fault", store, RID, kit.verifier, { allowStale: true }, {
+      signatureValid: true, complete: false, notRolledBack: false, reasonHas: [REASON_USAGE], downpipeIdNull: false,
     });
   }
 

@@ -1,4 +1,4 @@
-import { cellFromTypedValue, cellToBind, D1DefectError, quoteIdent, type D1Cell } from "./d1-format.ts";
+import { cellFromTypedValue, cellToBind, D1DefectError, quoteIdent, type D1Cell } from "./d1-format.ts"; import { noteSiteFault } from "../admin/site-faults.ts";
 import { resumeTokenError } from "./d1-token.ts";
 import { classifyD1Defect, faultItemId, recordD1Defect, recordRowidProbeFallback, recordSnapshotConsistency } from "./source-fault-ledger.ts";
 import type { Meter } from "./types.ts";
@@ -253,10 +253,10 @@ async function tableHasRowid(reader: D1Reader, name: string, meter?: Meter): Pro
 //
 // An empty result means "no usable key": the table is then read in one page, as before. That covers a
 // key column the column header does not name and a pragma the binding refuses. A refused pragma must
-// not fail a table the single-page read can capture. readDumpPlan calls this only for a table whose DDL
+// not fail a table the single-page read can capture. The refusal is recorded as a site fault. readDumpPlan calls this only for a table whose DDL
 // declares WITHOUT ROWID, so a rowid table never pages by a key that can hold NULL.
 async function readPrimaryKey(reader: D1Reader, t: TablePlan, meter?: Meter): Promise<KeyColumn[]> {
-  try {
+  try { // nosemgrep: incident-catch-returns-empty -- the fault is recorded as a site fault
     meter?.spend(1, "d1Read");
     const list = await reader.prepare(`PRAGMA index_list(${quoteIdent(t.name)})`).all<{ name: unknown; origin: unknown }>();
     const pk = list.results.find((r) => r.origin === "pk");
@@ -271,8 +271,8 @@ async function readPrimaryKey(reader: D1Reader, t: TablePlan, meter?: Meter): Pr
       keys.push({ index, collation: typeof r.coll === "string" && r.coll !== "" ? r.coll : "BINARY" });
     }
     return keys;
-  } catch {
-    return [];
+  } catch (e) {
+    noteSiteFault("source.d1-primary-key-read", e); return []; // still read in one page; the row says it was not read by key
   }
 }
 

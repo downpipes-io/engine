@@ -230,11 +230,11 @@ export function oauthErrorMark(raw: unknown): string {
  */
 export function oauthErrorMarkFromBody(bodyText: unknown): string {
   if (typeof bodyText !== "string" || bodyText.length === 0 || bodyText.length > 65_536) return "";
-  try {
+  try { // nosemgrep: incident-catch-returns-empty -- a body that is not JSON carries no code and the mark is left empty
     const j: unknown = JSON.parse(bodyText);
     if (typeof j !== "object" || j === null) return "";
     return oauthErrorMark((j as Record<string, unknown>).error);
-  } catch {
+  } catch { // site-fault-waiver: src/admin/sso-failure-class.ts:oauthErrorMarkFromBody:catch:1 -- a body that is not JSON carries no code and the mark is left empty
     return ""; // a non-JSON error body (a proxy interstitial, an HTML error page) carries no code we can trust
   }
 }

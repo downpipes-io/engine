@@ -265,7 +265,8 @@ async function captureRecords(): Promise<Captured> {
   ok("R2 bare object carries no descriptor", r2Bare.descriptor === undefined);
 
   // The scopes, comment and Worker wiring come from the account through the discovery-token reader
-  // (sources/secrets-wiring.ts); an in-memory API stands in for Cloudflare here.
+  // (sources/secrets-wiring.ts); an in-memory API stands in for Cloudflare here. With no stored discovery config
+  // the engine's own account (here "acct") is the one account in scope.
   const wiringApi = {
     // The engine's own script binds the secret under its bindingVar; "captured" needs that binding in the list.
     get: async (path: string): Promise<unknown> => {
@@ -281,7 +282,7 @@ async function captureRecords(): Promise<Captured> {
   };
   const secRecords = await collect(new SecretsSource([
     { name: "API_TOKEN", get: async () => "sk-never-logged", store: "default", bindingVar: "API_TOKEN" } satisfies BoundSecret,
-  ], { api: wiringApi, accountIds: ["acct"], scope: async () => null }).crawl(ALL));
+  ], { api: wiringApi, accountIds: ["acct"], scope: async () => null, engineAccount: async () => "acct" }).crawl(ALL));
   const sec = secRecords[0]!;
   ok(
     "secrets captures store/scopes/comment/workers/wiring/bindingVar",

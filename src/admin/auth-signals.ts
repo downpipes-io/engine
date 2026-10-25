@@ -27,7 +27,7 @@ export const AUTH_SIGNAL_NAMES = [
   "bootstrap-refused-native-idp", // a native-IdP (oidc/saml) caller reached an empty role table and was NOT made the first Owner
   // --- rate-limit / lockout availability ---
   "auth-ratelimited", // an interactive auth attempt hit the per-IP rate-limit cap (shared-NAT / brute-force lockout)
-  "recovery-ratelimited", // a recovery-code sign-in was refused by the hard per-IP / per-email fail-closed limiter
+  "recovery-ratelimited", // a recovery-code sign-in was refused by the hard per-IP / per-email-and-source fail-closed limiter
   "auth-limiter-unavailable", // the unauthenticated per-IP auth limiter FAILED CLOSED because its backing DO was unavailable (login blocked, not throttled)
   "admin-token-ratelimited", // the bare ADMIN_TOKEN break-glass compare was throttled: either its per-IP cap tripped (a guessing campaign) or the limiter's backing DO was unavailable (fails closed, so a legitimate operator's break-glass was denied too). RETAINED for the vocabulary's stability; the two causes also fire their own split names below
   // --- The AUTH-PLANE OUTAGE branches, which produce responses IDENTICAL to genuine auth verdicts ---
@@ -285,6 +285,7 @@ export const AUTH_SIGNAL_NAMES = [
   "role-invite-email-from-invalid", // INVITE_EMAIL_FROM is set but is not a usable custom-domain sender
   "role-invite-email-recipient-invalid", // the GRANTEE's address is not a custom-domain address, so the invite was a no-op: the grant committed and the person was never emailed
   "role-invite-email-send-rejected", // the EMAIL binding REJECTED the invite send; the role grant has already committed, so the person HAS access but was never told how to enrol
+  "recovery-enrol-notice-failed", // the email telling the other Owners about a passkey enrolled from a recovery-code session could not be sent or the roster could not be read; the enrolment is committed, audited and alerted to the notify channels
   // --- SSO failure SUB-CAUSES: the remediation-bearing half of "SSO broke overnight" ---
   // WHY: the 10 coarse SSO_FAIL_CODES name the STAGE that refused (issuer / key / signature / replay); they do
   // not name the CAUSE, and the cause is what the operator must fix. An EXPIRED Entra client secret answered
@@ -331,6 +332,7 @@ export const AUTH_SIGNAL_NAMES = [
   "invite-mint-refused-bad-email", // an invite could not be minted: the target address is not usable
   "invite-mint-refused-role-exists", // an invite was refused because the address already holds a role (it does not need one)
   "invite-mint-refused-latch-consumed", // a FIRST-OWNER bootstrap invite was refused because the one-shot bootstrap latch is already consumed: the documented "email the owner a link" button silently does nothing forever
+  "invite-mint-refused-cooldown", // a FIRST-OWNER bootstrap send was refused because the previous send was under a minute ago: the live link in the owner mailbox stays valid
   "invite-redeem-refused-malformed", // the presented invite token was not well-formed
   "invite-redeem-refused-absent", // no invite record exists for the presented token (never minted, or already burned)
   "invite-redeem-refused-expired", // the invite EXISTED and had lapsed. Recorded BEFORE the delete, so the proof it existed survives the burn

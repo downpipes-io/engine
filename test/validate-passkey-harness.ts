@@ -390,7 +390,7 @@ export async function post(
   path: string,
   body: unknown,
   opts: { authorization?: string; cookie?: string; origin?: string; ip?: string | null } = {},
-): Promise<{ status: number; json: PasskeyBody; setCookie: string | null; retryAfter: string | null }> {
+): Promise<{ status: number; json: PasskeyBody; setCookie: string | null; retryAfter: string | null; text: string; contentType: string | null }> {
   const headers: Record<string, string> = { "content-type": "application/json" };
   if (opts.authorization !== undefined) headers["authorization"] = opts.authorization;
   if (opts.cookie !== undefined) headers["cookie"] = opts.cookie;
@@ -412,7 +412,7 @@ export async function post(
   const json = (typeof rawJson === "object" && rawJson !== null ? rawJson : {}) as PasskeyBody;
   // retryAfter exposes the Retry-After response header so a test can verify the rate limiter's
   // Retry-After contract on a 429, not just the coarse body (finding engine-test-011-11).
-  return { status: resp.status, json, setCookie: resp.headers.get("set-cookie"), retryAfter: resp.headers.get("retry-after") };
+  return { status: resp.status, json, setCookie: resp.headers.get("set-cookie"), retryAfter: resp.headers.get("retry-after"), text, contentType: resp.headers.get("content-type") };
 }
 
 // extractSessionCookie turns a Set-Cookie header value into a Cookie header value (name=value) a later

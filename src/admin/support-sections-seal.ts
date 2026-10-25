@@ -37,6 +37,7 @@ import { sanitiseSealFaultSpans } from "../seal/seal-fault-spans.ts";
 import { resolveSealVerifyKnobs } from "../seal/verify-at-seal.ts";
 import { loadConfigWrapKey } from "./config-secret.ts";
 import { doURL } from "../do-url.ts";
+import { stampFields } from "../format/engine-stamp.ts";
 import { clampInt, clampIsoTs, clampTs } from "./support-shared.ts";
 
 // fetchReplication pulls the per-downpipe per-destination replication heartbeats (`repl:` DestReplState) so
@@ -64,11 +65,11 @@ import { clampInt, clampIsoTs, clampTs } from "./support-shared.ts";
 // it. The r.ok check exists because the DO's own error response is the likelier fault, not only a throw.
 // metrics.ts:122 holds the same line for the scrape ("a non-2xx from the DO is a genuine backend fault, not an
 // empty fleet"), and the pack holds it here too.
-type DestReplHeartbeat = { holdsRunId?: string | null; holdsIndex?: number; lastOk?: boolean; lastAttemptAt?: number; reason?: string; reasonSite?: string };
+type DestReplHeartbeat = { holdsRunId?: string | null; holdsIndex?: number; lastOk?: boolean; lastAttemptAt?: number; engineVersion?: string; reason?: string; reasonSite?: string };
 // The replicate-pass site that recorded a failed row's reason, re-gated at the pack boundary (from engine 0.3.7).
 const REPL_REASON_SITE_SET: ReadonlySet<string> = new Set(REPL_REASON_SITES);
 export async function fetchReplication(scheduler: DurableObjectStub): Promise<Record<string, Array<Record<string, unknown>>> | null> {
-  try {
+  try { // nosemgrep: incident-catch-returns-empty -- null is read by the caller as replication unknown and never as no replicas
     const r = await scheduler.fetch(doURL("/replication"), { method: "GET" });
     if (!r.ok) return null;
     const j = (await r.json()) as { byDownpipe?: Record<string, Record<string, DestReplHeartbeat>> };
@@ -83,6 +84,7 @@ export async function fetchReplication(scheduler: DurableObjectStub): Promise<Re
         // A reachable destination that holds no run yet: ok:true alone reads as a healthy copy, so the row
         // says there is no restorable copy here. A failed row's reason already says more than this would.
         ...(s.lastOk === true && (typeof s.holdsIndex !== "number" || s.holdsIndex < 0) ? { copy: "none-yet" } : {}),
+        ...stampFields(s.engineVersion, "engineVersion"),
         ...(s.lastOk !== true && typeof s.reason === "string" ? { reason: s.reason } : {}),
         ...(s.lastOk !== true && typeof s.reasonSite === "string" && REPL_REASON_SITE_SET.has(s.reasonSite) ? { reasonSite: s.reasonSite } : {}),
         // nextStep: what to do about a replica reason, from the engine's own table (seal-faults.ts).
@@ -91,7 +93,7 @@ export async function fetchReplication(scheduler: DurableObjectStub): Promise<Re
       if (rows.length > 0) out[dpId] = rows;
     }
     return out;
-  } catch {
+  } catch { // site-fault-waiver: src/admin/support-sections-seal.ts:fetchReplication:catch:1 -- null is read by the caller as replication unknown and never as no replicas
     return null;
   }
 }
@@ -201,9 +203,12 @@ const CHECKPOINT_UNWRAP_CODE_SET: ReadonlySet<string> = new Set(CHECKPOINT_UNWRA
 const WORM_UNKNOWN_REASON_SET: ReadonlySet<string> = new Set(WORM_UNKNOWN_REASONS);
 // fetchSealFaultSpans pulls the per-reason first-seen and last-seen spans the DO keeps beside the ring
 // (seal/seal-fault-spans.ts), re-gated at the pack boundary by sanitiseSealFaultSpans. {} when there are none.
+// ringOldestAt is the `at` of the oldest row in the seal-fault ring, present when the ring holds a row. It is the
+// lower bound of what the ring can show: a fault with no span can only be dated back to that time.
 export async function fetchSealFaultSpans(scheduler: DurableObjectStub): Promise<Record<string, unknown>> {
-  const j = (await (await scheduler.fetch(doURL("/seal-faults"), { method: "GET" })).json()) as { spans?: unknown };
-  return sanitiseSealFaultSpans(j.spans) ?? {};
+  const j = (await (await scheduler.fetch(doURL("/seal-faults"), { method: "GET" })).json()) as { spans?: unknown; faults?: unknown };
+  const ats = (Array.isArray(j.faults) ? (j.faults as Array<Record<string, unknown>>) : []).map((f) => f?.at).filter((a): a is number => typeof a === "number" && Number.isFinite(a));
+  return { ...(sanitiseSealFaultSpans(j.spans) ?? {}), ...(ats.length > 0 ? { ringOldestAt: Math.min(...ats) } : {}) };
 }
 
 export async function fetchSealFaults(scheduler: DurableObjectStub): Promise<unknown[]> {
@@ -218,6 +223,7 @@ export async function fetchSealFaults(scheduler: DurableObjectStub): Promise<unk
       .map((s) => ({
         kind: s.kind,
         ...(typeof s.at === "number" && Number.isFinite(s.at) ? { at: s.at } : {}),
+        ...stampFields(s.engineVersion, "engineVersion"),
         ...(typeof s.downpipeId === "string" ? { downpipeId: s.downpipeId.slice(0, 128) } : {}),
         ...(typeof s.runId === "string" ? { runId: s.runId.slice(0, 128) } : {}),
         ...(s.found !== undefined ? { found: intOr0(s.found) } : {}),

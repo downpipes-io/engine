@@ -78,7 +78,7 @@ export interface OrgPolicy {
   attendedCadenceDays?: number;
   // breakGlassTokenRetired: set true by the OWNER-ONLY POST /admin/policy/retire-break-glass-token. When
   // true the engine REFUSES the ADMIN_TOKEN bearer fallback exactly as if ADMIN_TOKEN_DISABLED were set, so
-  // the operator can dispose of the one-time bootstrap token in-app with no redeploy. It is ONE-WAY FROM THE
+  // the operator can dispose of the bootstrap token, valid until it is disabled or retired in-app with no redeploy. It is ONE-WAY FROM THE
   // APP: a retired token can never un-retire itself (the retire endpoint resolves to owner, and a retired
   // token no longer resolves to owner); only a passkey/Access Owner can flip it back, or a redeploy that
   // resets the DO (the flag lives in the DO, not in env). OPTIONAL: absent reads the default false
@@ -219,6 +219,7 @@ export interface DestReplState {
   holdsAbove?: number[];
   lastOk: boolean;           // the most recent seal/mirror attempt to this destination succeeded
   lastAttemptAt: number;     // epoch ms of that attempt
+  engineVersion?: string; // the engine version that wrote this state; absent on a record from before the stamp
   reason?: string; reasonSite?: ReplReasonSite; // coarse, secret-free reason when !lastOk (e.g. "unreachable"), and the replicate-pass site that recorded it (REPL_REASON_SITES)
 }
 
@@ -698,7 +699,7 @@ export const ENGINE_ACCOUNT_VERIFIED_KEY = "engineAccountVerified";
 export interface VerifiedEngineAccount {
   accountId: string;
   verifiedAt: number; // epoch ms
-  via: "attach" | "update-apply";
+  via: "attach" | "update-apply" | "deploy-var";
 }
 
 // DEST_CONFIG_KEY holds the single CONSOLE-SET archive-destination record: the S3-shaped
@@ -755,6 +756,9 @@ export const UPDATE_KEY = "updateLifecycle";
 // covers many release cycles of engine+console outcomes while keeping the record small (the full audit
 // trail remains the durable history; this ring is the console's quick view).
 export const UPDATE_HISTORY_CAP = 20;
+
+// UPDATE_VERSION_DIGEST_CAP bounds UpdateRecord.versionDigests (Cloudflare keeps the 100 most recent versions).
+export const UPDATE_VERSION_DIGEST_CAP = 100;
 // DEMO_FRESH_FIRST_RUN_KEY: a demo-only marker written by POST /demo/reset (after the storage wipe) and
 // cleared by POST /keys/install, so the guided setup restarts at the key ceremony even though a DO reset
 // cannot remove the surviving signer/break-glass worker secrets. Read by GET /setup-state under DEMO_MODE.
@@ -818,6 +822,9 @@ export interface UpdatePending {
   // (redaction-safe, same class as the sha384 already shown on the licence screen); absent on legacy
   // records and on any promote whose channel entry carried no digest.
   artefactSha384?: string;
+  // uploadedSha384 (ADDITIVE) is the SHA-384 of the bytes this promote uploaded as toVersion. setUpdatePending
+  // records it in UpdateRecord.versionDigests so a later rollback to toVersion can check the code it fetches.
+  uploadedSha384?: string;
   // readback (ADDITIVE) is the post-upload read-back verdict for this promote (verified | mismatch
   // | unavailable, the gate mode it ran under, and the platform-returned digest when bytes were read):
   // durable evidence of whether Cloudflare's own API held byte-exactly the signed bundle BEFORE the
@@ -890,6 +897,12 @@ export interface UpdateLast {
   // readback (ADDITIVE): the promote's read-back verdict, copied forward from the pending record at
   // settle so the outcome row remains self-contained evidence (see UpdatePending.readback).
   readback?: { verdict: string; mode: string; deployedSha384?: string; detail?: string };
+  // rollbackIdentity / liveSha384 (ADDITIVE, ROLLED-BACK ONLY): set when the rollback re-uploaded the prior code
+  // as a new version because a secret changed since it was live. rollbackIdentity is how the fetched code was
+  // matched to the release ("exact", "build-stamp" or "not-checked"); liveSha384 is the SHA-384 of the code now
+  // live under fromVersion (the new version id), which setUpdateSettled records in versionDigests.
+  rollbackIdentity?: string;
+  liveSha384?: string;
   // percentage (ADDITIVE, RAMP-SETTLED APPLIED ONLY): a gradual ramp that settles applied is DELIBERATELY
   // still serving a two-version split (toVersion at this percentage, fromVersion the rest) until the
   // operator promotes to 100%. Persisting the split on the settled record lets the update-version-drift
@@ -947,6 +960,10 @@ export interface UpdateRecord {
   // forward by every read-modify-write, like settledHighWaterMark).
   lastChannelSeq?: number;
   lastChannelIssuedAt?: string;
+  // versionDigests (ADDITIVE, sticky) maps a Cloudflare version id to the SHA-384 of the code the engine
+  // deployed as that version (every apply upload and every re-uploaded rollback version). A rollback reads it
+  // to check the identity of the older code it fetches. Bounded to UPDATE_VERSION_DIGEST_CAP, oldest dropped.
+  versionDigests?: Record<string, string>;
 }
 
 // GROUP_ROLE_SCOPED_PREFIX keys a group mapping SCOPED to one IdP connection: `grouproleconn:<connId>:<group>`.

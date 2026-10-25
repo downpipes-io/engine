@@ -50,7 +50,7 @@ import { verdictReached } from "./lib/verdict-guard.ts";
 
 const RUN = "01ARZ3NDEKTSV4RRFFQ69G5CB1";
 const NS = "ns_narrow";
-const ORIGIN = "acct-origin";
+const ORIGIN = "cccccccccccccccccccccccccccccc01";
 
 function rand(n: number): Uint8Array {
   return crypto.getRandomValues(new Uint8Array(n));
@@ -171,7 +171,7 @@ async function main(): Promise<void> {
 
   // apply drives the REAL handler with the given CF double and returns the applied result.
   const apply = async (cf: { api: CfApi }, kv: MockKV): Promise<RestoreResult> =>
-    (await runRestore(envFor(kv), { runId: RUN, confirm: true, cfConfig: { token: "narrow-token", accountId: ORIGIN } }, null, { cfApiFactory: () => cf.api })) as RestoreResult;
+    (await runRestore(envFor(kv), { runId: RUN, confirm: true, cfConfig: { token: "narrow-token", accountId: ORIGIN, zoneId: "dddddddddddddddddddddddddddddd0c", confirmDifferentZoneId: "dddddddddddddddddddddddddddddd0c" } }, null, { cfApiFactory: () => cf.api })) as RestoreResult;
 
   // ---------------- the control: a token with the scope ----------------
   console.log("-- control: a token that DOES carry the edit scope --");

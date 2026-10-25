@@ -10,15 +10,15 @@ import { callerHeaders, rateLimited } from "./router-core.ts";
 import { type AdminRuntime, doURL, type RouterCtx, recordAuthSignalEdge, recordAuthzRefusalEdge } from "./router-helpers.ts";
 import { routeAuthChangeAlert } from "./router-notify.ts";
 import { passkeyOriginAndRpId } from "./router-session.ts";
-import { csrfDoubleSubmitFailClass, readSessionCookie, sessionSetCookie } from "./session.ts";
+import { csrfDoubleSubmitFailClass, readSessionCookie, sessionSetCookie } from "./session.ts"; import { readJsonObjectOrEmpty } from "../util/json-body.ts";
 
 // csrfBlock is the SERVER-SIDE double-submit CSRF gate for the session-termination routes (ML-02). It is
 // DEFENCE IN DEPTH on top of the strict-Origin guard the hub already enforces for every cookie-borne
 // mutating request (§2.3a), never a replacement: a cookie-borne caller (passkey/oidc/saml) whose request
 // lacks a matching x-downpipes-csrf header + __Host-downpipes_csrf cookie pair is refused 403 BEFORE any
-// rate-limit or DO work. The token/access methods present an explicit header a foreign page cannot set
-// cross-origin, so they carry no ambient-cookie CSRF exposure and are exempt (exactly as the Origin guard
-// exempts them). Returns the 403 Response to short-circuit, or null to proceed.
+// rate-limit or DO work. The engine does not run this guard for the token or access methods; the Origin guard
+// runs for an access request only when it carries an Origin header. Returns the 403
+// Response to short-circuit, or null to proceed.
 //
 // The refusal is RECORDED as its closed sub-class (header missing / cookie missing / value mismatch).
 // Those are three different tickets -- a console that never read whoami, a browser that blocked or partitioned
@@ -169,7 +169,7 @@ export async function handleAccountSession(ctx: RouterCtx): Promise<Response | n
       if (csrf) return csrf;
       const limited = await rateLimited(scheduler, caller);
       if (limited) return limited;
-      const body = (await req.json().catch(() => ({}))) as { sid?: unknown };
+      const body = (await readJsonObjectOrEmpty(req)) as { sid?: unknown };
       const resp = await scheduler.fetch(doURL("/passkey/session/terminate-one"), { method: "POST", body: JSON.stringify({ sid: body.sid }), headers: callerHeaders(caller) });
       const out = (await resp.json()) as { ok?: boolean; reason?: string };
       if (out.ok === true) return new Response(JSON.stringify({ ok: true }), { headers: { "content-type": "application/json" } });

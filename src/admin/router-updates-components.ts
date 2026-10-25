@@ -367,6 +367,7 @@ export async function handleComponentApply(a: ComponentApplyArgs): Promise<Respo
           fromVersion: p.fromVersion,
           toVersion: p.toVersion,
           recommendedVersion: p.recommendedVersion,
+          ...(p.uploadedSha384 ? { uploadedSha384: p.uploadedSha384 } : {}),
           ...(p.canaryBaseline ? { canaryBaseline: p.canaryBaseline } : {}),
           riskClass: engineRisk,
           promotedAt: Date.now(),

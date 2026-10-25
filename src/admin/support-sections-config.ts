@@ -465,13 +465,13 @@ export async function fetchOwnerActionQueue(scheduler: DurableObjectStub): Promi
 // binding. Without it a downpipe naming "deploy" counted as dangling while DEST_R2 was bound (test/validate-deploy-
 // row-cleared.ts). Omitting env keeps the plain roster, for a caller that has no env to read.
 export async function fetchDestinationIdSet(scheduler: DurableObjectStub, env?: Env): Promise<Set<string> | null> {
-  try {
+  try { // nosemgrep: incident-catch-returns-empty -- null makes the caller skip the dangling destination check and is never read as an empty roster
     const j = (await (await scheduler.fetch(doURL("/destinations"), { method: "GET" })).json()) as { destinations?: Array<{ id?: unknown }> };
     const rows = Array.isArray(j.destinations) ? j.destinations : [];
     const set = new Set(rows.map((d) => d.id).filter((id): id is string => typeof id === "string"));
     if (env !== undefined && envDestinationDeclared(env)) set.add(DEPLOY_DEST_ID);
     return set;
-  } catch {
+  } catch { // site-fault-waiver: src/admin/support-sections-config.ts:fetchDestinationIdSet:catch:1 -- null makes the caller skip the dangling destination check and is never read as an empty roster
     return null;
   }
 }
@@ -590,10 +590,10 @@ export async function fetchDestResolution(env: Env, scheduler: DurableObjectStub
   // /destinations fetch would otherwise read "ok" with a silently empty destinations list (indistinguishable
   // from an account with no destinations). Keep the env-derived rate knobs but flag the DO-read fault
   // explicitly so a diagnoser can tell "no destinations configured" from "could not read the destinations".
-  let destinationsUnavailable = false;
+  let destinationsUnavailable = false; let destinationRowsDropped = 0; // a stored row that fails to project is counted, never named
   let storedRows: DestEvidenceStoredRow[] | null = null;
   try {
-    const r = await scheduler.fetch(doURL("/destinations"), { method: "GET" });
+    const r = await scheduler.fetch(doURL("/destinations"), { method: "GET" }); if (!r.ok) throw new Error(`destinations unreadable: HTTP ${r.status}`);
     const j = (await r.json()) as { destinations?: Array<{ id?: unknown; endpointHost?: unknown; bucket?: unknown; addressing?: unknown; storageClass?: unknown; worm?: unknown; objectLock?: unknown; lockMode?: unknown; lockRetentionDays?: unknown; checksumRequired?: unknown; verifiedAt?: unknown; deleteProbe?: unknown; isDefault?: unknown; source?: unknown; deleteStatusClass?: unknown }> };
     storedRows = Array.isArray(j.destinations) ? j.destinations.slice(0, 32) : [];
     destinations = (Array.isArray(j.destinations) ? j.destinations : []).slice(0, 32).flatMap((d) => {
@@ -603,7 +603,7 @@ export async function fetchDestResolution(env: Env, scheduler: DurableObjectStub
       // resolveAddressing now throws on a stored bucket that is unsafe under an explicit vhost policy
       // (ML-19); a per-item try/catch means one bad legacy record omits only ITS OWN row (returning []
       // to flatMap) rather than the outer catch below dropping every destination row over one bad record.
-      try {
+      try { // nosemgrep: incident-catch-returns-empty -- the dropped row is counted in destinationRowsDropped
         const vhost = resolveAddressing(host, bucket, addressing);
         return [{
           ...(typeof d.id === "string" ? { id: d.id } : {}),
@@ -634,8 +634,8 @@ export async function fetchDestResolution(env: Env, scheduler: DurableObjectStub
           // Without them a reader sees that a write was refused but not the lock rule or the retention behind it.
           lock: projectLockFacts(d),
         }];
-      } catch {
-        return [];
+      } catch { // site-fault-waiver: src/admin/support-sections-config.ts:fetchDestResolution:catch:2 -- the dropped row is counted in destinationRowsDropped and shown in the pack section
+        destinationRowsDropped++; return [];
       }
     });
   } catch {
@@ -658,7 +658,7 @@ export async function fetchDestResolution(env: Env, scheduler: DurableObjectStub
     destinations,
     ...idEvidence,
     ...(configAnomalies.length > 0 ? { configAnomalies } : {}),
-    ...(destinationsUnavailable ? { destinationsUnavailable: true } : {}),
+    ...(destinationsUnavailable ? { destinationsUnavailable: true } : {}), ...(destinationRowsDropped > 0 ? { destinationRowsDropped } : {}),
   };
 }
 

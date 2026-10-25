@@ -44,6 +44,7 @@ async function doFetch(path: string, opts?: { method?: string; body?: unknown; c
 }
 
 describe("destsim pull-consumer storm (real workerd + real SchedulerDO)", () => {
+  // The 20 s timeout covers 25 sequential DO calls and two concurrent bursts of 16 and 2 Worker requests in real workerd. A loaded host stretches them past the 5 s default.
   it("concurrent /metrics scrapes and /support/audit-feed pulls survive parallel access with stable results", async () => {
     // ---- seed: a small fleet, a modest audit chain, and both ingest credentials ----
     for (let i = 0; i < 3; i++) {
@@ -116,5 +117,5 @@ describe("destsim pull-consumer storm (real workerd + real SchedulerDO)", () => 
     expect(b.status).toBe(200);
     const [ta, tb] = await Promise.all([a.text(), b.text()]);
     expect(ta).toBe(tb);
-  });
+  }, 20_000);
 });

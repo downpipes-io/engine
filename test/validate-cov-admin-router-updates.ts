@@ -32,6 +32,7 @@ import { canonicalJSON } from "../src/format/canonjson.ts";
 import { concat, utf8, b64urlEncode, hexEncode, base64Encode, sha256Hex } from "../src/crypto/bytes.ts";
 import { sha384 } from "../src/crypto/primitives.ts";
 import { ENGINE_VERSION } from "../src/format/version.ts";
+import { SETTLE_INCONCLUSIVE_OUTCOME, SETTLE_INCONCLUSIVE_REASON, SETTLE_VERSION_WAIT_MS } from "../src/admin/router-updates.ts";
 import { compareSemver } from "../src/admin/updates.ts";
 import type { Env } from "../src/env.d.ts";
 import { verdictReached } from "./lib/verdict-guard.ts";
@@ -771,7 +772,7 @@ async function main(): Promise<void> {
     {
       // Pending present, NO token -> the decision is computed (canary flown, self-check consulted) then the
       // token-required 400 is returned (the canaryBaseline ?? gate.baseline() right arm is exercised here).
-      await seedPending({ fromVersion: "v-prior", toVersion: liveVersionId, recommendedVersion: "0.4.0", riskClass: "routine", promotedAt: Date.now(), promotedBy: OWNER });
+      await seedPending({ fromVersion: "v-prior", toVersion: liveVersionId, recommendedVersion: ENGINE_VERSION, riskClass: "routine", promotedAt: Date.now(), promotedBy: OWNER });
       const r = await call(OWNER, "POST", "/admin/update/settle", {});
       ok("settle with a pending, no token -> 400 token-required (decision computed first)", r.status === 400 && /paste the one-shot deploy token/.test(String((await jsonOf(r)).error)));
     }
@@ -779,14 +780,14 @@ async function main(): Promise<void> {
       // SUPERSEDED: the live version (deployments LIST = v-live) differs from pending.toVersion -> 409, and
       // the pending is cleared without any change. A seeded canaryBaseline:"alive" exercises the
       // liveBaseline !== "alive" FALSE arm (so the inline self-check is skipped).
-      await seedPending({ fromVersion: "v-prior", toVersion: "v-other", recommendedVersion: "0.4.0", riskClass: "routine", canaryBaseline: "alive", promotedAt: Date.now(), promotedBy: OWNER });
+      await seedPending({ fromVersion: "v-prior", toVersion: "v-other", recommendedVersion: ENGINE_VERSION, riskClass: "routine", canaryBaseline: "alive", promotedAt: Date.now(), promotedBy: OWNER });
       const r = await call(OWNER, "POST", "/admin/update/settle", { token: DEPLOY_TOKEN });
       ok("settle when the live version is no longer the promoted one -> 409 superseded", r.status === 409 && /no longer the one this update promoted/.test(String((await jsonOf(r)).error)));
     }
     {
       // No engine account marked after the token gate (a non-number promotedAt also exercises the TTL
       // guard's typeof-number FALSE arm, so the stale-clear branch is skipped on a malformed timestamp).
-      await seedPending({ fromVersion: "v-prior", toVersion: liveVersionId, recommendedVersion: "0.4.0", riskClass: "routine", promotedAt: "not-a-number", promotedBy: OWNER });
+      await seedPending({ fromVersion: "v-prior", toVersion: liveVersionId, recommendedVersion: ENGINE_VERSION, riskClass: "routine", promotedAt: "not-a-number", promotedBy: OWNER });
       accountOn = false;
       const r = await call(OWNER, "POST", "/admin/update/settle", { token: DEPLOY_TOKEN });
       ok("settle with a token but no engine account -> 400", r.status === 400 && /Cloudflare account is not marked/.test(String((await jsonOf(r)).error)));
@@ -796,7 +797,7 @@ async function main(): Promise<void> {
       // SPLIT live deployment (liveSingle === null): the route does NOT declare superseded on a split (it
       // would collapse the split by deploying at 100%); it proceeds and rolls back. Exercises the
       // liveSingle ?? slices.map(...) label fallback and the liveSingle !== null FALSE arm.
-      await seedPending({ fromVersion: "v-prior", toVersion: "v-other", recommendedVersion: "0.4.0", riskClass: "routine", promotedAt: Date.now(), promotedBy: OWNER });
+      await seedPending({ fromVersion: "v-prior", toVersion: "v-other", recommendedVersion: ENGINE_VERSION, riskClass: "routine", promotedAt: Date.now(), promotedBy: OWNER });
       liveSplit = true;
       const r = await call(OWNER, "POST", "/admin/update/settle", { token: DEPLOY_TOKEN });
       ok("settle on a multi-version split -> proceeds (not superseded) -> 200 applied (optimistic keep)", r.status === 200 && (await jsonOf(r)).outcome === "applied");
@@ -842,7 +843,7 @@ async function main(): Promise<void> {
       // live drills that reverted healthy updates. A stale promotedAt is now decision.keep=true, so the TTL
       // guard clears it as expired (see the dedicated stale block below). This exercises the KEEP settle:
       // the persistence-first record write, settleAfterPromote (no rollback deploy), the applied record.
-      await seedPending({ fromVersion: "v-prior", toVersion: liveVersionId, recommendedVersion: "0.4.0", riskClass: "routine", promotedAt: Date.now(), promotedBy: OWNER });
+      await seedPending({ fromVersion: "v-prior", toVersion: liveVersionId, recommendedVersion: ENGINE_VERSION, riskClass: "routine", promotedAt: Date.now(), promotedBy: OWNER });
       workerNameOn = false; // also exercise the scriptName default here
       const r = await call(OWNER, "POST", "/admin/update/settle", { token: DEPLOY_TOKEN });
       const j = await jsonOf(r);
@@ -855,6 +856,10 @@ async function main(): Promise<void> {
       // view fresh (pending: no flight has flown) and the read did not fail.
       const lastB = st.last as { canaryBaseline?: string; canaryBaselineReadFailed?: boolean } | null;
       ok("the settled record names the baseline it read (pending), with no failed-read flag", lastB?.canaryBaseline === "pending" && lastB?.canaryBaselineReadFailed === undefined);
+      // A keep stores its reason. The settle writes the record twice and the second write replaces the first, so
+      // the reason is read back here after both.
+      const lastR = st.last as { reason?: unknown } | null;
+      ok("the kept settle's stored record carries the keep reason", typeof lastR?.reason === "string" && /keeping/.test(lastR.reason));
       const aud = await jsonOf(await call(OWNER, "GET", "/admin/audit?action=update-applied"));
       const events = (aud.events as { target?: { detail?: string } }[] | undefined) ?? [];
       ok("the update-applied audit detail names the baseline", events.some((e) => /\(canary [a-z]+, baseline pending, self-check /.test(e.target?.detail ?? "")));
@@ -862,10 +867,49 @@ async function main(): Promise<void> {
       workerNameOn = true;
     }
     {
+      // NEW-VERSION GUARD. The pending names 0.4.0 and this process runs ENGINE_VERSION, which is the shape of a
+      // settle request the previous version's code answers just after a promote. Inside the wait the settle
+      // decides nothing: 200 inconclusive, no token read, no deploy, no record, the pending still armed.
+      const counterOf = async (): Promise<number> => (((await jsonOf(await sched.stub.fetch("https://do/admin-counters", { method: "GET" }))) as Record<string, { count?: number }>)["update-settle-inconclusive"]?.count) ?? 0;
+      await seedPending({ fromVersion: "v-prior", toVersion: liveVersionId, recommendedVersion: "0.4.0", riskClass: "routine", promotedAt: Date.now(), promotedBy: OWNER });
+      const before = await jsonOf(await call(OWNER, "GET", "/admin/update/status"));
+      const deployCallsBefore = deployCalls;
+      const countBefore = await counterOf();
+      const r = await call(OWNER, "POST", "/admin/update/settle", {});
+      const j = await jsonOf(r);
+      ok("settle answered by another version inside the wait -> 200 inconclusive, with no token asked for", r.status === 200 && j.outcome === "inconclusive" && j.phase === "settle");
+      ok("the inconclusive answer names the reason and the version that answered", j.reason === "old-version-answering" && j.runningVersion === ENGINE_VERSION && j.recommendedVersion === "0.4.0");
+      const after = await jsonOf(await call(OWNER, "GET", "/admin/update/status"));
+      ok("the pending verification is still armed and unchanged", JSON.stringify(after.pending) === JSON.stringify(before.pending) && (after.pending as { recommendedVersion?: string } | null)?.recommendedVersion === "0.4.0");
+      ok("no settled record was written", JSON.stringify(after.last) === JSON.stringify(before.last));
+      ok("no deploy call was made", deployCalls === deployCallsBefore);
+      ok("the inconclusive settle moved the update-settle-inconclusive counter by one", (await counterOf()) === countBefore + 1);
+      ok("the status read names the version that answered it", after.runningVersion === ENGINE_VERSION);
+      // A second request is inconclusive again: the first consumed nothing.
+      const r2 = await call(OWNER, "POST", "/admin/update/settle", { token: DEPLOY_TOKEN });
+      ok("a repeat with a token is inconclusive again and the pending stays armed", r2.status === 200 && (await jsonOf(r2)).outcome === "inconclusive" && (await jsonOf(await call(OWNER, "GET", "/admin/update/status"))).pending !== null);
+      ok("the wait for the promoted version to answer is 15 minutes", SETTLE_VERSION_WAIT_MS === 15 * 60 * 1000);
+      ok("the named parts of the inconclusive answer are the literals a client reads", SETTLE_INCONCLUSIVE_OUTCOME === "inconclusive" && SETTLE_INCONCLUSIVE_REASON === "old-version-answering");
+      // CONTROL, past the wait: the same pending, promoted longer ago than SETTLE_VERSION_WAIT_MS, takes the
+      // deciding path (here the optimistic keep), so a pending can never stay armed for want of a version match.
+      await seedPending({ fromVersion: "v-prior", toVersion: liveVersionId, recommendedVersion: "0.4.0", riskClass: "routine", promotedAt: Date.now() - SETTLE_VERSION_WAIT_MS - 1000, promotedBy: OWNER });
+      const late = await call(OWNER, "POST", "/admin/update/settle", { token: DEPLOY_TOKEN });
+      ok("past the wait the same settle decides -> 200 applied", late.status === 200 && (await jsonOf(late)).outcome === "applied");
+      ok("...and the pending is cleared", (await jsonOf(await call(OWNER, "GET", "/admin/update/status"))).pending === null);
+      // CONTROL, one second inside the wait: still inconclusive, so the boundary is the constant and no other.
+      await seedPending({ fromVersion: "v-prior", toVersion: liveVersionId, recommendedVersion: "0.4.0", riskClass: "routine", promotedAt: Date.now() - SETTLE_VERSION_WAIT_MS + 60_000, promotedBy: OWNER });
+      const edge = await call(OWNER, "POST", "/admin/update/settle", { token: DEPLOY_TOKEN });
+      ok("one minute inside the wait the settle is still inconclusive", edge.status === 200 && (await jsonOf(edge)).outcome === "inconclusive");
+      // CONTROL, a pending with no promotedAt: the guard has no clock to bound it, so it does not apply.
+      await seedPending({ fromVersion: "v-prior", toVersion: liveVersionId, recommendedVersion: "0.4.0", riskClass: "routine", promotedBy: OWNER });
+      const undated = await call(OWNER, "POST", "/admin/update/settle", { token: DEPLOY_TOKEN });
+      ok("a pending with no promotedAt takes the deciding path -> 200 applied", undated.status === 200 && (await jsonOf(undated)).outcome === "applied");
+    }
+    {
       // A baseline read that FAILED at apply time rides in the pending as canaryBaselineReadFailed: the settle
       // decides on the carried "pending" (the regression guard cannot fire), and says so in the settled record
       // and the audit detail.
-      await seedPending({ fromVersion: "v-prior", toVersion: liveVersionId, recommendedVersion: "0.4.0", riskClass: "routine", canaryBaseline: "pending", canaryBaselineReadFailed: true, promotedAt: Date.now(), promotedBy: OWNER });
+      await seedPending({ fromVersion: "v-prior", toVersion: liveVersionId, recommendedVersion: ENGINE_VERSION, riskClass: "routine", canaryBaseline: "pending", canaryBaselineReadFailed: true, promotedAt: Date.now(), promotedBy: OWNER });
       const r = await call(OWNER, "POST", "/admin/update/settle", { token: DEPLOY_TOKEN });
       ok("settle with a carried failed baseline read -> 200 applied (the decision is unchanged)", r.status === 200 && (await jsonOf(r)).outcome === "applied");
       const st = await jsonOf(await call(OWNER, "GET", "/admin/update/status"));
@@ -913,7 +957,35 @@ async function main(): Promise<void> {
       ok("settle after a self-update -> 200 applied (the ordinary KEEP path, undisturbed)", settleResp.status === 200 && settleJson.outcome === "applied");
       const afterResp = await sched2.stub.fetch("https://scheduler.internal/sources/engine-account-verified", { method: "GET" });
       const after = (await afterResp.json()) as { accountId?: string; via?: string } | null;
-      ok("the settle continuation alone recorded cfAccountId (old-engine-to-new-engine first cycle, at settle)", after !== null && after.accountId === "acct-test" && after.via === "update-apply");
+      // The admin router hands CF_ACCOUNT_ID to the scheduler at the start of every write request, and the
+      // scheduler keeps the first account it is given, so the settle request records it as "deploy-var"
+      // before the settle's own update-apply write, which then changes nothing.
+      ok("the settle request alone recorded cfAccountId (old-engine-to-new-engine first cycle, at settle)", after !== null && after.accountId === "acct-test" && after.via === "deploy-var");
+    }
+
+    {
+      // The one case where the settle's own record is the first to name the account: the Owner's discovery
+      // config marks the engine account and CF_ACCOUNT_ID is not set, so the request-start record has nothing to
+      // send and only the update-apply write can store it.
+      accountOn = false;
+      try {
+        const sched3 = makeScheduler();
+        await sched3.storage.put("discoveryConfig", { token: "", setAt: 1, setBy: null, accountsSeen: [{ id: "acct-cfg", name: "cfg" }], selected: ["acct-cfg"], engineAccountId: "acct-cfg" });
+        const env3 = { ...baseEnv(), ...sched3.env } as unknown as Env;
+        ok("config-only engine: no account is recorded before the settle", (await (await sched3.stub.fetch("https://scheduler.internal/sources/engine-account-verified", { method: "GET" })).json()) === null);
+        await sched3.stub.fetch("https://scheduler.internal/tick", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+        await sched3.stub.fetch("https://scheduler.internal/update-pending", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ fromVersion: "v-prior", toVersion: liveVersionId, recommendedVersion: ENGINE_VERSION, riskClass: "migration", promotedAt: Date.now(), promotedBy: OWNER }),
+        });
+        const settle3 = await callWithEnv(env3, OWNER, "POST", "/admin/update/settle", { token: DEPLOY_TOKEN });
+        ok("config-only engine: settle -> 200 applied", settle3.status === 200 && ((await settle3.json()) as Record<string, unknown>).outcome === "applied");
+        const rec3 = (await (await sched3.stub.fetch("https://scheduler.internal/sources/engine-account-verified", { method: "GET" })).json()) as { accountId?: string; via?: string } | null;
+        ok("config-only engine: the settle's update-apply write records the marked account", rec3 !== null && rec3.accountId === "acct-cfg" && rec3.via === "update-apply");
+      } finally {
+        accountOn = true;
+      }
     }
 
     // ===================================================================================================
@@ -929,13 +1001,13 @@ async function main(): Promise<void> {
     }
     {
       // Target present (pending.fromVersion) but NO token -> the token-required 400.
-      await seedPending({ fromVersion: "v-prior", toVersion: "v-new", recommendedVersion: "0.4.0", promotedAt: Date.now(), promotedBy: OWNER });
+      await seedPending({ fromVersion: "v-prior", toVersion: "v-new", recommendedVersion: ENGINE_VERSION, promotedAt: Date.now(), promotedBy: OWNER });
       const r = await call(OWNER, "POST", "/admin/update/rollback", {});
       ok("rollback with a target, no token -> 400 token-required", r.status === 400 && /one-shot Cloudflare deploy token/.test(String((await jsonOf(r)).error)));
     }
     {
       // A target present but no engine account marked (after the token gate) -> 400.
-      await seedPending({ fromVersion: "v-prior", toVersion: "v-new", recommendedVersion: "0.4.0", promotedAt: Date.now(), promotedBy: OWNER });
+      await seedPending({ fromVersion: "v-prior", toVersion: "v-new", recommendedVersion: ENGINE_VERSION, promotedAt: Date.now(), promotedBy: OWNER });
       accountOn = false;
       const r = await call(OWNER, "POST", "/admin/update/rollback", { token: DEPLOY_TOKEN });
       ok("rollback with a target but no engine account -> 400", r.status === 400 && /Cloudflare account is not marked/.test(String((await jsonOf(r)).error)));
@@ -945,7 +1017,7 @@ async function main(): Promise<void> {
       // Full rollback: target v-prior, live is v-live (differs), deploy succeeds, canary pending ->
       // reverted-unverified; the route records the update-rolled-back audit + clears the pending.
       // WORKER_NAME absent exercises the scriptName default branch.
-      await seedPending({ fromVersion: "v-prior", toVersion: "v-new", recommendedVersion: "0.4.0", promotedAt: Date.now(), promotedBy: OWNER });
+      await seedPending({ fromVersion: "v-prior", toVersion: "v-new", recommendedVersion: ENGINE_VERSION, promotedAt: Date.now(), promotedBy: OWNER });
       workerNameOn = false;
       const r = await call(OWNER, "POST", "/admin/update/rollback", { token: DEPLOY_TOKEN });
       const j = await jsonOf(r);
@@ -954,7 +1026,7 @@ async function main(): Promise<void> {
     }
     {
       // The deploy of the known-good FAILS -> outcome failed; the route records the update-refused audit.
-      await seedPending({ fromVersion: "v-prior", toVersion: "v-new", recommendedVersion: "0.4.0", promotedAt: Date.now(), promotedBy: OWNER });
+      await seedPending({ fromVersion: "v-prior", toVersion: "v-new", recommendedVersion: ENGINE_VERSION, promotedAt: Date.now(), promotedBy: OWNER });
       failDeploy = true;
       const r = await call(OWNER, "POST", "/admin/update/rollback", { token: DEPLOY_TOKEN });
       ok("rollback when the deploy fails -> 200 failed (engine unchanged)", r.status === 200 && (await jsonOf(r)).outcome === "failed");
@@ -1062,7 +1134,7 @@ async function main(): Promise<void> {
     {
       // A pending from the ATOMIC apply path (no `percentage`) is NOT ramp-shaped -> ramp-settle refuses
       // it; the two settle routes stay mutually exclusive (see POST /update/settle's own guard, GROUP D).
-      await seedPending({ fromVersion: "v-prior", toVersion: liveVersionId, recommendedVersion: "0.4.0", promotedAt: Date.now(), promotedBy: OWNER });
+      await seedPending({ fromVersion: "v-prior", toVersion: liveVersionId, recommendedVersion: ENGINE_VERSION, promotedAt: Date.now(), promotedBy: OWNER });
       const r = await call(OWNER, "POST", "/admin/update/ramp/settle", { token: DEPLOY_TOKEN });
       ok("ramp-settle against an apply's (non-ramp) pending -> 400 (wrong endpoint)", r.status === 400 && /no gradual ramp awaiting verification/.test(String((await jsonOf(r)).error)));
     }
@@ -1180,19 +1252,19 @@ async function main(): Promise<void> {
     }
     {
       // settle superseded as the bare token -> the superseded record's `by` is null.
-      await seedPending({ fromVersion: "v-prior", toVersion: "v-other", recommendedVersion: "0.4.0", riskClass: "routine", promotedAt: Date.now(), promotedBy: null });
+      await seedPending({ fromVersion: "v-prior", toVersion: "v-other", recommendedVersion: ENGINE_VERSION, riskClass: "routine", promotedAt: Date.now(), promotedBy: null });
       const r = await bareCall("POST", "/admin/update/settle", { token: DEPLOY_TOKEN });
       ok("settle superseded as the bare token -> 409 (by null arm)", r.status === 409);
     }
     {
       // settle proceed (optimistic keep) as the bare token -> the settle record's `by` is null.
-      await seedPending({ fromVersion: "v-prior", toVersion: liveVersionId, recommendedVersion: "0.4.0", riskClass: "routine", promotedAt: Date.now(), promotedBy: null });
+      await seedPending({ fromVersion: "v-prior", toVersion: liveVersionId, recommendedVersion: ENGINE_VERSION, riskClass: "routine", promotedAt: Date.now(), promotedBy: null });
       const r = await bareCall("POST", "/admin/update/settle", { token: DEPLOY_TOKEN });
       ok("settle proceed as the bare token -> 200 applied (optimistic keep, by null arm)", r.status === 200 && (await jsonOf(r)).outcome === "applied");
     }
     {
       // standalone rollback as the bare token -> the rolled-back record's `by` is null.
-      await seedPending({ fromVersion: "v-prior", toVersion: "v-new", recommendedVersion: "0.4.0", promotedAt: Date.now(), promotedBy: null });
+      await seedPending({ fromVersion: "v-prior", toVersion: "v-new", recommendedVersion: ENGINE_VERSION, promotedAt: Date.now(), promotedBy: null });
       const r = await bareCall("POST", "/admin/update/rollback", { token: DEPLOY_TOKEN });
       ok("rollback as the bare token -> 200 reverted-unverified (by null arm)", r.status === 200 && (await jsonOf(r)).outcome === "reverted-unverified");
     }
@@ -1390,7 +1462,7 @@ async function main(): Promise<void> {
       // pending promoted), which drives the SAME `outcome !== "applied"` abort in setUpdateSettled. This
       // proves the queue closes honestly whenever the engine does not land, without needing a dead canary
       // (unreachable here; the rollback DECISION itself is unit-covered in validate-update-apply).
-      await seedPending({ fromVersion: "v-prior", toVersion: "v-other", recommendedVersion: "0.6.0", riskClass: "routine", promotedAt: Date.now(), promotedBy: OWNER, consoleQueued: { version: "0.6.0", riskClass: "routine", queuedAt: Date.now() } });
+      await seedPending({ fromVersion: "v-prior", toVersion: "v-other", recommendedVersion: ENGINE_VERSION, riskClass: "routine", promotedAt: Date.now(), promotedBy: OWNER, consoleQueued: { version: "0.6.0", riskClass: "routine", queuedAt: Date.now() } });
       events.length = 0;
       const r = await call(OWNER, "POST", "/admin/update/settle", { token: DEPLOY_TOKEN });
       ok("engine settle superseded (not applied) -> 409, nothing deployed", r.status === 409 && /no longer the one this update promoted/.test(String((await jsonOf(r)).error)));
@@ -1659,14 +1731,14 @@ async function main(): Promise<void> {
       // decideKeep KEEPS regardless -- so the reachable outcome here is "applied",
       // not a rollback; the persistence-first write happens for that KEEP too, so the property still holds:
       // the recorded outcome (and the decision trace, selfCheckOk) outlives a failing audit append.
-      await seedPending({ fromVersion: "v-prior", toVersion: liveVersionId, recommendedVersion: "0.6.1", riskClass: "routine", promotedAt: Date.now(), promotedBy: OWNER });
+      await seedPending({ fromVersion: "v-prior", toVersion: liveVersionId, recommendedVersion: ENGINE_VERSION, riskClass: "routine", promotedAt: Date.now(), promotedBy: OWNER });
       failNextAudit = true;
       const r = await call(OWNER, "POST", "/admin/update/settle", { token: DEPLOY_TOKEN });
       const j = await jsonOf(r);
       ok("an audit-append fault after an optimistic keep -> 200 honest (real outcome + could-not-record note), never a false 400", r.status === 200 && j.outcome === "applied" && /could not be fully recorded/.test(String(j.reason)));
       const st = await jsonOf(await call(OWNER, "GET", "/admin/update/status"));
       const last = st.last as { outcome?: string; recommendedVersion?: string; selfCheckOk?: boolean } | null;
-      ok("the persisted outcome survived the audit fault (the bookkeeping write is self-redeploy-safe and independent of it)", last?.outcome === "applied" && last?.recommendedVersion === "0.6.1" && st.pending === null);
+      ok("the persisted outcome survived the audit fault (the bookkeeping write is self-redeploy-safe and independent of it)", last?.outcome === "applied" && last?.recommendedVersion === ENGINE_VERSION && st.pending === null);
       ok("the persisted record carries the decision trace (selfCheckOk)", typeof last?.selfCheckOk === "boolean");
     }
 

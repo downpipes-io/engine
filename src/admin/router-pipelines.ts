@@ -3,6 +3,7 @@
 // carries sealNow / canaryNow) off the RouterCtx the hub builds once, so the per-route capability gate runs
 // inline. Imports shared primitives + the drill core; never imports router.ts.
 
+import { zoneBulkRefusal, zoneSaveRefusal } from "./zone-scope.ts";
 import { RETENTION_ARMED_ALONE_HEADER } from "../sched/destinations.ts";
 import type { DownpipeConfig, DownpipeState } from "../sched/scheduler-do.ts";
 import type { AuditTarget } from "./audit.ts";
@@ -51,6 +52,8 @@ export async function handlePipelines(ctx: RouterCtx): Promise<Response | null> 
       const target = targetOf(body);
       const limited = await rateLimited(scheduler, caller);
       if (limited) return limited;
+      const zoneRefusal = await zoneSaveRefusal(env, scheduler, body);
+      if (zoneRefusal) return zoneRefusal;
       const resp = await scheduler.fetch(doURL("/downpipes"), { method: "POST", body: JSON.stringify(body), headers: callerHeaders(caller) });
       // The DO returns 200 on a valid upsert, 400 { error } on a validation failure, or 403 { error:
       // "forbidden" } when a custom role lacking scheduledtest.config tried to CHANGE the restore-test
@@ -85,7 +88,10 @@ export async function handlePipelines(ctx: RouterCtx): Promise<Response | null> 
       }
       const limited = await rateLimited(scheduler, caller);
       if (limited) return limited;
-      const resp = await scheduler.fetch(doURL("/downpipes/bulk"), { method: "POST", body: await req.text(), headers: callerHeaders(caller) });
+      const bulkText = await req.text();
+      const bulkZoneRefusal = await zoneBulkRefusal(env, scheduler, bulkText);
+      if (bulkZoneRefusal) return bulkZoneRefusal;
+      const resp = await scheduler.fetch(doURL("/downpipes/bulk"), { method: "POST", body: bulkText, headers: callerHeaders(caller) });
       const armedAlone = Number(resp.headers.get(RETENTION_ARMED_ALONE_HEADER) ?? 0);
       if (armedAlone > 0) await routeRetentionArmedAloneAlert(env, scheduler, caller.email ?? null, null, armedAlone);
       return resp;

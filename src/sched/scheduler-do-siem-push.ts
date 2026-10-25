@@ -318,9 +318,9 @@ export function SiemPushMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
       const sink = typeof c.sink === "string" ? c.sink : "http";
       const hostOf = (u: unknown): string => {
         if (typeof u !== "string") return "";
-        try {
+        try { // nosemgrep: incident-catch-returns-empty -- a malformed endpoint shows no host and is rejected when the push executes
           return new URL(u).host;
-        } catch {
+        } catch { // site-fault-waiver: src/sched/scheduler-do-siem-push.ts:SiemPushMixin.summarisePushConfig>hostOf:catch:1 -- a malformed endpoint shows no host and is rejected when the push executes
           return ""; // a malformed endpoint never leaks; buildPushRecord will reject it at execute time
         }
       };

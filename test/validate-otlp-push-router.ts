@@ -270,7 +270,7 @@ async function main(): Promise<void> {
       const inbox = await call(env, "GET", "/admin/owner-actions", { jwt: await tokenFor(O2) });
       const pending = (inbox.json as unknown as Array<{ id: string; kind: string; params: Record<string, unknown> }>).find((a) => a.id === pendingId);
       ok("the pending action is visible to owner2 (kind otlp-push-dest-set)", pending !== undefined && pending.kind === "otlp-push-dest-set");
-      ok("the QUEUED listing carries the non-secret fields (endpoint/header name)", pending?.params.endpoint === "https://otlp.example.com/v1/metrics" && pending?.params.authHeaderName === "Authorization");
+      ok("the QUEUED listing carries the non-secret fields (endpoint as scheme and host only, header name)", pending?.params.endpoint === "https://otlp.example.com" && pending?.params.endpointRedacted === true && pending?.params.authHeaderName === "Authorization");
       ok("DUAL CONTROL: the QUEUED listing NEVER carries the secret (redactOwnerActionParamsForListing strips authHeaderValue)", !("authHeaderValue" in (pending?.params ?? {})) && !JSON.stringify(pending?.params ?? {}).includes(SECRET));
 
       // Self-approval is refused (maker != checker), at the DO (defence in depth).

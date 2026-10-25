@@ -1818,12 +1818,24 @@ async function main(): Promise<void> {
           return new Response(JSON.stringify({ config: null }));
         },
       }) as unknown as DurableObjectStub;
-    const envWithToken = { DISCOVERY_API_TOKEN: "  env-disco-token  " } as unknown as import("../src/env.d.ts").Env;
-    const envNoToken = {} as unknown as import("../src/env.d.ts").Env;
+    // With no stored discovery config only the engine's own account (CF_ACCOUNT_ID) is in scope.
+    const envWithToken = { DISCOVERY_API_TOKEN: "  env-disco-token  ", CF_ACCOUNT_ID: "acc1" } as unknown as import("../src/env.d.ts").Env;
+    const envNoToken = { CF_ACCOUNT_ID: "acc1" } as unknown as import("../src/env.d.ts").Env;
     {
       const calls: string[] = [];
       const token = await cfConfigToken(mkNullStub(calls), dpStateSrc("dp-env-api", { type: "stream", accountId: "acc1" } as DownpipeState["config"]["source"]), envWithToken);
       ok("an API source falls back to the trimmed DISCOVERY_API_TOKEN env var when the DO has no token", token === "env-disco-token" && calls.includes("/sources/discovery-config"));
+    }
+    {
+      const calls: string[] = [];
+      const foreignEnv = { DISCOVERY_API_TOKEN: "env-disco-token", CF_ACCOUNT_ID: "acc2" } as unknown as import("../src/env.d.ts").Env;
+      let refused = false;
+      try {
+        await cfConfigToken(mkNullStub(calls), dpStateSrc("dp-env-foreign", { type: "stream", accountId: "acc1" } as DownpipeState["config"]["source"]), foreignEnv);
+      } catch (e) {
+        refused = (e as { code?: string }).code === "account-scope-excluded";
+      }
+      ok("an API source naming an account other than CF_ACCOUNT_ID is refused when only the env token exists", refused);
     }
     {
       const calls: string[] = [];

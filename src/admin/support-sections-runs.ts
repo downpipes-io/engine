@@ -11,7 +11,7 @@ import { doURL } from "../do-url.ts";
 import { failedDestinationOf } from "../sched/destinations.ts";
 import type { BuildStatusOptions } from "./status.ts";
 import { clampNonNegInt, gateClosed, UNKNOWN_CODE } from "./support-shared.ts";
-import { checkUpdates, compareSemver } from "./updates.ts";
+import { checkUpdates, compareSemver } from "./updates.ts"; import { noteSiteFault } from "./site-faults.ts";
 // UNKNOWN_CODE is used by the update-availability classifiers below.
 
 // STATE_REFUSED_CLASSES mirrors the closed StateRefusedClass vocabulary (sched/types.ts). The
@@ -252,18 +252,18 @@ export async function fetchDriveBudgetYield(scheduler: DurableObjectStub): Promi
 // deploy id + time observed when the baseline was (re-)established. A snapshot RESET (a wiped/first-poll
 // control plane) re-stamps it with a fresh `at`, so comparing `at` across two packs reveals a reset a same-
 // version redeploy would otherwise hide, and cfVersionId names which deploy. Redaction-safe (a version string
-// + a deploy id + a timestamp). Best-effort: {} on failure OR before the first observation (honest absence).
+// + a deploy id + a timestamp). Best-effort: {} before the first observation (honest absence); a read failure also gives {} and is recorded as a site fault.
 export async function fetchStatusBaseline(scheduler: DurableObjectStub): Promise<Record<string, unknown>> {
-  try {
-    const j = (await (await scheduler.fetch(doURL("/status-baseline"), { method: "GET" })).json()) as { version?: unknown; cfVersionId?: unknown; at?: unknown } | null;
+  try { // nosemgrep: incident-catch-returns-empty -- the fault is recorded as a site fault
+    const resp = await scheduler.fetch(doURL("/status-baseline"), { method: "GET" }); if (!resp.ok) throw new Error(`status baseline unreadable: HTTP ${resp.status}`); const j = (await resp.json()) as { version?: unknown; cfVersionId?: unknown; at?: unknown } | null;
     if (j === null || typeof j !== "object") return {};
     return {
       ...(typeof j.version === "string" ? { version: j.version.slice(0, 64) } : {}),
       ...(typeof j.cfVersionId === "string" ? { cfVersionId: j.cfVersionId.slice(0, 128) } : {}),
       ...(typeof j.at === "number" && Number.isFinite(j.at) ? { at: j.at } : {}),
     };
-  } catch {
-    return {};
+  } catch (e) {
+    noteSiteFault("support.status-baseline-read", e); return {}; // {} also reads as no baseline yet, so the fault is recorded
   }
 }
 

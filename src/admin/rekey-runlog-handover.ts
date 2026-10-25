@@ -101,7 +101,7 @@ export async function handOverTargets(targets: readonly HandoverTarget[], oldVer
 export type BeginResult = { ok: true; targets: HandoverTarget[]; oldVerifier: HybridVerifier | null } | { ok: false; status: number; message: string; failed: PrecheckFailure[] };
 
 // beginRekeyRunlogHandover is step 1. It reads the outgoing signer's public halves from this request's env
-// (the old Worker's secret), opens the DO record, and runs the pre-check. When the current signer does not
+// (the old Worker's secret), runs the pre-check, then opens the DO record with every target pending. When the current signer does not
 // load, nothing can verify a RUNLOG under it: the re-key (which is then the repair) proceeds with no hand-over,
 // and each destination RUNLOG waits for the attended re-sign. Nothing is signed unverified.
 export async function beginRekeyRunlogHandover(env: Env, scheduler: DurableObjectStub): Promise<BeginResult> {
@@ -114,11 +114,7 @@ export async function beginRekeyRunlogHandover(env: Env, scheduler: DurableObjec
     // site-fault-waiver: src/admin/rekey-runlog-handover.ts:beginRekeyRunlogHandover:catch:1 -- a signer that does not load is the state this re-key repairs, and the install response reports it as runlogHandover.skipped
     return { ok: true, targets: [], oldVerifier: null };
   }
-  const opened = await scheduler.fetch(doURL("/rekey-handover/begin"), { method: "POST", body: JSON.stringify({ oldVerifier: encodeVerifier(oldVerifier) }), headers: { "content-type": "application/json" } });
-  if (!opened.ok) {
-    const why = opened.status === 409 ? "an earlier re-key has destinations still waiting to be handed over; finish those first" : "the re-key hand-over could not be recorded";
-    return { ok: false, status: 409, message: why, failed: [] };
-  }
+  // Everything that can fault runs BEFORE the record is opened, so a fault or a timeout here leaves no record.
   const targets = await listHandoverTargets(env, scheduler);
   const anomalies: PrecheckAnomaly[] = [];
   const failed = await precheckTargets(targets, oldVerifier, anomalies);
@@ -126,9 +122,18 @@ export async function beginRekeyRunlogHandover(env: Env, scheduler: DurableObjec
   // after this refusal names it. The refusal below does not depend on the post.
   for (const a of anomalies) await reportRunlogAnomaly(scheduler, a.downpipeId, a.row);
   if (failed.length > 0) {
-    await scheduler.fetch(doURL("/rekey-handover/abort"), { method: "POST" });
     const names = failed.map((f) => `${f.label}${f.id && f.id !== f.label ? ` (${f.id})` : ""}: ${f.reason}`).join("; ");
     return { ok: false, status: 409, message: `the re-key stopped before any key was changed: the RUNLOG of ${failed.length === 1 ? "this destination does" : "these destinations do"} not verify under the current signer, so it cannot be handed over: ${names}`, failed };
+  }
+  // The record opens with every target pending. If this request stops before settle, those destinations
+  // stay pending and the attended route can finish them; settle trims the list. With no target there is
+  // nothing to hand over and no record is opened.
+  if (targets.length > 0) {
+    const opened = await scheduler.fetch(doURL("/rekey-handover/begin"), { method: "POST", body: JSON.stringify({ oldVerifier: encodeVerifier(oldVerifier), pending: targets.map((t) => t.id) }), headers: { "content-type": "application/json" } });
+    if (!opened.ok) {
+      const why = opened.status === 409 ? "an earlier re-key has destinations still waiting to be handed over; finish those first" : "the re-key hand-over could not be recorded";
+      return { ok: false, status: 409, message: why, failed: [] };
+    }
   }
   return { ok: true, targets, oldVerifier };
 }

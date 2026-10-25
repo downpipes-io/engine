@@ -532,13 +532,15 @@ async function testAssertionReplay(ctx: Ctx): Promise<void> {
   }
 }
 
-// 6h. REPLAY INSIDE THE CLOCK-SKEW WINDOW (ASVS v5.0.0-6.8.3). A connection that allows IdP-initiated SSO has no
-//     InResponseTo binding, so the one-time-use marker is the only replay defence. The verifier accepts an
-//     assertion until NotOnOrAfter + clockSkewSec, so the marker must live at least that long. The attacker
-//     mints their own RelayState and browser-binding cookie with /start, then re-posts a consumed assertion at
-//     NotOnOrAfter, inside the skew, and at the last accepted instant. Each MUST be refused. The alarm sweep
-//     deletes a marker once its stored expiry passes, so the stored expiry is checked too. The clock is faked
-//     and restored at the end.
+// 6h. REPLAY INSIDE THE CLOCK-SKEW WINDOW (ASVS v5.0.0-6.8.3). The verifier accepts an assertion until
+//     NotOnOrAfter + clockSkewSec, so the one-time-use marker must live at least that long. Each attempt starts
+//     its own sign-in with /start and posts a Response bound to THAT request (so the RelayState and the
+//     InResponseTo binding both pass) that re-uses the assertion id the first use consumed. Only the marker can
+//     refuse it. Attempts are made before NotOnOrAfter, at it, inside the skew, and at the last accepted
+//     instant. Each MUST be refused. The alarm sweep deletes a marker once its stored expiry passes, so the
+//     stored expiry is checked too. The clock is faked and restored at the end.
+//     The connection is stored with allowIdpInitiated: true. That flag does not relax the binding: the last
+//     checks post a Response with NO InResponseTo to the same connection and it mints no session.
 async function testReplayInsideSkewWindow(): Promise<void> {
   const { env, storage } = makeEnv();
   const connId = "work-idp";
@@ -566,14 +568,17 @@ async function testReplayInsideSkewWindow(): Promise<void> {
     const invited = await handleAdmin(new Request(adminUrl("/admin/roles"), { method: "POST", headers: tokenHeaders(), body: JSON.stringify({ email: "alice@example.com", role: "operator" }) }), env);
     ok("skew-replay: invite the assertion email as operator (pending): 200", invited.status === 200);
     const iso = (ms: number) => new Date(ms).toISOString();
-    const assertion = buildFixtureAssertion({ assertionId: "_skew_replay_1", inResponseTo: null, recipient: FIXTURE_ACS_URL, audience: FIXTURE_SP_ENTITY, notBefore: iso(t0 - 60_000), notOnOrAfter: iso(t0 + 30_000), scdNotOnOrAfter: iso(t0 + 30_000) });
-    const signed = await signFixtureAssertion(assertion, "_skew_replay_1", rsa.privateKey);
-    const samlResponse = encodeFixtureResponse(buildFixtureResponse([signed], { destination: FIXTURE_ACS_URL, inResponseTo: null }));
-    const postAt = async (offsetMs: number): Promise<boolean> => {
+    // bound: true binds the Response and the assertion to the request this attempt started; false sends neither.
+    const postAt = async (offsetMs: number, assertionId = "_skew_replay_1", bound = true): Promise<boolean> => {
       fake = t0 + offsetMs;
       const s = await handleAdmin(new Request(adminUrl(`/admin/saml/start/${connId}`), { method: "GET" }), env);
-      const rs = new URL(s.headers.get("location") ?? "https://x/").searchParams.get("RelayState") ?? "";
+      const su = new URL(s.headers.get("location") ?? "https://x/");
+      const rs = su.searchParams.get("RelayState") ?? "";
+      const reqId = extractAuthnRequestId(new TextDecoder().decode(await inflateRaw(b64stdDecode(su.searchParams.get("SAMLRequest") ?? "")))) ?? "";
       const st = cookieValue(getSetCookie(s), "__Host-downpipes_saml_txn") ?? "";
+      const assertion = buildFixtureAssertion({ assertionId, inResponseTo: bound ? reqId : null, recipient: FIXTURE_ACS_URL, audience: FIXTURE_SP_ENTITY, notBefore: iso(t0 - 60_000), notOnOrAfter: iso(t0 + 30_000), scdNotOnOrAfter: iso(t0 + 30_000) });
+      const signed = await signFixtureAssertion(assertion, assertionId, rsa.privateKey);
+      const samlResponse = encodeFixtureResponse(buildFixtureResponse([signed], { destination: FIXTURE_ACS_URL, inResponseTo: bound ? reqId : null }));
       const body = `SAMLResponse=${encodeURIComponent(samlResponse)}&RelayState=${encodeURIComponent(rs)}`;
       const r = await handleAdmin(new Request(adminUrl(`/admin/saml/acs/${connId}`), { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded", cookie: `__Host-downpipes_saml_txn=${st}` }, body }), env);
       return cookieValue(getSetCookie(r), "__Host-downpipes_session") !== null;
@@ -586,6 +591,12 @@ async function testReplayInsideSkewWindow(): Promise<void> {
     // The alarm sweep deletes a marker whose stored expiry has passed, so the stored value itself must cover
     // the whole acceptance window, not only NotOnOrAfter.
     ok("skew-replay: the stored marker expiry covers NotOnOrAfter + clockSkewSec", ((await storage.get<number>(`seenassertion:${connId}:_skew_replay_1`)) ?? 0) >= t0 + 30_000 + 120_000);
+    // THE BINDING IS NOT RELAXED BY THE STORED FLAG. A fresh assertion id, so the marker cannot be what refuses:
+    // with no InResponseTo on the Response or the assertion, no session is minted and no marker is written.
+    ok("binding: allowIdpInitiated=true and a Response with no InResponseTo mints no session", !(await postAt(0, "_unbound_1", false)));
+    ok("binding: the refused unbound assertion left no one-time-use marker", (await storage.get<number>(`seenassertion:${connId}:_unbound_1`)) === undefined);
+    // CONTROL: the same fresh-id shape, bound to its own request, mints a session, so the refusal above is the binding's.
+    ok("binding control: a fresh assertion bound to its own request mints a session", await postAt(0, "_bound_2", true));
   } finally {
     Date.now = realNow;
   }

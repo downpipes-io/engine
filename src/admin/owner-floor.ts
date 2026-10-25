@@ -13,12 +13,12 @@
 // without a mutation firing this guard (effectiveRole drops it lazily) - the same property the long-standing
 // last-Owner guard already has, since it too gates mutations, not the passage of time.
 //
-// THIS PARAGRAPH USED TO CALL BOTH EDGES "RECOVERABLE via the break-glass off-switch (the route guarantees
-// the break-glass can always disarm)". THAT WAS FALSE, and the sentence was the whole safety argument.
-// Retiring the break-glass token removes the off-switch, there is no un-retire route, and the product's own
-// dispose-bootstrap-token posture check tells the operator to retire it. Measured by another
-// pass over the full eight-cell lattice; see wouldStrandDualControl below, which now refuses the
-// combination at each of its three entrances, and test/validate-owner-floor-breakglass-escape.ts.
+// NEITHER EDGE IS RECOVERABLE through the break-glass off-switch. Retiring the break-glass token removes
+// that off-switch, there is no un-retire route, and the product's own dispose-bootstrap-token posture check
+// tells the operator to retire it. So the guard cannot rest on the off-switch: wouldStrandDualControl below
+// refuses the stranding combination at each of its three entrances, over the full eight-cell lattice of
+// dual control, break-glass retirement and an expiring Owner grant. test/validate-owner-floor-breakglass-escape.ts
+// drives every cell.
 //
 // This EXTENDS the existing last-Owner guard rather than replacing it: the floor is ONE while
 // dual control is off (removing the last Owner is refused, unchanged) and TWO while it is on. The count is
@@ -153,7 +153,7 @@ export function canRequireDualControl(ownerCount: number): boolean {
 // for ever, the role-set answers 202, the maker cannot approve their own action and the lapsed Owner cannot
 // approve anything. The gate stays ON in exactly that one cell of eight.
 //
-// So the invariant this module now states is: THE ESTATE MAY HOLD AT MOST TWO OF THE THREE. It is enforced at
+// So the invariant this module states is: THE ESTATE MAY HOLD AT MOST TWO OF THE THREE. It is enforced at
 // each of the three entrances rather than at the lapse, because the lapse is the passage of time and there is
 // nothing there to refuse. A refusal here always leaves both of its named remedies open, because the second
 // Owner is still live at the moment it fires.

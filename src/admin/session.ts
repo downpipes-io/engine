@@ -26,8 +26,8 @@
 //  - CSRF (defence in depth on top of SameSite=Strict): originAllowed enforces a STRICT match of the
 //    request Origin against CONSOLE_ORIGIN on a state-changing (mutating) request authenticated via the
 //    cookie, so even a browser that did not honour SameSite (or a future relaxation) cannot drive a
-//    cross-origin write with the ambient cookie. A bare-token or Access caller is not cookie-borne and is
-//    not subject to this check (it carries no ambient credential a foreign page could ride).
+//    cross-origin write with the ambient cookie. The router also runs it for an Access request that carries an
+//    Origin header; a bare-token request and an Access request with no Origin skip it.
 //
 // Node 25 strip-types compatible and Workers-runtime compatible: Web Crypto only, no Node built-ins, no
 // enums, explicit field declarations. The pure sign/verify is exercised directly by the validator with a
@@ -532,10 +532,10 @@ export function readSessionCookie(req: Request): string | null {
 // state-changing request, so a legitimate console write always carries it, while a cross-site forgery
 // either omits it or carries a foreign origin and is refused.
 //
-// This is enforced ONLY for the cookie (passkey-session) method on MUTATING requests: an Access JWT and
-// the bare token are presented in explicit headers a foreign page cannot set on a credentialed
-// cross-origin request, so they are not ambient-credential CSRF vectors and are not subject to this check
-// (the router applies it conditionally). It is DEFENCE IN DEPTH on top of SameSite=Strict on the cookie:
+// This is enforced for the cookie-borne methods on MUTATING requests, and for an Access request that carries an
+// Origin header. The engine does not run it for the bare token or for an Access request with no Origin
+// (the router applies it conditionally, by method and by Origin presence).
+// It is DEFENCE IN DEPTH on top of SameSite=Strict on the cookie:
 // even a browser that ignored SameSite, or a future relaxation of it, could not drive a cross-origin
 // write because the Origin would not match.
 export function originAllowed(req: Request, consoleOrigin: string | undefined): boolean {

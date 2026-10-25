@@ -105,6 +105,8 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with: { node-version: "${{ env.NODE_VERSION }}" }
       - run: npm ci --no-audit --no-fund
+      - name: The shipped wrangler.toml names the vendor update channel on its canonical host
+        run: node test/validate-shipped-update-channel.ts
       - name: Build the release artefact (deterministic, unstamped)
         id: facts
         run: |
@@ -121,7 +123,9 @@ jobs:
           VERSION: ${{ steps.facts.outputs.version }}
         run: |
           set -euo pipefail
-          sha256sum "dist/engine-${VERSION}.mjs" release-facts.json sbom.cdx.json > SHA256SUMS.txt
+          # Each line names its file as the release publishes it: the bare file name, with no folder.
+          (cd dist && sha256sum "engine-${VERSION}.mjs") > SHA256SUMS.txt
+          sha256sum release-facts.json sbom.cdx.json >> SHA256SUMS.txt
           cat SHA256SUMS.txt
       - name: Export subject hashes for SLSA
         id: hash

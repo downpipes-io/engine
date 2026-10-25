@@ -51,7 +51,7 @@ export function decodeVerifier(v: unknown): HybridVerifier | null {
   if (typeof v !== "object" || v === null) return null;
   const o = v as { ed?: unknown; mldsa?: unknown };
   if (typeof o.ed !== "string" || typeof o.mldsa !== "string") return null;
-  try {
+  try { // nosemgrep: incident-catch-returns-empty -- the fault is recorded as a site fault
     const ed = b64urlDecode(o.ed);
     const mldsa = b64urlDecode(o.mldsa);
     return ed.length === 32 && mldsa.length === 2592 ? { ed, mldsa } : null;
@@ -69,11 +69,14 @@ export async function readRekeyHandover(storage: HandoverStorage): Promise<Rekey
 
 /**
  * beginRekeyHandover opens a hand-over: it holds the old public key and holds run allocation until
- * now + REKEY_HOLD_MS. An open record from an earlier re-key keeps its pending ids, because those RUNLOGs are
- * still signed under the key it holds. A second re-key over an unfinished one is refused by the caller.
+ * now + REKEY_HOLD_MS. The pending ids start as every destination the re-key will hand over, so a request that
+ * stops before settle leaves destinations the attended route can finish, never a record with nothing pending.
+ * settle trims the list to the destinations still waiting. A second re-key over an unfinished one is refused
+ * by the caller.
  */
-export async function beginRekeyHandover(storage: HandoverStorage, oldVerifier: { ed: string; mldsa: string }, now: number): Promise<void> {
-  await storage.put(REKEY_HANDOVER_KEY, { oldVerifier, startedAt: now, holdUntil: now + REKEY_HOLD_MS, pending: [] } satisfies RekeyHandoverRecord);
+export async function beginRekeyHandover(storage: HandoverStorage, oldVerifier: { ed: string; mldsa: string }, now: number, pending: readonly string[] = []): Promise<void> {
+  const ids = [...new Set(pending)].slice(0, PENDING_MAX);
+  await storage.put(REKEY_HANDOVER_KEY, { oldVerifier, startedAt: now, holdUntil: now + REKEY_HOLD_MS, pending: ids } satisfies RekeyHandoverRecord);
 }
 
 /**

@@ -147,9 +147,9 @@ export function OtlpPushMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
       const c = req as { endpoint?: unknown };
       const hostOf = (u: unknown): string => {
         if (typeof u !== "string") return "";
-        try {
+        try { // nosemgrep: incident-catch-returns-empty -- a malformed endpoint shows no host and is rejected when the push executes
           return new URL(u).host;
-        } catch {
+        } catch { // site-fault-waiver: src/sched/scheduler-do-otlp-push.ts:OtlpPushMixin.summariseOtlpPushConfig>hostOf:catch:1 -- a malformed endpoint shows no host and is rejected when the push executes
           return ""; // a malformed endpoint never leaks; buildOtlpPushRecord rejects it at execute time
         }
       };

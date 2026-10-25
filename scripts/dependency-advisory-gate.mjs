@@ -14,16 +14,16 @@
 // edited to say something different, each with its own declaration line re-issued to match its own new
 // text, both report CANONICAL, and neither CI turns red. The self-digest proves a copy matches its OWN
 // declaration; it says nothing about whether that declaration still matches the rest of the family.
-// siblingReport below is the second check this gap needs: when a sibling repository is checked out next to
-// this one, it reads that sibling's copy of this same file and compares bytes directly, no digest either
-// side. A sibling that differs is a finding, naming the file and both bodies' sha256. A sibling not found
+// siblingReport below is the second check this gap needs: it reads each sibling repository's copy of this
+// same file, from an explicit path or from the sibling's origin/main, and compares bytes directly, no
+// digest either side. A sibling that differs is a finding, naming the file and both bodies' sha256. A sibling not found
 // on disk is SKIPPED, stated as a reason rather than folded into a silent pass, because a checkout that
 // cannot see a sibling has not checked parity and must not report as if it had.
 //
-// WHY NOT FOUR HAND-WRITTEN GATES, and why not a shared package either. Four independent gates is the
-// drift this project paid for in the same week this was written: three copies of
-// scripts/sibling-freshness.mjs diverged on their own main while two written statements said they must
-// not, and the requirement had been recorded twice and changed nothing. A published package is the
+// WHY NOT FOUR HAND-WRITTEN GATES, and why not a shared package either. Four independent gates let
+// the copies of scripts/sibling-freshness.mjs drift apart on their own main, and a written statement
+// that they must match does not stop that. A published package is the
+// correct-in-principle answer and is refused on the same ground
 // correct-in-principle answer and is refused on the same ground
 // the sibling-freshness copy gate refuses it: version-pinned per repository, the copies would
 // drift by PIN instead of by bytes, and a stale pin is silent. What is taken here is duplication that a
@@ -104,7 +104,8 @@
 
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -113,7 +114,7 @@ const ROOT = dirname(dirname(SELF));
 const CONFIG_PATH = join(ROOT, ".github", "dependency-advisories.json");
 const BLOCKING = new Set(["high", "critical"]);
 const DIGEST_DECLARATION = /^const CANONICAL_BODY_SHA256 = .*$/m;
-const CANONICAL_BODY_SHA256 = "bfa36cce28c3e520e12fdd5e32f22bdfe0f51acf06aad199d95314fd0af1bf50";
+const CANONICAL_BODY_SHA256 = "d7a720b3ceebdbf8bd5daa81ec6d0dac5455492fa5b5406053771ba8340e44b9";
 
 // The self-check. Hashing the file with the declaration line removed is what lets the constant live in
 // the file it describes. A copy that fails this has been edited in one repository and nowhere else, which
@@ -143,16 +144,42 @@ function repoRootFor(cwd) {
   }
 }
 
-// THE SECOND CHECK A SELF-DIGEST CANNOT DO. Resolves every sibling repository this family names, next to
-// the one this checkout's git directory says it belongs to, and compares this file's own bytes with each
-// sibling's copy directly. FAILS CLOSED: a sibling that is checked out and differs is a problem, naming the
-// file and both sha256 sums. A sibling not checked out there is SKIPPED with the reason, counted as neither
-// a pass nor a failure, because a checkout that never saw a sibling has not established that the two match.
+// THE SECOND CHECK A SELF-DIGEST CANNOT DO. Compares this file's own bytes with each sibling repository's
+// copy directly. FAILS CLOSED: a sibling whose copy differs is a problem, naming the file and both sha256
+// sums. A sibling that cannot be read is SKIPPED with the reason, counted as neither a pass nor a failure,
+// because a checkout that never saw a sibling has not established that the two match.
+//
+// WHERE A SIBLING'S COPY COMES FROM, in this order, and every checked entry says which one was used:
+//   1. An explicit path wins. DOWNPIPES_<NAME>_ROOT, then DOWNPIPES_<NAME> (NAME upper-cased, "-" as "_"),
+//      are the variables the workspace and CI already set for checked-out siblings. The file is read from
+//      that directory's working tree. A variable that is set but names a directory without the file is a
+//      SKIP with the reason, never a fall-through to the guess below, because the caller said where to look.
+//   2. Otherwise a sibling found next to the repository root is read from its COMMITTED canonical copy,
+//      `git show origin/main:scripts/dependency-advisory-gate.mjs`, and never from its working tree. A
+//      primary sibling checkout is often many commits behind main, and its working tree reported a false
+//      drift red for as long as it stayed behind, even with every sibling's origin/main copy identical.
+//      A sibling without that ref or file is a SKIP with the reason.
+const GATE_PATH = "scripts/dependency-advisory-gate.mjs";
+
+/**
+ * @param {string} repo
+ * @param {Record<string, string | undefined>} env
+ */
+function explicitSiblingRoot(repo, env) {
+  const name = repo.toUpperCase().replace(/-/g, "_");
+  for (const key of [`DOWNPIPES_${name}_ROOT`, `DOWNPIPES_${name}`]) {
+    const value = env[key];
+    if (value) return { key, dir: resolve(value) };
+  }
+  return null;
+}
+
 /**
  * @param {string} selfSource
  * @param {string} [cwd]
+ * @param {Record<string, string | undefined>} [env]
  */
-export function siblingReport(selfSource, cwd = ROOT) {
+export function siblingReport(selfSource, cwd = ROOT, env = process.env) {
   const repoRoot = repoRootFor(cwd);
   if (!repoRoot) {
     return { checked: [], skipped: [{ repo: "(all)", reason: "git rev-parse --git-common-dir failed here, so no repository root could be resolved" }], problems: [] };
@@ -164,18 +191,39 @@ export function siblingReport(selfSource, cwd = ROOT) {
   const problems = [];
   for (const repo of SIBLING_REPOS) {
     if (repo === self) continue;
-    const path = join(family, repo, "scripts", "dependency-advisory-gate.mjs");
-    if (!existsSync(path)) {
-      skipped.push({ repo, reason: `not found at ${path}` });
-      continue;
+    const explicit = explicitSiblingRoot(repo, env);
+    let theirs;
+    let path;
+    let source;
+    if (explicit) {
+      path = join(explicit.dir, GATE_PATH);
+      source = `${explicit.key} working tree`;
+      if (!existsSync(path)) {
+        skipped.push({ repo, reason: `${explicit.key} is set but ${path} does not exist` });
+        continue;
+      }
+      theirs = readFileSync(path, "utf8");
+    } else {
+      const dir = join(family, repo);
+      path = `${dir} origin/main:${GATE_PATH}`;
+      source = "origin/main of the sibling next to this checkout";
+      if (!existsSync(dir)) {
+        skipped.push({ repo, reason: `not found at ${dir}` });
+        continue;
+      }
+      try {
+        theirs = execFileSync("git", ["-C", dir, "show", `origin/main:${GATE_PATH}`], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+      } catch {
+        skipped.push({ repo, reason: `no origin/main:${GATE_PATH} in ${dir}` });
+        continue;
+      }
     }
-    const theirs = readFileSync(path, "utf8");
     if (theirs === selfSource) {
-      checked.push(repo);
+      checked.push({ repo, source });
       continue;
     }
     problems.push(
-      `scripts/dependency-advisory-gate.mjs differs from ${repo}'s copy at ${path}.\n` +
+      `scripts/dependency-advisory-gate.mjs differs from ${repo}'s copy at ${path} (${source}).\n` +
         `  this copy sha256 ${bodyDigest(selfSource)}, ${repo}'s copy sha256 ${bodyDigest(theirs)}.\n` +
         `  This file is copied byte for byte into every repository that carries it. Make the same edit in every\n` +
         `  copy and reissue the canonical declaration in all of them together.`,
@@ -684,9 +732,92 @@ function selfTest(hooks) {
     const source = readFileSync(SELF, "utf8");
     const { checked, skipped, problems } = siblingReport(source);
     for (const s of skipped) console.log(`SKIPPED dependency-advisory sibling-parity: ${s.repo}: ${s.reason}`);
-    for (const repo of checked) console.log(`ok   dependency-advisory sibling-parity: ${repo} matches this copy byte for byte`);
+    for (const c of checked) console.log(`ok   dependency-advisory sibling-parity: ${c.repo} matches this copy byte for byte (${c.source})`);
     for (const p of problems) console.log(`FAIL dependency-advisory sibling-parity:\n  ${p.split("\n").join("\n  ")}`);
     record("every sibling repository checked out next to this one matches this file byte for byte", problems.length === 0, JSON.stringify({ checked, skipped, problems }));
+  }
+
+  {
+    // siblingReport against temporary repositories, so each resolution rule is driven rather than assumed.
+    // The family directory holds a git repository named for this one plus one sibling; the sibling's
+    // working tree and its origin/main copy are set separately: a primary checkout
+    // behind main must not decide the verdict.
+    const source = readFileSync(SELF, "utf8");
+    const other = `${source}\n// a different copy\n`;
+    /** @type {(dir: string, ...args: string[]) => string} */
+    const git = (dir, ...args) => execFileSync("git", ["-C", dir, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+    const tmp = mkdtempSync(join(tmpdir(), "advisory-sibling-"));
+    try {
+      /** @type {(dir: string, committed: string | null) => void} */
+      const initRepo = (dir, committed) => {
+        mkdirSync(join(dir, "scripts"), { recursive: true });
+        git(dir, "init", "-q", "-b", "main");
+        if (committed !== null) {
+          writeFileSync(join(dir, GATE_PATH), committed);
+          git(dir, "add", GATE_PATH);
+          git(dir, "-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-q", "-m", "fixture");
+          git(dir, "update-ref", "refs/remotes/origin/main", "HEAD");
+        }
+      };
+      /** @type {(name: string, files: {committed: string | null, working?: string}) => string} */
+      const family = (name, { committed, working }) => {
+        const root = join(tmp, name);
+        mkdirSync(join(root, "engine"), { recursive: true });
+        initRepo(join(root, "engine"), source);
+        mkdirSync(join(root, "console"), { recursive: true });
+        initRepo(join(root, "console"), committed);
+        if (working !== undefined) writeFileSync(join(root, "console", GATE_PATH), working);
+        return join(root, "engine");
+      };
+      /** @type {(r: ReturnType<typeof siblingReport>, repo: string) => {checked: {repo: string, source: string}[], skipped: {repo: string, reason: string}[], problems: string[]}} */
+      const only = (r, repo) => ({
+        checked: r.checked.filter((c) => c.repo === repo),
+        skipped: r.skipped.filter((c) => c.repo === repo),
+        problems: r.problems.filter((p) => p.includes(`from ${repo}'s copy`)),
+      });
+      {
+        // (a) the false red: stale working tree, matching origin/main.
+        const self = family("a", { committed: source, working: other });
+        const r = only(siblingReport(source, self, {}), "console");
+        record("a sibling whose working tree is stale but whose origin/main copy matches is not a problem", r.problems.length === 0 && r.checked.length === 1 && r.checked.some((c) => /origin\/main/.test(c.source)), JSON.stringify(r));
+      }
+      {
+        // (b) origin/main differs while the working tree matches.
+        const self = family("b", { committed: other, working: source });
+        const r = only(siblingReport(source, self, {}), "console");
+        record("a sibling whose origin/main copy differs is a problem even when its working tree matches", r.problems.length === 1 && r.checked.length === 0, JSON.stringify(r));
+      }
+      {
+        // (c) an explicit path wins over the sibling next to the checkout.
+        const self = family("c", { committed: other, working: other });
+        const dir = join(tmp, "c-explicit");
+        mkdirSync(join(dir, "scripts"), { recursive: true });
+        writeFileSync(join(dir, GATE_PATH), source);
+        const r = only(siblingReport(source, self, { DOWNPIPES_CONSOLE_ROOT: dir }), "console");
+        const r2 = only(siblingReport(source, self, { DOWNPIPES_CONSOLE: dir }), "console");
+        record(
+          "an explicit sibling path is read ahead of the sibling next to the checkout, and says so",
+          r.problems.length === 0 && r.checked.length === 1 && r.checked.some((c) => c.source.includes("DOWNPIPES_CONSOLE_ROOT")) && r2.checked.length === 1 && r2.checked.some((c) => c.source.includes("DOWNPIPES_CONSOLE ")),
+          JSON.stringify({ r, r2 }),
+        );
+      }
+      {
+        // (d) an explicit path with no file is a SKIP, not a fall-through to the matching sibling next door.
+        const self = family("d", { committed: source, working: source });
+        const dir = join(tmp, "d-empty");
+        mkdirSync(dir, { recursive: true });
+        const r = only(siblingReport(source, self, { DOWNPIPES_CONSOLE_ROOT: dir }), "console");
+        record("an explicit sibling path without the file is skipped with the reason and does not fall through", r.checked.length === 0 && r.problems.length === 0 && r.skipped.length === 1 && r.skipped.some((c) => c.reason.includes("DOWNPIPES_CONSOLE_ROOT")), JSON.stringify(r));
+      }
+      {
+        // A sibling with no origin/main is a SKIP: its working tree is never read.
+        const self = family("e", { committed: null, working: source });
+        const r = only(siblingReport(source, self, {}), "console");
+        record("a sibling without origin/main is skipped and its working tree is not read", r.checked.length === 0 && r.problems.length === 0 && r.skipped.length === 1 && r.skipped.some((c) => c.reason.includes("origin/main")), JSON.stringify(r));
+      }
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
   }
 
   const failures = cases.filter((c) => !c.ok);

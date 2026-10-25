@@ -34,6 +34,7 @@ import { decodeD1Record, type D1Cell } from "../src/sources/d1-format.ts";
 import { D1_PAGE_BYTE_LIMIT, D1Source } from "../src/sources/d1.ts";
 import { parseToken } from "../src/sources/d1-token.ts";
 import * as reader from "../src/sources/d1-reader.ts";
+import { peekSiteFaults } from "../src/admin/site-faults.ts";
 import { drainSourceFaultLedger, resetSourceFaultLedger } from "../src/sources/source-fault-ledger.ts";
 import type { CrawlEvent, SourceRecord } from "../src/sources/types.ts";
 import { SqliteD1, toSqliteBind } from "./lib/sqlite-d1.ts";
@@ -327,6 +328,23 @@ async function proveOnlyDeclaredWithoutRowidPagesByKey(): Promise<void> {
   ok(`every row of that table is captured once (${rowsOf(a.records, "t").length} of 18)`, rowsOf(a.records, "t").length === 18);
   ok("no mark carries a key cursor for a table that is not WITHOUT ROWID", a.events.every((e) => e.kind !== "mark" || !e.token.includes("afterKey")));
   ok(`the failed probe is counted as a rowid probe fallback (${fallbacks})`, fallbacks === 1);
+
+  // (a2) A WITHOUT ROWID table whose primary key lookup fails. The table is still read, in one page, and the
+  // fault reaches the site-fault ledger so the pack can say the table was not read by key. A healthy twin
+  // records nothing.
+  const keyed = new SqliteD1();
+  keyed.db.exec(EVENTS_SQL);
+  const insKeyed = keyed.db.prepare('INSERT INTO "events" VALUES (?, ?, ?)');
+  for (let i = 0; i < 9; i++) insKeyed.run(`t${i % 3}`, i, `b${i}`);
+  const keyFaults0 = peekSiteFaults()["source.d1-primary-key-read"]?.count ?? 0;
+  const keyedOk = await crawlOrError(keyed, null, 4);
+  ok(`control, a healthy key lookup records nothing${keyedOk.error ? ` (threw: ${keyedOk.error.slice(0, 90)})` : ""}`, keyedOk.error === "" && (peekSiteFaults()["source.d1-primary-key-read"]?.count ?? 0) === keyFaults0);
+  keyed.failKeyLookup = true;
+  const keyedFail = await crawlOrError(keyed, null, 4);
+  keyed.failKeyLookup = false;
+  ok(`a failed key lookup does not fail the run${keyedFail.error ? ` (threw: ${keyedFail.error.slice(0, 90)})` : ""}`, keyedFail.error === "");
+  ok(`a failed key lookup still captures every row once (${rowsOf(keyedFail.records, "events").length} of 9)`, rowsOf(keyedFail.records, "events").length === 9);
+  ok("a failed key lookup is recorded as one site fault", (peekSiteFaults()["source.d1-primary-key-read"]?.count ?? 0) === keyFaults0 + 1);
 
   // (b) The probe fails on slice 1 and recovers on slice 2. Slice 1 reads the rowid table in one pass and
   // its mark moves on to the next table, so slice 2 resumes cleanly and the run completes.

@@ -20,7 +20,7 @@ export function parsePinnedUpdateSigner(pub: string): HybridVerifier {
 // not parse, which is also when the channel check refuses with key-config.
 export async function updateSignerFingerprint(env: Env): Promise<string | null> {
   if (!env.UPDATE_SIGNER_PUBLIC) return null;
-  try {
+  try { // nosemgrep: incident-catch-returns-empty -- the site fault waiver at the handler gives the reason
     return await signerFingerprint(parsePinnedUpdateSigner(env.UPDATE_SIGNER_PUBLIC));
   } catch {
     // site-fault-waiver: src/admin/update-signer-pin.ts:updateSignerFingerprint:catch:1 -- a malformed key is already reported as the key-config channel fault, and null withholds any fingerprint

@@ -12,7 +12,11 @@
 // failed is never mistaken for one that passed. Run: node test/validate-egress-allowlist.ts
 
 import { isAllowedWebhookUrl, screenEgressAllowlist, validateEgressAllowlist, normaliseEgressAllowlistEntry, deliverPayload, EGRESS_ALLOWLIST_MAX_ENTRIES } from "../src/notify/types.ts";
-import { validateChannel } from "../src/notify-routing.ts";
+import { routeEngineNotification, validateChannel } from "../src/notify-routing.ts";
+import { handleAdmin } from "../src/admin/router.ts";
+import { routeAuthChangeAlert } from "../src/admin/router-notify.ts";
+import { flushDigests, routeNotification } from "../src/cron/notify-passes.ts";
+import type { Env } from "../src/env.d.ts";
 import { deliver as jsmDeliver } from "../src/notify/channels/jsm.ts";
 import type { NotifyChannel, NotifyEmission } from "../src/notify/types.ts";
 import { SchedulerDO } from "../src/sched/scheduler-do.ts";
@@ -78,6 +82,7 @@ console.log("\nV13.2.4 egress-allowlist: screenEgressAllowlist (the shared match
   ok("wildcard matches a deeper subdomain", screenEgressAllowlist("eu.events.pagerduty.com", list));
   // The two boundary attacks a substring test would pass and a dotted-suffix test must refuse.
   ok("wildcard suffix boundary: a host merely ENDING in the suffix without the dot is refused", !screenEgressAllowlist("notpagerduty.com", list));
+  ok("wildcard suffix boundary: evilpagerduty.com (no dot before the suffix) is refused", !screenEgressAllowlist("evilpagerduty.com", list));
   ok("wildcard suffix boundary: the suffix appended as a further label is refused", !screenEgressAllowlist("pagerduty.com.evil", list));
   ok("the wildcard's own bare suffix (no subdomain label) is refused", !screenEgressAllowlist("pagerduty.com", list));
 }
@@ -261,6 +266,98 @@ console.log("\nV13.2.4 egress-allowlist: the DO authority (setEgressAllowlist / 
   ok("an owner can clear the allowlist back to empty", cleared.egressAllowlist.length === 0);
   const createdAfterClear = await dobj.addNotifyChannel({ kind: "webhook", name: "anything", url: "https://anything.example/hook", enabled: true }, OWNER_CALLER);
   ok("after clearing, an arbitrary host is accepted again (unset === unrestricted)", createdAfterClear.url === "https://anything.example/hook");
+}
+
+console.log("\nV13.2.4 egress-allowlist: a notification send whose scheduler answer carries no readable list refuses\n");
+{
+  // The scheduler answers the list with every resolve, every digest-due and the allowlist read (an empty list
+  // when none is set). Only an EMPTY list permits every host: an answer with no list, or a list with a
+  // non-string element, sends nothing. Each send path is driven with the answer varied; sends are counted at
+  // the global fetch by the channel's own host.
+  const HOOK_HOST = "hooks.egress-test.example";
+  const hookChannel: NotifyChannel = { id: "ch-hook", kind: "webhook", name: "hook", url: `https://${HOOK_HOST}/hook`, enabled: true, createdAt: "2026-01-01T00:00:00.000Z" };
+  const batch = { channelId: "ch-hook", channelKind: "webhook", period: "daily", summary: { total: 1, byEvent: {}, downpipeNames: [], accountLevelCount: 0, fromAt: "", toAt: "" }, detail: "Digest: 1 update", seqs: [7] };
+  let hookSends = 0;
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL): Promise<Response> => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+    const host = new URL(url).hostname;
+    if (host === "cloudflare-dns.com") return new Response(JSON.stringify({ Answer: [] }), { status: 200 });
+    if (host === HOOK_HOST) hookSends++;
+    return new Response("{}", { status: 200 });
+  }) as typeof fetch;
+
+  type Answer = { present: false } | { present: true; value: unknown };
+  const listPart = (a: Answer): Record<string, unknown> => (a.present ? { egressAllowlist: a.value } : {});
+  const json = (body: unknown): Response => new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+  function schedulerFor(a: Answer, cleared: number[]): DurableObjectStub {
+    return {
+      fetch: async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+        const path = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url).pathname;
+        if (path === "/notify/resolve") return json({ now: [hookChannel], digestedCount: 0, emission: testEmission(), ...listPart(a) });
+        if (path === "/notify/digest-due") return json({ batches: [batch], ...listPart(a) });
+        if (path === "/notify/channel") return json({ channel: hookChannel });
+        if (path === "/notify/digest-sent") {
+          cleared.push(...((JSON.parse(String(init?.body ?? "{}")) as { ids?: number[] }).ids ?? []));
+          return json({});
+        }
+        return json({});
+      },
+    } as unknown as DurableObjectStub;
+  }
+  const noEnv = {} as unknown as Env;
+  const sites: Array<{ name: string; run: (sched: DurableObjectStub) => Promise<void> }> = [
+    { name: "router-notify routeEmission", run: (s) => routeAuthChangeAlert(noEnv, s, "sign-in-new-context", "sign-in-context", "egress test") },
+    { name: "notify-passes routeNotification", run: async (s) => void (await routeNotification(noEnv, s, testEmission())) },
+    { name: "notify-passes flushDigests", run: (s) => flushDigests(noEnv, s) },
+    { name: "notify-routing routeEngineNotification", run: async (s) => void (await routeEngineNotification(noEnv, s, testEmission(), "egress test")) },
+  ];
+  const variants: Array<{ label: string; answer: Answer; sends: number }> = [
+    { label: "an answer without egressAllowlist", answer: { present: false }, sends: 0 },
+    { label: "a null egressAllowlist", answer: { present: true, value: null }, sends: 0 },
+    { label: "an egressAllowlist of [1,2]", answer: { present: true, value: [1, 2] }, sends: 0 },
+    { label: 'an egressAllowlist of ["ok",1]', answer: { present: true, value: ["ok", 1] }, sends: 0 },
+    { label: "an EMPTY egressAllowlist (negative control: allow all)", answer: { present: true, value: [] }, sends: 1 },
+    { label: "a list that names the channel host (negative control)", answer: { present: true, value: [HOOK_HOST] }, sends: 1 },
+    { label: "a list that omits the channel host", answer: { present: true, value: ["other.egress-test.example"] }, sends: 0 },
+  ];
+  for (const site of sites) {
+    for (const v of variants) {
+      hookSends = 0;
+      const cleared: number[] = [];
+      await site.run(schedulerFor(v.answer, cleared));
+      ok(`${site.name}: ${v.label} makes ${v.sends} send(s) (made ${hookSends})`, hookSends === v.sends);
+      if (site.name === "notify-passes flushDigests" && v.sends === 0 && !v.answer.present) ok("flushDigests: nothing is cleared when the list is unreadable, so the batch retries", cleared.length === 0);
+    }
+  }
+
+  // POST /notify/test reads the list itself. A real DO holds the channel and the list; only the list read is varied.
+  const ADMIN_TOKEN = "egress-allowlist-test-break-glass-token-1234567890";
+  for (const v of variants) {
+    const dobj = makeDO();
+    const created = await dobj.addNotifyChannel({ kind: "webhook", name: "hook", url: hookChannel.url, enabled: true }, OWNER_CALLER);
+    const real = { fetch: (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => dobj.fetch(new Request(input instanceof Request ? input : input.toString(), init)) };
+    const stub = {
+      fetch: async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+        const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+        if (new URL(url).pathname === "/config/egress-allowlist" && (init?.method ?? "GET") === "GET") return json(listPart(v.answer));
+        return real.fetch(input, init);
+      },
+    } as unknown as DurableObjectStub;
+    const env = { SCHEDULER: { idFromName: () => ({}), get: () => stub }, ADMIN_TOKEN } as unknown as Env;
+    hookSends = 0;
+    const resp = await handleAdmin(
+      new Request("https://engine.egress-test.example/admin/notify/test", { method: "POST", headers: { authorization: `Bearer ${ADMIN_TOKEN}`, "content-type": "application/json" }, body: JSON.stringify({ channelId: created.id }) }),
+      env,
+    );
+    ok(`router-ops POST /notify/test: ${v.label} makes ${v.sends} send(s) (made ${hookSends})`, hookSends === v.sends);
+    if (!v.answer.present || (v.answer.present && !Array.isArray(v.answer.value)) || (v.answer.present && Array.isArray(v.answer.value) && v.answer.value.some((h) => typeof h !== "string"))) {
+      ok(`router-ops POST /notify/test: ${v.label} answers 503 (status ${resp.status})`, resp.status === 503);
+    } else {
+      ok(`router-ops POST /notify/test: ${v.label} is not a 503 (status ${resp.status})`, resp.status !== 503);
+    }
+  }
+  globalThis.fetch = realFetch;
 }
 
 console.log(failures === 0 ? "\nEGRESS ALLOWLIST PASS" : `\n${failures} FAILURE(S)`);

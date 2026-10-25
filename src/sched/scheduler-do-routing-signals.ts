@@ -12,7 +12,7 @@
 import { CALLER_HEADER, decodeCaller } from "../admin/identity.ts";
 import { redactChannelSecretForRead } from "../notify.ts";
 import { type ConfigRejectReason, readSchedDiag, recordClientDiagnostics, recordConfigRejection, recordContractFault } from "./sched-fault-ledger.ts";
-import { CRON_ALERT_SWEEP_AT_KEY, type SchedulerDOCtor } from "./scheduler-do-base.ts";
+import { CRON_ALERT_SWEEP_AT_KEY, type SchedulerDOCtor } from "./scheduler-do-base.ts"; import { readJsonOrNull, readJsonObjectOrEmpty } from "../util/json-body.ts";
 
 // readFleetDrillBody reads the POST /fleet-drill/start body into a selection, or into the refusal the route
 // returns. Only a JSON object selects: {} is every downpipe, {"downpipeIds": [...]} is those downpipes.
@@ -229,7 +229,7 @@ export function RoutingSignalsMixin<TBase extends SchedulerDOCtor>(Base: TBase) 
         // run before the ladder walk. The seed reads an absent binding as out of service and DELETES its
         // rotation marker, so a body that is missing, does not parse or is not a JSON object is refused with
         // a 400 and changes nothing: read as {}, it would drop every marker and restart every rotation clock.
-        const body = (await req.json().catch(() => null)) as unknown;
+        const body = (await readJsonOrNull(req)) as unknown;
         if (typeof body !== "object" || body === null || Array.isArray(body)) return this.jsonStatus({ ok: false, error: "expiry-reconcile-body-invalid" }, 400);
         return this.json(await this.reconcileExpiry(body as { presentBindings?: Record<string, boolean>; fingerprints?: Record<string, string | null>; adminTokenDisabled?: boolean }));
       }
@@ -322,7 +322,7 @@ export function RoutingSignalsMixin<TBase extends SchedulerDOCtor>(Base: TBase) 
       // a route path, an item name or a URL structurally cannot enter the pack. It is best-effort and never
       // throws: a diagnostic ring must never be able to fail the pack build that carries it.
       case "POST /client-diag":
-        await recordClientDiagnostics(this.state.storage, await req.json().catch(() => ({})));
+        await recordClientDiagnostics(this.state.storage, await readJsonObjectOrEmpty(req));
         return this.json({ ok: true });
       // On-demand fleet drill: start a bulk restore-test campaign over the whole fleet (or a
       // downpipeIds subset). The router gates the public /drill-all route on drill.run and forwards the
@@ -344,7 +344,7 @@ export function RoutingSignalsMixin<TBase extends SchedulerDOCtor>(Base: TBase) 
       // campaign, marking each in flight. The cron runs each drill OUT OF THE DO via the same scheduled-test
       // path and the /restore-test-complete callback advances the campaign.
       case "POST /fleet-drill/next":
-        return this.json(await this.fleetDrillNextBatch((((await req.json().catch(() => ({}))) as { cap?: number }).cap) ?? 1));
+        return this.json(await this.fleetDrillNextBatch((((await readJsonObjectOrEmpty(req)) as { cap?: number }).cap) ?? 1));
       // The fleet-drill progress view (active campaign, else the last finished one). Read-only, redaction-safe;
       // the router forwards GET /admin/drill-all here for the console progress surface.
       case "GET /fleet-drill/status":

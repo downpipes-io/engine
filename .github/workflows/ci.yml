@@ -300,9 +300,6 @@ jobs:
         working-directory: engine
         env:
           REQUIRE_DOWNPIPE: "1"
-          # The downpipe checkout above is pinned to a release tag on purpose, so it is behind its own
-          # main whenever the reader has moved on; the doc validators grade against the pinned tag.
-          DOWNPIPES_ALLOW_STALE_SIBLINGS: "downpipe"
 
   build:
     name: Bundle
@@ -577,7 +574,10 @@ jobs:
       - name: gitleaks (binary, full history)
         run: |
           VERSION=8.30.0
+          # The digest from the release's gitleaks_8.30.0_checksums.txt. Change it with VERSION.
+          SHA256=79a3ab579b53f71efd634f3aaf7e04a0fa0cf206b7ed434638d1547a2470a66e
           curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${VERSION}/gitleaks_${VERSION}_linux_x64.tar.gz" -o /tmp/gitleaks.tgz
+          echo "${SHA256}  /tmp/gitleaks.tgz" | sha256sum -c -
           tar -xzf /tmp/gitleaks.tgz -C /tmp gitleaks
           # The scan has no range: it covers every commit in this repository's history. Every rule in
           # .gitleaks.toml fires on every path in every commit, and a finding fails the job.

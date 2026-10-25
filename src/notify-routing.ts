@@ -28,6 +28,7 @@
 import { isWrappedSecret, type WrappedSecret } from "./admin/config-secret.ts";
 import { doURL } from "./do-url.ts";
 import { log } from "./log.ts";
+import { requireEgressAllowlist } from "./notify/push-egress.ts";
 import type { Env } from "./env.d.ts";
 import * as emailChannel from "./notify/channels/email.ts";
 import * as jsmChannel from "./notify/channels/jsm.ts";
@@ -788,11 +789,12 @@ export async function routeEngineNotification(
       body: JSON.stringify({ emission }),
       headers: { "content-type": "application/json" },
     });
-    const { now, egressAllowlist } = (await resolveResp.json()) as { now: NotifyChannel[]; digestedCount: number; emission: NotifyEmission | null; egressAllowlist?: string[] };
+    const { now, egressAllowlist } = (await resolveResp.json()) as { now: NotifyChannel[]; digestedCount: number; emission: NotifyEmission | null; egressAllowlist?: unknown };
     // No channel resolved immediately is NOT a routing failure: the operator configured no immediate
     // channel, or it was digested. Reporting that as a lost alert would be a false alarm.
     if (now.length === 0) return { delivered: false };
-    const records = await deliverEmission(env, emission, now, egressAllowlist);
+    // An answer without the list throws into the routingFailed path below: nothing is sent.
+    const records = await deliverEmission(env, emission, now, requireEgressAllowlist(egressAllowlist, "resolve answered no egress allowlist"));
     let historyWriteFailed = false;
     try {
       const rec = await scheduler.fetch(doURL("/notify/record"), {

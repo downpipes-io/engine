@@ -169,8 +169,9 @@ methods in strict anti-downgrade precedence (`src/admin/auth.ts`): a Cloudflare
 Access RS256 JWT (verified server-side in `src/admin/access.ts`); a first-party
 WebAuthn PASSKEY session (the engine is its own IdP - `src/admin/passkey.ts`
 verifies, `src/admin/session.ts` mints the signed session cookie); or the
-bootstrap-only `ADMIN_TOKEN` bearer (a one-way `bootstrapConsumed` latch;
-retired in-app or disabled via `ADMIN_TOKEN_DISABLED`). No first-party
+`ADMIN_TOKEN` bearer. It has no expiry or use count. A one-way `bootstrapConsumed` latch
+ends only the first-Owner claim. The bearer ends when an Owner retires it in-app, when
+`ADMIN_TOKEN_DISABLED` is set, or when the secret is deleted or rotated. No first-party
 PASSWORDS (those stay at the customer's IdP via Access), but downpipes DOES
 implement first-party MFA-grade auth: WebAuthn passkeys with mandatory user
 verification (phishing-resistant), single-use salted-hash RECOVERY CODES as the

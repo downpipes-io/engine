@@ -86,6 +86,10 @@ export interface SecretsWiringContext {
   api: SecretsWiringApi;
   accountIds: string[];
   scope: () => Promise<DiscoveryScopeConfig | null>;
+  // engineAccount names the engine's own account for an env-only token (no discovery config). Absent or
+  // null means no account is in scope without a config. It throws when the account cannot be read, and the
+  // reader then refuses to touch any account.
+  engineAccount?: () => Promise<string | null>;
 }
 
 // WiringBudget is the part of the slice budget (seal/budget.ts SliceBudget) the reader checks. The crawl
@@ -208,18 +212,20 @@ async function readStoreSecrets(api: SecretsWiringApi, accountId: string, storeI
 // account. With no configured id, the candidates are the discovery config's selected (else seen) accounts.
 async function candidateAccounts(ctx: SecretsWiringContext, meter: Meter): Promise<string[]> {
   let cfg: DiscoveryScopeConfig | null;
-  try {
+  let engineAccount: string | null = null;
+  try { // nosemgrep: incident-catch-returns-empty -- wiringUnknown records the unknown state before the empty return
     meter.spend(1); // the discovery-config read is a DO subrequest
     cfg = await ctx.scope();
+    if (cfg === null && ctx.engineAccount !== undefined) engineAccount = await ctx.engineAccount();
     if (cfg !== null && (!Array.isArray(cfg.accountsSeen) || !Array.isArray(cfg.selected))) throw new Error("discovery config shape");
-  } catch {
+  } catch { // site-fault-waiver: src/sources/secrets-wiring.ts:candidateAccounts:catch:1 -- wiringUnknown records the unknown state before the empty return
     // Without the scope, no account can be proven in scope. Fail closed.
     await wiringUnknown("_unavailable", "other", "scope-unreadable");
     return [];
   }
   const configured = [...new Set(ctx.accountIds.filter((a) => a !== ""))];
   if (configured.length > 0) {
-    const allowed = configured.filter((a) => accountInDiscoveryScope(a, cfg));
+    const allowed = configured.filter((a) => accountInDiscoveryScope(a, cfg, engineAccount));
     if (allowed.length < configured.length) await wiringUnknown("_refused", "auth", "account-scope");
     return allowed;
   }
@@ -230,7 +236,7 @@ async function candidateAccounts(ctx: SecretsWiringContext, meter: Meter): Promi
     return [];
   }
   const pool = cfg.selected.length > 0 ? cfg.selected : cfg.accountsSeen.map((a) => a.id);
-  return [...new Set(pool.filter((a) => typeof a === "string" && a !== "" && accountInDiscoveryScope(a, cfg)))].slice(0, SECRETS_WIRING_MAX_ACCOUNTS);
+  return [...new Set(pool.filter((a) => typeof a === "string" && a !== "" && accountInDiscoveryScope(a, cfg, null)))].slice(0, SECRETS_WIRING_MAX_ACCOUNTS);
 }
 
 // readWorkerBindings reads every script's settings in one account and returns, per (store, name), the
@@ -243,7 +249,7 @@ async function readWorkerBindings(api: SecretsWiringApi, accountId: string, mete
     return null;
   }
   let scripts: string[];
-  try {
+  try { // nosemgrep: incident-catch-returns-empty -- wiringUnknown records the unknown state before the empty return
     limit.charge();
     const list = await paginate(readOnly(api), `/accounts/${acct}/workers/scripts`, meter);
     scripts = [];
@@ -256,7 +262,7 @@ async function readWorkerBindings(api: SecretsWiringApi, accountId: string, mete
         return null;
       }
     }
-  } catch (e) {
+  } catch (e) { // site-fault-waiver: src/sources/secrets-wiring.ts:readWorkerBindings:catch:1 -- wiringUnknown records the unknown state before the empty return
     await wiringUnknown("_unavailable", classifySourceFaultReason(e), "scripts");
     return null;
   }
@@ -273,11 +279,11 @@ async function readWorkerBindings(api: SecretsWiringApi, accountId: string, mete
       return null;
     }
     let raw: unknown;
-    try {
+    try { // nosemgrep: incident-catch-returns-empty -- wiringUnknown records the unknown state before the empty return
       meter.spend(1, "cfApiRead");
       limit.charge();
       raw = await api.get(`/accounts/${acct}/workers/scripts/${encodeURIComponent(script)}/settings`);
-    } catch (e) {
+    } catch (e) { // site-fault-waiver: src/sources/secrets-wiring.ts:readWorkerBindings:catch:2 -- wiringUnknown records the unknown state before the empty return
       await wiringUnknown("_unavailable", classifySourceFaultReason(e), "settings", script);
       return null;
     }

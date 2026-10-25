@@ -1047,7 +1047,7 @@ export type ClientDiagFormField = (typeof CLIENT_DIAG_FORM_FIELDS)[number];
 export const CLIENT_DIAG_REJECT_OUTCOMES = ["rejected", "silently-coerced"] as const;
 export type ClientDiagRejectOutcome = (typeof CLIENT_DIAG_REJECT_OUTCOMES)[number];
 
-// catalogueClass -- catalogue-degraded only (20). WHY the Cloudflare-configuration offer was withheld or
+// catalogueClass -- catalogue-degraded only (22). WHY the Cloudflare-configuration offer was withheld or
 // untrustworthy. It records a WITHHELD AFFORDANCE, not a fault: the operator opened the wizard and did not get
 // the option, which is the ticket, and the row says which of the four confusable reasons applied.
 //
@@ -1104,6 +1104,14 @@ export const CLIENT_DIAG_CATALOGUE_CLASSES = [
   "cf-rediscover-not-an-engine",
   "cf-rediscover-transport",
   "cf-rediscover-failed",
+  // cf-rediscover-env-only-scope: no Owner discovery token is stored, so the engine lists and permits only its own
+  // Cloudflare account, and the downpipe names another (router-discovery.ts refuses with ENV_ONLY_SCOPE_REFUSAL).
+  // No Owner selection is involved, which is what sets it apart from cf-rediscover-out-of-scope. Remedy: an Owner
+  // stores a discovery token under Sources, or the downpipe names the engine's own account.
+  "cf-rediscover-env-only-scope",
+  // cf-rediscover-zone-not-in-account: the downpipe's zone is not a zone of its account (the rediscover zone
+  // refusal in router-discovery.ts). Remedy: an Owner corrects the zone under Sources.
+  "cf-rediscover-zone-not-in-account",
 ] as const;
 export type ClientDiagCatalogueClass = (typeof CLIENT_DIAG_CATALOGUE_CLASSES)[number];
 

@@ -476,7 +476,7 @@ export const DRAFTS: Record<AuditAction, AuditDraft> = {
     outcome: "success",
     target: { kind: "posture-check", checkId: "posture-tls-min-version", overrideKind: "risk-accepted" },
   },
-  // src/admin/router-ops.ts:106 (an applied channel edit; the id is the stored channel's ULID)
+  // src/admin/router-ops.ts:107 (an applied channel edit; the id is the stored channel's ULID)
   "notify-channel-change": {
     actorSubject: OPERATOR_SUBJECT,
     actorEmail: OPERATOR_EMAIL,
@@ -486,7 +486,7 @@ export const DRAFTS: Record<AuditAction, AuditDraft> = {
     outcome: "success",
     target: { kind: "configchange", id: "01JB6Y3M2R8Q4T0V9W5X7Z1A2B", changeKind: "notify-channel-set" },
   },
-  // src/admin/router-ops.ts:106 (an applied rule delete; the id is the deleted rule's ULID)
+  // src/admin/router-ops.ts:107 (an applied rule delete; the id is the deleted rule's ULID)
   "notify-rule-change": {
     actorSubject: OPERATOR_SUBJECT,
     actorEmail: OPERATOR_EMAIL,
@@ -872,6 +872,26 @@ export const DRAFTS: Record<AuditAction, AuditDraft> = {
     action: "passkey-invite-enrol",
     outcome: "success",
     target: { kind: "role", email: OPERATOR_EMAIL, role: "operator" },
+  },
+  // src/sched/scheduler-do-passkey.ts (a passkey enrolled from a session a recovery code minted; the actor is the member)
+  "passkey-recovery-enrol": {
+    actorSubject: OPERATOR_SUBJECT,
+    actorEmail: OPERATOR_EMAIL,
+    actorMethod: "passkey",
+    sourceIp: IP_A,
+    action: "passkey-recovery-enrol",
+    outcome: "success",
+    target: { kind: "role", email: OPERATOR_EMAIL, role: "operator" },
+  },
+  // src/admin/router-notify.ts (whether the other Owners were emailed about a passkey enrolled from a recovery-code session)
+  "passkey-recovery-enrol-notice": {
+    actorSubject: OPERATOR_SUBJECT,
+    actorEmail: OPERATOR_EMAIL,
+    actorMethod: "passkey",
+    sourceIp: IP_A,
+    action: "passkey-recovery-enrol-notice",
+    outcome: "success",
+    target: { kind: "role", email: OPERATOR_EMAIL, role: "operator", notice: { state: "sent", owners: 2, sent: 2, skipped: 0, failed: 0 } },
   },
   // src/sched/scheduler-do-signin-factors.ts:449 (the role is what they HELD, not a transition)
   "signin-factor-revoke": {

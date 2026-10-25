@@ -20,9 +20,9 @@ import { type SchedulerDOCtor, SEEN_ASSERTION_PREFIX } from "./scheduler-do-base
 export function IdpSamlMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
   return class extends Base {
     // ---- Native external-IdP (SAML SP): metadata + SP-initiated start + the ACS ===========================
-    // SP-initiated only in v1 (allowIdpInitiated is stored in the connection and respected by the assertion
-    // verifier; the ACS enforces SP-initiated by requiring a server-minted RelayState record, so IdP-initiated
-    // assertions are rejected at the record.requestId binding before the verifier runs). The ACS is a
+    // SP-initiated only in v1 (allowIdpInitiated is stored in the connection and has no effect on sign-in:
+    // the ACS requires a server-minted RelayState record, so IdP-initiated assertions are rejected before the
+    // verifier runs, and the verifier requires InResponseTo to equal record.requestId). The ACS is a
     // CROSS-ORIGIN IdP POST carrying NO SameSite cookie, so the anti-CSRF/replay defence is the opaque single-use
     // RelayState (recovered from the request store) + the assertion InResponseTo bound to the AuthnRequest ID this
     // SP actually minted. The XML pipeline runs in saml/* (no env, no network: Web Crypto + the POSTed bytes); the

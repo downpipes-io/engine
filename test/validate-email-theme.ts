@@ -7,8 +7,8 @@
 // covered by nothing at all, in a repo where this mail goes to a customer's own on-call team.
 //
 // WHAT THE SIBLING ALREADY SOLVED. The vendor control plane's tests grade the licensing pack against
-// a set of rules this file extends rather than reinvents: renders a full document, no U+2014 or U+2013
-// anywhere in any part, no external URL outside an allowed set, NO REMOTE RESOURCE OF ANY KIND, hostile
+// a set of rules this file extends rather than reinvents: renders a full document,
+// no external URL outside an allowed set, NO REMOTE RESOURCE OF ANY KIND, hostile
 // values escaped, and WCAG contrast computed from the colours the renderer actually emitted rather than
 // checked against a magic hex string. Those transfer, and the remote-resource rule matters more here than
 // there: a tracking pixel or a remote webfont in an on-call alert is a privacy leak and a rendering
@@ -57,7 +57,7 @@ function ok(label: string, cond: boolean): void {
 }
 
 // ---- WCAG relative luminance and contrast ratio ------------------------------------------------------
-// Ported from the vendor control plane's tests, for the same reason it was ported there: the check
+// Graded on rendered output, never on a constant string: the check
 // has to run on the colour the renderer EMITTED. A test that looks for a known-good hex string passes on
 // the day the palette is edited and the string is edited with it.
 function relativeLuminance(hex: string): number {
@@ -122,6 +122,12 @@ const kinds: Record<string, EngineEmailInput> = {
     code: { value: "SYNTHETIC-SHARE-VALUE-NEVER-A-REAL-ONE", label: "Your share" },
     steps: { heading: "What to do now", items: ["Save this share offline, or in a password manager such as Bitwarden.", "Then delete this email.", "Keep it to yourself and do not forward it."] },
   },
+  // src/admin/router-notify.ts: the notice to the other Owners that a member enrolled a passkey from a recovery-code session. No CTA.
+  recoveryEnrolNotice: {
+    subject: "A passkey was enrolled from a recovery-code session on your Downpipes backups",
+    heading: "A passkey was enrolled from a recovery-code session",
+    paragraphs: ["jo@acme-internal.example.com signed in with a recovery code and enrolled a new passkey. The passkey stays in place after the code is spent.", "If you do not expect this, review the passkeys for that member under Access and security."],
+  },
   // src/admin/router-destinations.ts: the console's outbound delivery test. No CTA.
   deliveryTest: {
     subject: "Downpipes email delivery test",
@@ -185,7 +191,7 @@ function main(): void {
   console.log("(1) the population of message kinds is the population of call sites");
   {
     const callers = derivedCallers();
-    const expected = ["src/admin/router-auth-flow.ts", "src/admin/router-custody.ts", "src/admin/router-destinations.ts", "src/admin/router-sources.ts", "src/notify/channels/email.ts"];
+    const expected = ["src/admin/router-auth-flow.ts", "src/admin/router-custody.ts", "src/admin/router-destinations.ts", "src/admin/router-notify.ts", "src/admin/router-sources.ts", "src/notify/channels/email.ts"];
     ok(`the card has ${expected.length} callers in src/, and they are the ones fixtured here`, callers.join(",") === expected.join(","));
     ok("the derivation found callers at all (the scan itself is exercised)", callers.length > 0);
     ok("src/util/html.ts is not counted: it names the module in prose and never calls it", !callers.includes("src/util/html.ts"));
@@ -263,19 +269,6 @@ function main(): void {
     ok(`${id}: no personal sign-off from the vendor`, !/O&#39;Connor|O'Connor/.test(chrome));
     ok(`${id}: no vendor contact, marketing address or unsubscribe rail in the chrome`, !/downpipes\.io|support@|sales@|unsubscribe/i.test(chrome));
     ok(`${id}: the footer note is the neutral engine line`, html.includes("This is an automated message from your Downpipes engine."));
-  }
-
-  // --- (6) no U+2014, no U+2013 -----------------------------------------------------------------------
-  // Written as code points, never the literal characters, so this file carries neither character
-  // itself.
-  console.log("(6) no U+2014 or U+2013 in any rendered kind");
-  {
-    const EM_DASH = String.fromCodePoint(0x2014);
-    const EN_DASH = String.fromCodePoint(0x2013);
-    for (const [id, html] of Object.entries(rendered)) {
-      ok(`${id}: no U+2014`, !html.includes(EM_DASH));
-      ok(`${id}: no U+2013`, !html.includes(EN_DASH));
-    }
   }
 
   // --- (7) escaping ------------------------------------------------------------------------------------

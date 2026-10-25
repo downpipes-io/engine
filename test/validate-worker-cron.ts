@@ -389,7 +389,7 @@ export async function run(): Promise<void> {
       // Two digest batches: one to the enabled channel (delivery + record + clear), one whose channel
       // fetch throws (the per-batch catch path; those seqs are NOT cleared).
       if (path === "/notify/digest-due") {
-        return new Response(JSON.stringify({ batches: [DIGEST_BATCH_OK, DIGEST_BATCH_BADCH] }), { headers: { "content-type": "application/json" } });
+        return new Response(JSON.stringify({ batches: [DIGEST_BATCH_OK, DIGEST_BATCH_BADCH], egressAllowlist: [] }), { headers: { "content-type": "application/json" } });
       }
       if (path === "/notify/channel") {
         const id = u.searchParams.get("id");
@@ -483,7 +483,7 @@ export async function run(): Promise<void> {
       if (path === "/restore-test-complete") throw new Error("simulated recency blip");
       if (path === "/drill-evidence") throw new Error("simulated evidence blip");
       // A single digest batch whose channel fetch THROWS -> the flush per-batch catch arm runs.
-      if (path === "/notify/digest-due") return new Response(JSON.stringify({ batches: [{ channelId: "ch-z", channelKind: "webhook", period: "daily", summary: { total: 1, byEvent: {}, downpipeNames: [], accountLevelCount: 0, fromAt: "", toAt: "" }, detail: "Digest: 1 update", seqs: [9] }] }), { headers: { "content-type": "application/json" } });
+      if (path === "/notify/digest-due") return new Response(JSON.stringify({ batches: [{ channelId: "ch-z", channelKind: "webhook", period: "daily", summary: { total: 1, byEvent: {}, downpipeNames: [], accountLevelCount: 0, fromAt: "", toAt: "" }, detail: "Digest: 1 update", seqs: [9] }], egressAllowlist: [] }), { headers: { "content-type": "application/json" } });
       if (path === "/notify/channel") throw new Error("simulated channel fetch blip");
       if (path === "/notify/digest-sent") return new Response(JSON.stringify({ cleared: 0 }), { headers: { "content-type": "application/json" } });
       // The retention prune pass reads the downpipe list; to also exercise its FAIL-OPEN arm here, the

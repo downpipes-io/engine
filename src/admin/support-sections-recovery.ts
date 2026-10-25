@@ -10,7 +10,7 @@ import type { Env } from "../env.d.ts";
 import { destinationsUnreadable, pendingOwnerActions } from "./support-recovery-owner-actions.ts";
 import { AUTO_HEAL_REFUSAL_CODES, AUTO_HEAL_SUB_CAUSES, EXPORT_SKIP_REASONS } from "./control-plane.ts";
 import { RECOVERY_REFUSAL_CLASSES, RECOVERY_REFUSAL_SURFACES } from "./diag-records.ts";
-import { clampEpochMs, clampInt, clampTs, gateClosed, UNKNOWN_CODE } from "./support-shared.ts";
+import { clampEpochMs, clampInt, clampTs, gateClosed, UNKNOWN_CODE } from "./support-shared.ts"; import { noteSiteFault } from "./site-faults.ts";
 
 // fetchRecoveryStatus pulls the control-plane RECOVERY / AMNESIA latch into the pack: whether recovery is
 // required (a wiped scheduler DO while live archives remain, the loudest fault there is), the coarse
@@ -45,10 +45,10 @@ const RECOVERY_REFUSAL_CLASS_SET: ReadonlySet<string> = new Set(RECOVERY_REFUSAL
 // SIBLING of the recovery status (below) and folded into the same section, because it answers the same
 // question from the other side: recovery-status says what the AUTOMATIC heal did, and this says what happened
 // every time a human tried to do it by hand -- which, on the disaster-recovery path, is the half that was
-// invisible. Best-effort: {} when no manual recovery has ever been refused (honest absence, and the good state).
+// invisible. Best-effort: {} when no manual recovery has ever been refused (honest absence, and the good state) or when the read faulted (recorded as a site fault).
 async function fetchRecoveryRefusals(scheduler: DurableObjectStub): Promise<Record<string, unknown>> {
-  try {
-    const j = (await (await scheduler.fetch(doURL("/recovery-refusals"), { method: "GET" })).json()) as { refusals?: unknown };
+  try { // nosemgrep: incident-catch-returns-empty -- the fault is recorded as a site fault
+    const resp = await scheduler.fetch(doURL("/recovery-refusals"), { method: "GET" }); if (!resp.ok) throw new Error(`recovery refusals unreadable: HTTP ${resp.status}`); const j = (await resp.json()) as { refusals?: unknown };
     const r = (typeof j.refusals === "object" && j.refusals !== null ? j.refusals : null) as Record<string, unknown> | null;
     if (r === null) return {};
     const bySurfaceClass: Record<string, number> = {};
@@ -74,8 +74,8 @@ async function fetchRecoveryRefusals(scheduler: DurableObjectStub): Promise<Reco
       // the operator has no way to know that from the 409 alone.
       ...(r.stagedMalformed === true ? { stagedMalformed: true } : {}),
     };
-  } catch {
-    return {}; // the refusal record is best-effort: it must never break the recovery section it rides in
+  } catch (e) {
+    noteSiteFault("support.recovery-refusals-read", e); return {}; // best-effort, never breaks the recovery section; recorded because {} reads as the good state
   }
 }
 

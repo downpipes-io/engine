@@ -20,6 +20,7 @@ import { RUNLOG_ANOMALY_KINDS } from "../format/integrity-fault-ledger.ts";
 import { PRECHECK_REFUSALS, RELINK_REFUSALS } from "../seal/runlog-handover.ts";
 import { DEST_PROBE_FAIL_CLASS_SET, DEST_REFUSAL_PROVIDER_SET, DEST_SAVE_REFUSAL_SET } from "./dest-save-refusal.ts";
 import { clampInt, clampTs, gateClosed, grantExpiryState } from "./support-shared.ts";
+import { RECOVERY_NOTICE_REASONS } from "./router-notify.ts";
 
 // The restore-receipt vocabularies, taken from the module that CLASSIFIES at the fault site so the
 // pack's gate and the classifier cannot drift apart.
@@ -88,7 +89,15 @@ const CONFIG_EVENT_ALLOWLIST = new Set([
   // attended resume that published an absent RUNLOG.sig again.
   // Projected by runlogFields to closed enums and counts only.
   "runlog-handover", "runlog-relinked", "runlog-resumed",
+  // A passkey enrolled from a recovery-code session, and (below, success rows only) the recovery-code sign-in
+  // before it. A spent single-use code leaves a standing credential behind, so both rows are in the excerpt.
+  "passkey-recovery-enrol", "passkey-recovery-enrol-notice",
 ]);
+// RECOVERY_SESSION_ACTIONS are allowlisted by action AND outcome: only the successful recovery-code sign-in is a
+// recovery session. Failed and denied attempts are folded rows with their own counters and would crowd the excerpt.
+const RECOVERY_SESSION_ACTIONS = new Set(["recovery-code-used"]);
+const isExcerptEvent = (e: AuditExcerptEvent): boolean =>
+  CONFIG_EVENT_ALLOWLIST.has(e.action) || (RECOVERY_SESSION_ACTIONS.has(e.action) && e.outcome === "success");
 // Bound to the canonical RESTORE_FAILURE_CLASSES tuple rather than hand-listed, for the reason the auto-heal
 // refusal codes are: a hand-listed copy is exactly how a class the fault site happily tags gets silently
 // dropped at this boundary, leaving a pack that reads clean while the evidence is gone.
@@ -114,6 +123,8 @@ const CONFIG_EVENT_KEYSTONE = new Set([
   // key presence flipped true -> false. It is rare and old by the time the ticket is raised ("backups stopped
   // three weeks ago"), so a churn of newer events must never roll it out of the excerpt.
   "engine-secret-absent",
+  // passkey-recovery-enrol is rare and old by the time the ticket is raised, so churn must not roll it out.
+  "passkey-recovery-enrol", "passkey-recovery-enrol-notice",
 ]);
 // How far back the recent-context window's cursor reaches. NOTE: the DO serves this as ONE bounded forward
 // page (bounded by the request limit and the platform's per-list page), not the whole log, so the recent
@@ -131,6 +142,7 @@ type AuditExcerptEvent = {
   // its PRESENCE rides, exactly as restoreProven.by is collapsed to restoreProven.attributed.
   actorEmail?: string | null;
   target?: {
+    notice?: { state?: unknown; reason?: unknown; owners?: unknown; sent?: unknown; skipped?: unknown; failed?: unknown };
     detail?: string;
     connKind?: string;
     op?: string;
@@ -592,16 +604,16 @@ async function fetchLatestAction(scheduler: DurableObjectStub, action: string): 
 }
 
 // fetchActionPage returns the DO's server-side action-filtered page (ascending seq, newest AUDIT_PAGE_MAX
-// matches of that ONE action), or [] on any fault. This is the churn-proof read: a keystone marker is found
+// matches of that ONE action). This is the churn-proof read: a keystone marker is found
 // through the action filter regardless of how much newer traffic has buried it in the recent window.
+// A fault THROWS. An empty page would read as "no such event ever happened", which for the forced
+// destination removal is the one event the excerpt must not lose; fetchConfigEvents' caller turns the throw
+// into the section's error state, which says the excerpt is unavailable.
 async function fetchActionPage(scheduler: DurableObjectStub, action: string): Promise<AuditExcerptEvent[]> {
-  try {
-    const resp = await scheduler.fetch(doURL(`/audit/export?action=${encodeURIComponent(action)}`), { method: "GET" });
-    const doc = (await resp.json()) as { events?: AuditExcerptEvent[] };
-    return (doc.events ?? []).filter((e) => e != null && e.action === action);
-  } catch {
-    return [];
-  }
+  const resp = await scheduler.fetch(doURL(`/audit/export?action=${encodeURIComponent(action)}`), { method: "GET" });
+  if (!resp.ok) throw new Error(`audit action page for ${action} unreadable: HTTP ${resp.status}`);
+  const doc = (await resp.json()) as { events?: AuditExcerptEvent[] };
+  return (doc.events ?? []).filter((e) => e != null && e.action === action);
 }
 
 // fetchLatestForcedDestRemoval finds the newest FORCED removal of a destination that was the ONLY
@@ -644,7 +656,7 @@ export async function fetchConfigEvents(scheduler: DurableObjectStub): Promise<{
     const from = Math.max(0, headSeq - CONFIG_EVENT_SCAN);
     const resp = await scheduler.fetch(doURL(`/audit/export?afterSeq=${from}&limit=${CONFIG_EVENT_SCAN}`), { method: "GET" });
     const doc = (await resp.json()) as { events?: AuditExcerptEvent[] };
-    const allowed = (doc.events ?? []).filter((e) => CONFIG_EVENT_ALLOWLIST.has(e.action)); // ascending seq
+    const allowed = (doc.events ?? []).filter(isExcerptEvent); // ascending seq
     // The recent window, PLUS the latest of each keystone action smart-retained even if it predates the window
     // (so a deploy/detach/dest-repoint marker is never absent just because the page filled with newer churn).
     const out = new Map<number, AuditExcerptEvent>();
@@ -681,6 +693,7 @@ export async function fetchConfigEvents(scheduler: DurableObjectStub): Promise<{
       ...keyCeremonyFields(e), // the ceremony step + cause it died at, and Cloudflare's own verdict
       ...secretAbsentFields(e), // WHICH key presence flipped true -> false, and (from the row's `at`) WHEN
       ...customRoleFields(e), // how many grants a custom-role DELETION floors to the viewer floor
+      ...recoveryNoticeFields(e), // whether the other Owners were emailed about a recovery-session enrolment (closed enums, counts)
       ...runlogFields(e), // the RUNLOG integrity step, anomaly kind and refusal classes (closed enums, counts)
     }));
     return { events, fetched: true };
@@ -855,5 +868,23 @@ export async function fetchAuditExportAttempts(scheduler: DurableObjectStub): Pr
     ...(typeof a.lastAt === "number" && Number.isFinite(a.lastAt) ? { lastAt: Math.max(0, Math.floor(a.lastAt)) } : {}),
     ...(typeof a.lastFailureAt === "number" && Number.isFinite(a.lastFailureAt) ? { lastFailureAt: Math.max(0, Math.floor(a.lastFailureAt)) } : {}),
     ...(lastFailureOutcome !== undefined ? { lastFailureOutcome } : {}),
+  };
+}
+
+
+// recoveryNoticeFields projects the Owner-email trace on a passkey-recovery-enrol-notice row: a closed state, a closed
+// reason and counts. Anything outside the closed sets is dropped, and no address is ever read.
+const NOTICE_STATES: ReadonlySet<string> = new Set(["sent", "partial", "skipped", "failed"]);
+const NOTICE_REASON_SET: ReadonlySet<string> = new Set(RECOVERY_NOTICE_REASONS);
+function recoveryNoticeFields(e: AuditExcerptEvent): Record<string, unknown> {
+  const n = e.action === "passkey-recovery-enrol-notice" ? e.target?.notice : undefined;
+  if (n === undefined || n === null || typeof n.state !== "string" || !NOTICE_STATES.has(n.state)) return {};
+  return {
+    noticeState: n.state,
+    ...(typeof n.reason === "string" && NOTICE_REASON_SET.has(n.reason) ? { noticeReason: n.reason } : {}),
+    ...(clampInt(n.owners) !== undefined ? { noticeOwners: clampInt(n.owners) } : {}),
+    ...(clampInt(n.sent) !== undefined ? { noticeSent: clampInt(n.sent) } : {}),
+    ...(clampInt(n.skipped) !== undefined ? { noticeSkipped: clampInt(n.skipped) } : {}),
+    ...(clampInt(n.failed) !== undefined ? { noticeFailed: clampInt(n.failed) } : {}),
   };
 }

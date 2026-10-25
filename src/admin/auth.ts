@@ -19,7 +19,7 @@ import { adminTokenFingerprint, readSessionCookie } from "./session.ts";
 // the account is fully self-hosted auth: no Cloudflare Access, no shared token). See envFlagEnabled and the
 // token branch below; the default (flag absent/falsey) is unchanged.
 //
-// BREAK-GLASS DISPOSAL: the ADMIN_TOKEN is meant for a ONE-TIME bootstrap of the first Owner. Once
+// BREAK-GLASS RETIRE: the ADMIN_TOKEN claims the first Owner and has no expiry or use count. Once
 // the Owner's passkey works, the Owner can RETIRE the token in-app (POST /admin/policy/retire-break-glass-
 // token), which the engine cannot delete itself (by design it holds no Cloudflare token that can change its
 // own secrets). A retired token is refused EXACTLY as ADMIN_TOKEN_DISABLED refuses it, so the effective "token fallback OFF"

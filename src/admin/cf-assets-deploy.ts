@@ -42,7 +42,7 @@ import { blake3 } from "@noble/hashes/blake3.js";
 import { base64Encode, hexEncode, sha256Hex, utf8 } from "../crypto/bytes.ts";
 import { cfErr, classifyBindings, type LiveBinding } from "./cf-deploy.ts";
 import type { LiveVersionShare } from "./update-types.ts";
-import { CF_API_BASE as CF_API } from "../lib/outbound.ts";
+import { CF_API_BASE as CF_API } from "../lib/outbound.ts"; import { readJsonOrNull } from "../util/json-body.ts";
 
 // The base URL lives in src/lib/outbound.ts (the one place vendor hosts are enumerated, V13.2.5).
 
@@ -253,7 +253,7 @@ export function makeCfAssetsDeployDriver(opts: {
   async function readLiveSlices(): Promise<LiveVersionShare[]> {
     const url = `${CF_API}/accounts/${A}/workers/scripts/${S}/deployments`;
     const resp = await fetchImpl(url, { method: "GET", headers: auth, redirect: "manual" });
-    const body = (await resp.json().catch(() => null)) as CfEnvelope<{ deployments?: Array<{ versions?: Array<{ version_id?: unknown; percentage?: unknown }> }> }> | null;
+    const body = (await readJsonOrNull(resp)) as CfEnvelope<{ deployments?: Array<{ versions?: Array<{ version_id?: unknown; percentage?: unknown }> }> }> | null;
     if (!resp.ok || body?.success !== true) {
       const { why } = cfErr(body, resp.status);
       throw new Error(`could not read the console's current deployment to record a rollback target (Cloudflare: ${why}). The token needs Workers Scripts: Edit on account ${accountId}. Nothing was changed.`);
@@ -282,7 +282,7 @@ export function makeCfAssetsDeployDriver(opts: {
   async function readConsoleSettings(): Promise<{ bindings: LiveBinding[]; compatibilityDate?: string; compatibilityFlags?: string[] }> {
     const url = `${CF_API}/accounts/${A}/workers/scripts/${S}/settings`;
     const resp = await fetchImpl(url, { method: "GET", headers: auth, redirect: "manual" });
-    const body = (await resp.json().catch(() => null)) as CfEnvelope<{ bindings?: unknown; compatibility_date?: unknown; compatibility_flags?: unknown }> | null;
+    const body = (await readJsonOrNull(resp)) as CfEnvelope<{ bindings?: unknown; compatibility_date?: unknown; compatibility_flags?: unknown }> | null;
     if (!resp.ok || body?.success !== true) {
       const { why } = cfErr(body, resp.status);
       throw new Error(`could not read the console's current settings to preserve its bindings before uploading the new version (Cloudflare: ${why}). The token must have Workers Scripts: Edit on account ${accountId} (the "Edit Cloudflare Workers" template). Nothing was uploaded.`);
@@ -334,7 +334,7 @@ export function makeCfAssetsDeployDriver(opts: {
       headers: { ...auth, "content-type": "application/json" },
       body: JSON.stringify({ manifest }),
     });
-    const sessionBody = (await sessionResp.json().catch(() => null)) as CfEnvelope<{ jwt?: unknown; buckets?: unknown }> | null;
+    const sessionBody = (await readJsonOrNull(sessionResp)) as CfEnvelope<{ jwt?: unknown; buckets?: unknown }> | null;
     if (!sessionResp.ok || sessionBody?.success !== true) {
       const { why } = cfErr(sessionBody, sessionResp.status);
       throw new Error(`the console asset manifest was not accepted (Cloudflare: ${why}); your console is unchanged (no version was created and nothing was deployed). The token needs Workers Scripts: Edit on account ${accountId}.`);
@@ -367,7 +367,7 @@ export function makeCfAssetsDeployDriver(opts: {
         headers: { authorization: `Bearer ${sessionJwt}` },
         body: payload,
       });
-      const upBody = (await upResp.json().catch(() => null)) as CfEnvelope<{ jwt?: unknown }> | null;
+      const upBody = (await readJsonOrNull(upResp)) as CfEnvelope<{ jwt?: unknown }> | null;
       if (!upResp.ok || upBody?.success !== true) {
         const { why } = cfErr(upBody, upResp.status);
         throw new Error(`a console asset bucket failed to upload (Cloudflare: ${why}); your console is unchanged (staged assets do not serve until a version referencing them is deployed, and none was).`);
@@ -447,7 +447,7 @@ export function makeCfAssetsDeployDriver(opts: {
 
       const url = `${CF_API}/accounts/${A}/workers/scripts/${S}/versions`;
       const resp = await fetchImpl(url, { method: "POST", headers: auth, body: form, redirect: "manual" });
-      const body = (await resp.json().catch(() => null)) as CfEnvelope<{ id?: unknown }> | null;
+      const body = (await readJsonOrNull(resp)) as CfEnvelope<{ id?: unknown }> | null;
       if (!resp.ok || body?.success !== true) {
         const { why } = cfErr(body, resp.status);
         throw new Error(`the new console version could not be uploaded (Cloudflare: ${why}); your console is unchanged (an uploaded version is not live until it is deployed, and nothing was deployed). The token needs Workers Scripts: Edit on account ${accountId}.`);
@@ -472,7 +472,7 @@ export function makeCfAssetsDeployDriver(opts: {
         headers: { ...auth, "content-type": "application/json" },
         body: JSON.stringify({ strategy: "percentage", versions: [{ version_id: versionId, percentage: 100 }] }),
       });
-      const body = (await resp.json().catch(() => null)) as CfEnvelope<unknown> | null;
+      const body = (await readJsonOrNull(resp)) as CfEnvelope<unknown> | null;
       if (!resp.ok || body?.success !== true) {
         const { why } = cfErr(body, resp.status);
         throw new Error(`could not make console version ${versionId} the live deployment (Cloudflare: ${why}); the previously-live console version is still serving (Cloudflare deploys are atomic, so nothing was half-applied). The token needs Workers Scripts: Edit on account ${accountId}.`);

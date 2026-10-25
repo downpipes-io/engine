@@ -70,9 +70,9 @@ export class ChecksumRequiredError extends Error {
 // and the same body decides the checksum retry, the fault record and the initiate's Object-Lock verdict.
 // Fail-safe: an unreadable body reads as "", which records s3Code "none" and never matches a retry.
 async function readErrorBody(resp: Response): Promise<string> {
-  try {
+  try { // nosemgrep: incident-catch-returns-empty -- an unreadable error body is left out of the message and the failure it explains is already raised
     return new TextDecoder().decode(await drainResponseBounded(resp, MAX_DEST_TEXT_BYTES, "s3 error body"));
-  } catch {
+  } catch { // site-fault-waiver: src/dest/s3-multipart-ops.ts:readErrorBody:catch:1 -- an unreadable error body is left out of the message and the failure it explains is already raised
     return "";
   }
 }

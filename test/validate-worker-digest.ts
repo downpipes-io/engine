@@ -70,7 +70,7 @@ export async function run(): Promise<void> {
           try { body = JSON.parse(init.body); } catch { body = init.body; }
         }
         calls.push({ path, body });
-        if (path === "/notify/digest-due") return new Response(JSON.stringify({ batches: [batch] }), { headers: { "content-type": "application/json" } });
+        if (path === "/notify/digest-due") return new Response(JSON.stringify({ batches: [batch], egressAllowlist: [] }), { headers: { "content-type": "application/json" } });
         if (path === "/notify/channel") return new Response(JSON.stringify({ channel }), { headers: { "content-type": "application/json" } });
         if (path === "/notify/record") return new Response(JSON.stringify({ recorded: 1 }), { headers: { "content-type": "application/json" } });
         if (path === "/notify/digest-sent") return new Response(JSON.stringify({ cleared: (body as { ids?: unknown[] })?.ids?.length ?? 0 }), { headers: { "content-type": "application/json" } });
@@ -207,7 +207,7 @@ export async function run(): Promise<void> {
           try { body = JSON.parse(init.body); } catch { body = init.body; }
         }
         calls.push({ path, body });
-        if (path === "/notify/digest-due") return new Response(JSON.stringify({ batches: [batch] }), { headers: { "content-type": "application/json" } });
+        if (path === "/notify/digest-due") return new Response(JSON.stringify({ batches: [batch], egressAllowlist: [] }), { headers: { "content-type": "application/json" } });
         if (path === "/notify/channel") return new Response(JSON.stringify({ channel: null }), { headers: { "content-type": "application/json" } });
         if (path === "/notify/record") return new Response(JSON.stringify({ recorded: 1 }), { headers: { "content-type": "application/json" } });
         if (path === "/notify/digest-sent") return new Response(JSON.stringify({ cleared: (body as { ids?: unknown[] })?.ids?.length ?? 0 }), { headers: { "content-type": "application/json" } });
@@ -254,7 +254,7 @@ export async function run(): Promise<void> {
           try { body = JSON.parse(init.body); } catch { body = init.body; }
         }
         calls.push({ path, body });
-        if (path === "/notify/digest-due") return new Response(JSON.stringify({ batches: [batch] }), { headers: { "content-type": "application/json" } });
+        if (path === "/notify/digest-due") return new Response(JSON.stringify({ batches: [batch], egressAllowlist: [] }), { headers: { "content-type": "application/json" } });
         if (path === "/notify/channel") return new Response(JSON.stringify({ channel: disabledChannel }), { headers: { "content-type": "application/json" } });
         if (path === "/notify/record") return new Response(JSON.stringify({ recorded: 1 }), { headers: { "content-type": "application/json" } });
         if (path === "/notify/digest-sent") return new Response(JSON.stringify({ cleared: (body as { ids?: unknown[] })?.ids?.length ?? 0 }), { headers: { "content-type": "application/json" } });

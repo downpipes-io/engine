@@ -12,7 +12,7 @@ import type { Caller } from "./identity.ts";
 import { recordAudit } from "./router-audit.ts";
 import { logSurfaceAuth, RATE_LIMITED_ERROR, rateLimitedResponse } from "./router-core.ts";
 import { sealedSupportBundle } from "./support.ts";
-import { grantExpiryState, nowIso } from "./support-shared.ts";
+import { grantExpiryState, nowIso } from "./support-shared.ts"; import { noteSiteFault } from "./site-faults.ts";
 
 // ---- platform-issued ingest credentials (client/secret) ------------------------------
 //
@@ -243,8 +243,8 @@ const INGEST_PULL_RATE_LIMIT_MAX_PER_WINDOW = 120;
  * schedule, so a limiter that failed closed when its own backing store hiccuped would turn an engine
  * fault into a SIEM outage -- exactly the harm a per-credential cap exists to avoid causing.
  */
-async function ingestPullRateLimited(scheduler: DurableObjectStub, clientId: string): Promise<Response | null> {
-  try {
+export async function ingestPullRateLimited(scheduler: DurableObjectStub, clientId: string): Promise<Response | null> {
+  try { // nosemgrep: incident-catch-returns-empty -- the fault is recorded as a site fault
     const resp = await scheduler.fetch(doURL("/rate-check"), {
       method: "POST",
       body: JSON.stringify({ key: `ingest:${clientId}`, max: INGEST_PULL_RATE_LIMIT_MAX_PER_WINDOW }),
@@ -259,10 +259,10 @@ async function ingestPullRateLimited(scheduler: DurableObjectStub, clientId: str
     const retryAfterSeconds = Math.max(1, Math.ceil(retryAfterMs / 1000));
     void bumpAdminCounter(scheduler, "ingest-pull-rate-limited");
     return rateLimitedResponse(RATE_LIMITED_ERROR, retryAfterSeconds, INGEST_PULL_RATE_LIMIT_MAX_PER_WINDOW);
-  } catch {
+  } catch (e) {
     // FAIL OPEN: the limiter's own backing store is unavailable. Admit the pull rather than turn an
     // engine-side fault into a collector-visible outage.
-    return null;
+    noteSiteFault("support.ingest-pull-limiter", e); return null; // the unchecked admission is recorded
   }
 }
 

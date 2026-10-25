@@ -161,7 +161,7 @@ export function parseShard(plain: Uint8Array): { preamble: ShardPreamble; recs: 
   if (typeof preamble !== "object" || preamble === null || preamble.kind !== "preamble") throw new Error("first shard line is not a preamble");
   const recs: ShardRecord[] = [];
   for (const line of lines.slice(1)) {
-    validateCanonicalCounts(line, "plaintextSize", "segments[].packed.offset", "segments[].packed.length", "segments[].chunkRange[]");
+    validateCanonicalCounts(line, "plaintextSize", "segments[].packed?.offset", "segments[].packed?.length", "segments[].chunkRange[]");
     const r = JSON.parse(line) as ShardRecord | null;
     if (typeof r !== "object" || r === null || r.kind !== "record") throw new Error("shard line is not a record");
     recs.push(r);

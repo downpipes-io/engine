@@ -14,7 +14,7 @@ import type { Destination } from "../dest/types.ts";
 import type { Env } from "../env.d.ts";
 import type { ObjectStore } from "../format/reader.ts";
 import type { parseRunlog } from "../format/writer.ts";
-import { loadIdentity, loadSigner, operationalReadbackPrivate, verifierFrom } from "../keys-env.ts";
+import { loadIdentity, loadSigner, operationalReadbackPrivate, verifierFrom } from "../keys-env.ts"; import { noteSiteFault } from "../admin/site-faults.ts";
 import { log } from "../log.ts";
 import { type NotifyEvent, severityOf } from "../notify.ts";
 import { primaryDestinationId, replicaDestinationIds } from "../sched/destinations.ts";
@@ -315,15 +315,15 @@ export function replicaCoverageFor(config: DownpipeState["config"], replState: R
 // (the same wiring the drill builds). A missing required key (SIGNER_PRIVATE) or an unloadable identity
 // logs coarsely and returns null, which the caller turns into a skipped tick rather than a crashed cron.
 // The caller owns zeroising the returned signer's ML-DSA secret on every path.
-async function loadPassKeys(env: Env, operationalPrivate: string): Promise<{ signer: Awaited<ReturnType<typeof loadSigner>>; identity: ReturnType<typeof loadIdentity>; verifier: ReturnType<typeof verifierFrom> } | null> {
-  try {
+export async function loadPassKeys(env: Env, operationalPrivate: string): Promise<{ signer: Awaited<ReturnType<typeof loadSigner>>; identity: ReturnType<typeof loadIdentity>; verifier: ReturnType<typeof verifierFrom> } | null> {
+  try { // nosemgrep: incident-catch-returns-empty -- the fault is recorded as a site fault
     const signer = await loadSigner(requireConfig(env.SIGNER_PRIVATE, "SIGNER_PRIVATE"));
     const identity = loadIdentity(operationalPrivate);
     const verifier = verifierFrom(signer);
     return { signer, identity, verifier };
   } catch (e) {
     log("error", `retention prune skipped: ${(e as Error).message}`);
-    return null;
+    noteSiteFault("cron.retention-keys", e); return null;
   }
 }
 

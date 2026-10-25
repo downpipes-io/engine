@@ -78,7 +78,8 @@ function makeRecipient(role: string): { entry: RecipientEntry; identity: Uint8Ar
 // R. Restore failure classes
 // ---------------------------------------------------------------------------------------------------------
 const RESTORE_RUN = "01BX5ZZKBKACTAV9WEVGEMMVV1";
-const ACCT = "acct-vocab";
+const ACCT = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeee01";
+const ZONE = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeee02";
 const BUCKET = "media";
 // A real MP4 container header: an "images" record holding these bytes is a cross-type mismatch.
 const REAL_MP4 = new Uint8Array([0, 0, 0, 0x18, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d, 0, 0, 2, 0, 0x69, 0x73, 0x6f, 0x6d, 1, 2, 3, 4]);
@@ -164,7 +165,7 @@ async function restoreSection(): Promise<void> {
       OPERATIONAL_PRIVATE: b64urlEncode(op.identity),
       [`R2_${BUCKET}`]: new LiveR2(faulty) as unknown as R2Bucket,
     } as unknown as Env;
-    return (await runRestore(env, { runId: RESTORE_RUN, confirm: true, cfConfig: { token: "tok", accountId: ACCT }, mediaRestore: { token: "tok", accountId: ACCT } }, null, {
+    return (await runRestore(env, { runId: RESTORE_RUN, confirm: true, cfConfig: { token: "tok", accountId: ACCT, zoneId: ZONE }, mediaRestore: { token: "tok", accountId: ACCT } }, null, {
       cfApiFactory: () => cfDouble(faulty),
       mediaUploaderFactory: () => ({
         uploadImage: async () => { throw new Error("the uploader must not be reached for a type-mismatched record"); },

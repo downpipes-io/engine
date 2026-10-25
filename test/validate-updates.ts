@@ -13,14 +13,14 @@ import { concat, utf8, b64urlEncode } from "../src/crypto/bytes.ts";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { verdictReached } from "./lib/verdict-guard.ts";
+import { CANONICAL_UPDATE_HOST, gradeChannelLine, type ChannelLineState } from "./lib/update-channel-toml.ts";
 
-// CANONICAL_UPDATE_HOST is the ONE host the engine fetches its signed version channel from. The engine
+// CANONICAL_UPDATE_HOST (test/lib/update-channel-toml.ts) is the ONE host the engine fetches its signed version channel from. The engine
 // trusts the PINNED SIGNATURE, not the host (see wrangler.toml "singular"), and every engine config
 // file (wrangler.toml, wrangler.demo.toml) and the deploy ceremony comments use the singular spelling.
 // The plural "updates.downpipes.io" is a drift risk in the external publish tool and design doc; pin the
-// singular here so any reintroduction of a divergent host into the engine's own config FAILS the gate
+// singular (test/lib/update-channel-toml.ts) so any reintroduction of a divergent host into the engine's own config FAILS the gate
 // before a deploy could point UPDATE_CHANNEL_URL at a host the channel is not served on.
-const CANONICAL_UPDATE_HOST = "update.downpipes.io";
 
 let failures = 0;
 function ok(label: string, cond: boolean): void {
@@ -255,24 +255,61 @@ async function main(): Promise<void> {
       return null;
     }
   };
-  const channelUrlFrom = (tomlPath: string): string | null => {
+  const stateOf = (tomlPath: string): ChannelLineState | null => {
     const text = readIfPresent(tomlPath);
-    if (text === null) return null;
-    const m = text.match(/^\s*UPDATE_CHANNEL_URL\s*=\s*"([^"]+)"/m);
-    return m && m[1] !== undefined ? m[1] : null;
+    return text === null ? null : gradeChannelLine(text);
   };
-  const prodUrl = channelUrlFrom("wrangler.toml");
-  ok("wrangler.toml sets UPDATE_CHANNEL_URL", prodUrl !== null);
-  const prodHost = prodUrl ? new URL(prodUrl).host : "";
-  ok(`prod channel host is the canonical "${CANONICAL_UPDATE_HOST}"`, prodHost === CANONICAL_UPDATE_HOST);
+  // wrangler.toml may carry the URL as the one recognised active line (drift-checked below) or leave it to a
+  // Worker secret (`wrangler secret put UPDATE_CHANNEL_URL`, the documented customer path), in which case no
+  // line names the key and the runtime pins the host. Any other non-comment line naming the key fails closed.
+  // That the SHIPPED wrangler.toml carries the canonical line is graded by
+  // test/validate-shipped-update-channel.ts, which the customer preflight does not run.
+  const prod = stateOf("wrangler.toml");
+  const prodSecret = prod !== null && prod.state === "secret";
+  if (prodSecret) {
+    console.log(`  note wrangler.toml has no active UPDATE_CHANNEL_URL line: the URL is a Worker secret whose host the runtime pins to ${CANONICAL_UPDATE_HOST}`);
+  }
+  if (prod !== null && !prodSecret) ok(`prod channel line is the canonical "${CANONICAL_UPDATE_HOST}" form`, prod.state === "canonical");
   const otherEnvConfigs = ["wrangler.demo.toml", "wrangler.chaos.toml", "wrangler.internal.toml"];
   for (const envToml of otherEnvConfigs) {
-    const envUrl = channelUrlFrom(envToml);
-    if (envUrl === null) continue; // not present in this tree; nothing to check for drift
-    const envHost = new URL(envUrl).host;
-    ok(`${envToml} channel host is the canonical "${CANONICAL_UPDATE_HOST}"`, envHost === CANONICAL_UPDATE_HOST);
-    ok(`${envToml} and wrangler.toml update hosts agree (no drift)`, envHost === prodHost);
+    const env = stateOf(envToml);
+    if (env === null || env.state === "secret") continue; // not present, or no line naming the key: nothing to drift
+    ok(`${envToml} channel line is the canonical "${CANONICAL_UPDATE_HOST}" form`, env.state === "canonical");
   }
+  // Synthetic toml text (not the real file). Passes first, then every form that must fail closed.
+  const U = "https://update.downpipes.io/stable.json";
+  const passCases: Array<[string, string, "canonical" | "secret"]> = [
+    ["an active canonical double-quoted line", `UPDATE_CHANNEL_URL = "${U}"\n`, "canonical"],
+    ["an active canonical line with a trailing comment", `UPDATE_CHANNEL_URL = "${U}" # vendor channel\n`, "canonical"],
+    ["a commented-out line (Worker secret form)", `# UPDATE_CHANNEL_URL = "${U}"\n`, "secret"],
+    ["an absent line (Worker secret form)", 'name = "x"\n', "secret"],
+    ["a canonical line beside a multi-line array with bare quoted elements", `compatibility_flags = [\n  "nodejs_compat",\n]\nUPDATE_CHANNEL_URL = "${U}"\n`, "canonical"],
+    ["a multi-line array with bare quoted elements and no channel line", 'compatibility_flags = [\n  "nodejs_compat",\n]\n', "secret"],
+    ["a commented-out non-canonical line", '#UPDATE_CHANNEL_URL = "https://mirror.example/x"\n', "secret"],
+  ];
+  for (const [label, text, want] of passCases) ok(`synthetic: ${label} grades ${want}`, gradeChannelLine(text).state === want);
+  const failCases: Array<[string, string]> = [
+    ["a non-canonical host", 'UPDATE_CHANNEL_URL = "https://mirror.example/stable.json"\n'],
+    ["a single-quoted value", "UPDATE_CHANNEL_URL = 'https://evil.example/x'\n"],
+    ["a triple-quoted value", 'UPDATE_CHANNEL_URL = """https://evil.example/x"""\n'],
+    ["a double-quoted key", '"UPDATE_CHANNEL_URL" = "https://evil.example/x"\n'],
+    ["a single-quoted key", "'UPDATE_CHANNEL_URL' = \"https://evil.example/x\"\n"],
+    ["two active lines (canonical first)", `UPDATE_CHANNEL_URL = "${U}"\nUPDATE_CHANNEL_URL = "https://evil.example/x"\n`],
+    ["two active lines (canonical second)", `UPDATE_CHANNEL_URL = "https://evil.example/x"\nUPDATE_CHANNEL_URL = "${U}"\n`],
+    ["userinfo before the canonical host", 'UPDATE_CHANNEL_URL = "https://update.downpipes.io@evil.example/stable.json"\n'],
+    ["userinfo naming the canonical host", 'UPDATE_CHANNEL_URL = "https://user:pw@update.downpipes.io/stable.json"\n'],
+    ["an http scheme", 'UPDATE_CHANNEL_URL = "http://update.downpipes.io/stable.json"\n'],
+    ["an uppercase host", 'UPDATE_CHANNEL_URL = "https://UPDATE.DOWNPIPES.IO/stable.json"\n'],
+    ["a port", 'UPDATE_CHANNEL_URL = "https://update.downpipes.io:8443/stable.json"\n'],
+    ["a quoted key spelled with a hex escape", '"UPDATE_CHANNEL\\x5fURL" = "https://evil.example/x"\n'],
+    ["a quoted key spelled with a unicode escape", '"UPDATE_CHANNEL\\u005fURL" = "https://evil.example/x"\n'],
+    ["a single-quoted key spelled with an escape-style name", "'UPDATE_CHANNEL\\u005fURL' = \"https://evil.example/x\"\n"],
+    ["a quoted key of another name that decodes to the channel key only through an escape", '"\\x55PDATE_CHANNEL_URL" = "https://evil.example/x"\n'],
+    ["an unquoted-key line naming UPDATE_ with an escape", 'vars.UPDATE_CHANNEL\\x5fURL = "https://evil.example/x"\n'],
+    ["an unquoted value", `UPDATE_CHANNEL_URL = ${U}\n`],
+    ["an inline-table mention", `vars = { UPDATE_CHANNEL_URL = "${U}" }\n`],
+  ];
+  for (const [label, text] of failCases) ok(`synthetic: ${label} fails closed (drift)`, gradeChannelLine(text).state === "drift");
   // The plural check covers the PUBLISH TOOL as well as the engine's own config: the external publish tool
   // and design doc must align to this host, not the other way round, so the loop below reads
   // tools/publish-channel.mjs alongside the deploy configs. updates.downpipes.io does not resolve at all,
@@ -284,6 +321,7 @@ async function main(): Promise<void> {
     const text = readIfPresent(hostFile);
     if (text === null) continue; // not present in this tree
     ok(`${hostFile} contains no plural "updates.downpipes.io" host drift`, !/updates\.downpipes\.io/.test(text));
+    if (hostFile === "wrangler.toml" && prodSecret) continue; // Worker-secret form: nothing in the file need name the host
     ok(`${hostFile} names the canonical "${CANONICAL_UPDATE_HOST}"`, text.includes(CANONICAL_UPDATE_HOST));
   }
 

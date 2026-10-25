@@ -7,6 +7,7 @@
 // vocabulary (defence in depth: the DO clamps at the recording site, and an out-of-vocabulary value is DROPPED
 // here rather than propagated). No schedule string, window minute, bucket name, secret or record content rides.
 
+import { unwiredSecretSinks } from "../dest/restore-sink.ts";
 import { RESTORE_TEST_REASON_CODES } from "../restore-reasons.ts";
 import { allDestinationIds, replNeverReportedSince } from "../sched/destinations.ts";
 import { INFLIGHT_LEASE_MS } from "../sched/scheduler-do-records.ts";
@@ -15,7 +16,7 @@ import { selfIdentityClass, selfIdentityDegraded } from "../seal/adapters.ts";
 import { SOURCE_FAULT_STATUS_CLASSES } from "../sources/source-fault-ledger.ts";
 import { doURL } from "../do-url.ts";
 import { RTO_DEGRADATION_CAUSES, RTO_REJECT_REASONS } from "./rto.ts";
-import type { CapTruncationSubjectIndex } from "./support-sections-diag.ts";
+import { type CapTruncationSubjectIndex, capTruncationSubjectIndex, freshnessUncomputableIndex } from "./support-sections-diag.ts";
 import { danglingDestinationRef } from "./support-sections-config.ts";
 import { STATE_REFUSED_CLASSES } from "./support-sections-runs.ts";
 import { clampNonNegInt, gateClosed, UNKNOWN_CODE } from "./support-shared.ts";
@@ -475,8 +476,8 @@ export function projectDownpipeRow(d: SupportDownpipeState, opts: ProjectRowOpts
         : {}),
     // blackoutResolve / selfIdentityDegraded + selfIdentityClass / stateRefused:
     // per-row derivations over state the roster read already returned (stateRefused joins the scheduler
-    // section fetched above -- no extra DO round trip). Each is gated on its own closed vocabulary inside the
-    // projector, and a healthy downpipe contributes nothing. See support-sections-downpipes.ts.
+    // section buildSupportBundle fetched -- no extra DO round trip). Each is gated on its own closed vocabulary
+    // inside the projector, and a healthy downpipe contributes nothing.
     ...projectDownpipeDiagnostics(d as SupportDownpipeRow, refusalIndex),
   };
 }
@@ -544,4 +545,48 @@ export async function fetchRtoEstimates(scheduler: DurableObjectStub): Promise<R
     ...(fleet !== null ? { fleet } : {}),
     ...(downpipes.length > 0 ? { downpipes } : {}),
   };
+}
+
+// deriveFleetProjections computes the fleet-level lookups and counts the pack joins onto each downpipe row,
+// from the roster and the scheduler and schedDiag sections the build has already fetched (no DO round trip).
+export function deriveFleetProjections(downpipes: SupportDownpipeState[], schedulerSignals: Record<string, unknown>, schedDiag: Record<string, unknown>): {
+  refusalIndex: Map<string, StateRefusedRow>;
+  selfIdentityDegradedFleet: number;
+  freshnessIndex: Map<string, string>;
+  freshnessTruncation: CapTruncationSubjectIndex;
+  secretsRestorability: { bound: number; unwired: number };
+} {
+  // refusalIndex: the downpipeId -> state-refusal lookup, built from the scheduler section already fetched
+  // by buildSupportBundle (no extra DO round trip); empty when that section faulted or nothing was refused.
+  // selfIdentityDegradedFleet: the fleet count of downpipes whose source config can no longer re-identify
+  // itself, so a roster rebuild after a control-plane loss cannot reconstruct them.
+  const refusalIndex = stateRefusalIndex(schedulerSignals);
+  const selfIdentityDegradedFleet = selfIdentityDegradedCount(downpipes as unknown as SupportDownpipeRow[]);
+  // freshnessIndex: the downpipes whose staleness rule can never arm, from the schedDiag section already
+  // fetched by buildSupportBundle (no extra DO round trip). A downpipe in this index reads "Fresh" on the map and the overview
+  // forever, even while its backups have stopped: the per-downpipe boolean below is what lets the bot fire the
+  // staleness-uncomputable signal rather than trusting a green tile.
+  const freshnessIndex = freshnessUncomputableIndex(schedDiag);
+  // freshnessTruncation: the other half of the same join. The fault map refuses a downpipe once full, so the
+  // index above can only ever mark the downpipes inside the cap; a downpipe past the cap is absent from the
+  // map and carries no field there, so without this its row would assert a working staleness rule while
+  // `capTruncations` says only that some row was dropped. This names which downpipe was refused, so its row can
+  // carry that fact rather than a false "healthy".
+  const freshnessTruncation = capTruncationSubjectIndex(schedDiag, "freshness-faults");
+  // secretsRestorability: a pure, derivable standing posture, computed from the roster already fetched by
+  // calling the restore path's own leaf (unwiredSecretSinks) on the same bound-secret list a restore would
+  // build. Secrets Store bindings are read-only at runtime, so a secret whose operator never wired a write path
+  // cannot be restored in-account; without this section that is discovered during the disaster, on the restore
+  // receipt, when it is far too late to do anything about it. Because it is derived rather than recorded, it
+  // needs no write, cannot be dropped by an unavailable DO, and cannot drift from the refusal it describes.
+  // Counts only: a secret's name is a customer label and never rides.
+  const boundSecretSinks = downpipes.flatMap((d) => {
+    const src = d?.config?.source;
+    if (src?.type !== "secrets" || !Array.isArray(src.secrets)) return [];
+    // The restore path builds each secret's sink with a bindingVar and NO `put` (restore-sinks.ts), which is
+    // exactly what makes it unrestorable; reconstructing the list the same way keeps this honest by construction.
+    return src.secrets.map(() => ({ name: "", bindingVar: "SECRETS" }));
+  });
+  const secretsRestorability = unwiredSecretSinks(boundSecretSinks);
+  return { refusalIndex, selfIdentityDegradedFleet, freshnessIndex, freshnessTruncation, secretsRestorability };
 }

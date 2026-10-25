@@ -292,7 +292,7 @@ async function main(): Promise<void> {
 
     const call = async (email: string): Promise<Response> => handleAdmin(new Request("https://engine.example/admin/keys/install", {
       method: "POST",
-      headers: { "cf-access-jwt-assertion": await tokenFor(email), "content-type": "application/json", origin: "https://engine.example" },
+      headers: { "cf-access-jwt-assertion": await tokenFor(email), "content-type": "application/json" },
       body: JSON.stringify({ token: TOKEN, signerPrivate: SIGNER_PRIVATE, breakGlassPublic: BREAK_GLASS_PUBLIC, ...CFG }),
     }), env);
 

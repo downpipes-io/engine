@@ -96,7 +96,7 @@ unset, unparseable or not https, the check is not raised. To clear it, serve the
 domain on a zone you control and set `CONSOLE_ORIGIN` to it, then set Minimum TLS 1.2 on that zone (free)
 and, optionally, the Modern cipher suite preset (it needs Cloudflare Advanced Certificate Manager).
 
-## Step 2: the admin token (ONE-TIME bootstrap, then dispose of it)
+## Step 2: the admin token (claims the first Owner; retire it when a better path exists)
 
 Set an admin token. This is the lower-assurance break-glass path: anyone with the engine URL and the
 token can administer the engine, and the token caller is not attributable in the audit log.
@@ -110,11 +110,16 @@ Use a long random value and store it in your secrets manager.
 `npm run deploy` offers this step when neither `ADMIN_TOKEN` nor `BOOTSTRAP_OWNER_EMAIL` is set. It
 either generates the token and prints it once, or sets `BOOTSTRAP_OWNER_EMAIL`. From the console sign-in
 page, the engine then emails a first-Owner set-up link to that address.
+Pressing the button again while that link is valid sends the same link, and the engine mails it at most
+once every 60 seconds.
 
-The admin token is for a ONE-TIME bootstrap of the FIRST Owner. Use it once to sign in and either register
-your Owner passkey in the console or claim the first Owner via Cloudflare Access (Step 6). The first Owner is
-claimed once and once only: the engine latches a `bootstrapConsumed` flag the moment the first Owner exists,
-so the token can never mint a second Owner afterwards, even if the role table is later emptied.
+The admin token claims the FIRST Owner. Use it to sign in and either register your Owner passkey in the
+console or claim the first Owner via Cloudflare Access (Step 6). The first Owner is claimed once and once
+only: the engine latches a `bootstrapConsumed` flag the moment the first Owner exists, so the token can
+never mint a second Owner afterwards, even if the role table is later emptied. The latch ends only that
+claim. The token itself does not expire and has no use count. It stays valid until an Owner retires it, you
+set `ADMIN_TOKEN_DISABLED`, or you delete or rotate the secret. It skips passkey step-up. It turns dual
+control off without a second Owner, and it cannot approve a dual-control action.
 
 When you complete your Owner passkey enrolment, the console shows you a set of RECOVERY CODES, ONCE. SAVE THEM
 OFFLINE (a password manager, or printed and locked away). These are your ongoing admin break-glass, exactly
@@ -122,8 +127,8 @@ like the recovery codes any app gives you: if you ever lose your passkey, you us
 shown only once and the engine stores only salted hashes of them, never the codes themselves, so there is no
 way to see them again later (you regenerate a fresh set instead, which invalidates the old one).
 
-Once your passkey works AND your recovery codes are saved, DISPOSE OF THE BOOTSTRAP TOKEN. Leaving it live
-means anyone who ever sees the string can take admin. You have two equivalent ways to dispose of it:
+Once your passkey works AND your recovery codes are saved, RETIRE THE ADMIN TOKEN. Leaving it live
+means anyone who ever sees the string can take admin. You have two equivalent ways to retire it:
 
 - RETIRE it in-app: Security Centre > Retire break-glass token. This is immediate and needs NO redeploy: the
   engine stops honouring the `ADMIN_TOKEN` bearer the instant you retire it (it cannot delete its own Worker
@@ -532,8 +537,8 @@ exports, and record the final audit export (with its head hash) as the closing e
 - Serve the console on a custom domain in production; a `workers.dev` hostname is for a first run.
 - The break-glass private key is yours alone: store it offline, never paste it anywhere, and retain old
   keys after a rotation (archives sealed before a rotation need the old key).
-- Treat `ADMIN_TOKEN` as a ONE-TIME bootstrap credential: once your Owner passkey or Cloudflare Access
-  works AND you have saved your recovery codes offline, retire it in-app (Security Centre > Retire break-glass
+- Treat `ADMIN_TOKEN` as a standing break-glass credential that stays valid until you retire it: once your
+  Owner passkey or Cloudflare Access works AND you have saved your recovery codes offline, retire it in-app (Security Centre > Retire break-glass
   token, immediate, no redeploy) or delete the secret. The engine refuses to retire it until a way back in
   exists (recovery codes for an Owner, or a second Owner). Leaving it live lets anyone with the string take
   admin. Prefer Cloudflare Access or a passkey for attributable administration.

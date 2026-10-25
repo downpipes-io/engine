@@ -23,7 +23,7 @@ import { SECRETS_WIRING_RESERVE_PER_SECRET } from "../src/sources/secrets-wiring
 import { readSourceFaultLedger, resetSourceFaultLedger, type SourceFaultLedger } from "../src/sources/source-fault-ledger.ts";
 import type { SourceRecord } from "../src/sources/types.ts";
 import { verdictReached } from "./lib/verdict-guard.ts";
-import { healthStub, makeEnv, makeSchedulerStub } from "./validate-worker-helpers.ts";
+import { makeEnv, makeSchedulerStub } from "./validate-worker-helpers.ts";
 
 let failures = 0;
 function ok(label: string, cond: boolean): void {
@@ -103,7 +103,13 @@ const VALUES: Record<string, string> = { SRC_SEC_api_key: "sk-live-never-in-a-re
 // scopeStub answers the scheduler DO's discovery-config read. undefined = no stored config (an env-only
 // token); "throw" = the DO cannot be read.
 function scopeStub(cfg?: { accountsSeen: Array<{ id: string }>; selected: string[] } | "throw") {
-  if (cfg === undefined) return healthStub();
+  // With no stored config the engine's own account is ACCT: an env-only token reaches only that account.
+  if (cfg === undefined) {
+    return makeSchedulerStub(async (url) => {
+      if (url.endsWith("/sources/engine-account-verified")) return new Response(JSON.stringify({ accountId: ACCT, verifiedAt: 1, via: "attach" }), { status: 200 });
+      return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "content-type": "application/json" } });
+    });
+  }
   return makeSchedulerStub(async (url) => {
     if (cfg === "throw") throw new Error("DO unreachable");
     if (url.endsWith("/sources/discovery-config")) return new Response(JSON.stringify({ config: { token: "do-token", ...cfg } }), { status: 200 });
@@ -227,6 +233,17 @@ async function accountScopeCases(): Promise<void> {
   try {
     const recs = await crawl(secretsState(ACCT), "discovery-token", secretEnv({}, { accountsSeen: [{ id: ACCT }, { id: "someone-else" }], selected: [ACCT] }));
     ok("negative control: with ACCT selected the same crawl captures", recs.every((r) => r.descriptor?.secretsWiring === "captured"));
+  } finally {
+    cf.restore();
+  }
+  // An env-only token (no stored config) reaches only the engine's own account. A downpipe that names another
+  // account is refused; the same crawl naming the engine's own account captures (negative control above).
+  resetSourceFaultLedger();
+  cf = fakeCloudflare({ [ACCT]: OWNER, "foreign-acct": OWNER }, ["foreign-acct"]);
+  try {
+    const recs = await crawl(secretsState("foreign-acct"), "discovery-token");
+    ok("env-only token, foreign accountId: wiring unknown and no request reaches that account", recs.every((r) => r.descriptor?.secretsWiring === "unknown") && !cf.paths.some((p) => p.startsWith("/accounts/foreign-acct/")));
+    ok("env-only token, foreign accountId: recorded as secrets:wiring/account-scope", (readSourceFaultLedger().incompleteIds._refused ?? []).includes("secrets:wiring/account-scope"));
   } finally {
     cf.restore();
   }

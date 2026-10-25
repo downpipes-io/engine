@@ -58,7 +58,7 @@ a holder of raw Durable Object storage could rewrite the whole chain.
 
 ### Events recorded
 
-The closed action set is `AUDIT_ACTIONS` (`src/admin/audit-types.ts:38`), 106 members, ending
+The closed action set is `AUDIT_ACTIONS` (`src/admin/audit-types.ts:38`), 108 members, ending
 at `] as const` (`src/admin/audit-types.ts:450`). `AuditAction` (`src/admin/audit-types.ts:452`)
 is derived from it, so no action outside this table can be written. This table lists every member
 of the constant.
@@ -117,7 +117,7 @@ of the constant.
 | `owner-action-execute` | An approved owner operation ran. |
 | `owner-action-reject` | A gated owner operation rejected or vetoed. |
 | `change-recorded` | A change reference recorded for a CAB-worthy change (opt-in Require Change Number). |
-| `bootstrap-consumed` | The one-time first-Owner bootstrap consumed (latched). |
+| `bootstrap-consumed` | The first-Owner claim consumed (latched). |
 | `break-glass-token-retired` | An Owner retired the ADMIN_TOKEN bearer in-app. |
 | `discovery-token-set` | The read-only account-discovery token set. |
 | `discovery-token-cleared` | The account-discovery token cleared. |
@@ -145,6 +145,8 @@ of the constant.
 | `support-bundle-generated` | An operator downloaded or generated the support bundle through the admin API; one row per bundle served, with the route and whether the bundle was sealed to the vendor key. From engine 0.3.7. |
 | `passkey-credential-revoke` | A WebAuthn credential removed. |
 | `passkey-invite-enrol` | A passkey enrolled through a registration invite; the actor is the enrolling member. |
+| `passkey-recovery-enrol` | A passkey enrolled from a session that a recovery code signed in; the actor is the enrolling member. An enrolment from an ordinary passkey session writes no such row. |
+| `passkey-recovery-enrol-notice` | Whether the other Owners were emailed about that enrolment: a state (sent, partial, skipped, failed), a closed reason and counts, never an address. An enrolment from an ordinary passkey session writes no such row. |
 | `signin-factor-revoke` | Every sign-in factor of one member removed in one act. |
 | `session-terminate` | Sessions terminated: a member's own other sessions, one member's sessions, or all sessions. |
 | `retention-prune` | An applied retention prune deleted superseded runs; the cron (engine actor) or the admin route (human actor). |
@@ -243,7 +245,7 @@ carry a count.
   connection and actor), with the count in `attempts`. It also writes a row once 25 attempts are
   pending, if the budget allows. The row identity holds no source address.
 - **Failed and throttled recovery-code sign-ins** (`recovery-code-used`, outcome `failed` or
-  `denied`): `appendRecoveryFailureAudit` (`src/sched/scheduler-do-recovery.ts:493`) writes one row
+  `denied`): `appendRecoveryFailureAudit` (`src/sched/scheduler-do-recovery.ts:496`) writes one row
   per minute per source and outcome. An IPv6 source counts by its /64
   (`recoveryFoldSource` (`src/sched/audit-fold.ts:423`)). The row carries the `authn-attempt` target
   with ceremony `recovery` and the count in `attempts`. A throttled attempt writes no row of its own.
@@ -284,7 +286,7 @@ minute (the per-IP sign-in limit), a Viewer wrote one row per refused request, a
 any number of IPs or accounts, writes at most 32 rows an hour: 20 sign-in rows, 9 refusal rows and
 three hourly overflow rows (one per recovery outcome, one `denied-overflow`). At that rate 10,000
 rows take 13 days, and `auditNearCap` shows at 9,000. Two rows a minute per writer still gives a real person
-who mistypes a recovery code and then meets the per-email limit a row for each outcome.
+who mistypes a recovery code and then meets the per-email-and-source limit a row for each outcome.
 
 The folds are kept in Durable Object storage under `AUDIT_FOLD_STORAGE_PREFIX`
 (`src/sched/audit-fold.ts:81`). Each writer saves the folds before it appends the rows they hand out,
@@ -350,9 +352,9 @@ under `src/` calls `console.log`, `console.error`, `console.warn`, `console.info
 
 ### Call sites
 
-Measured: 281 `log(` call sites across 60 files (`src/admin/config-rewrap.ts`, `src/admin/drill.ts`, `src/admin/key-vintages.ts`, `src/admin/restore-apply.ts`, `src/admin/restore-plan-types.ts`, `src/admin/restore-plan.ts`, `src/admin/restore-receipt.ts`, `src/admin/restore-sinks.ts`, `src/admin/restore-verify.ts`, `src/admin/restore.ts`, `src/admin/router-audit.ts`, `src/admin/router-auth-flow.ts`, `src/admin/router-core.ts`, `src/admin/router-custody.ts`, `src/admin/router-identity.ts`, `src/admin/router-idp-web.ts`, `src/admin/router-keys.ts`, `src/admin/router-notify.ts`, `src/admin/router-posture.ts`, `src/admin/router-restore.ts`, `src/admin/router-runlog.ts`, `src/admin/router-session.ts`, `src/admin/router-sources.ts`, `src/admin/router-updates-shared.ts`, `src/admin/scim.ts`, `src/admin/update-support.ts`, `src/admin/updates.ts`, `src/attest/verify.ts`, `src/cron/alert-passes.ts`, `src/cron/beacon-emit.ts`, `src/cron/control-plane-pass.ts`, `src/cron/discovery-pass.ts`, `src/cron/drive.ts`, `src/cron/history-retention-pass.ts`, `src/cron/notify-passes.ts`, `src/cron/otlp-push-pass.ts`, `src/cron/posture-pass.ts`, `src/cron/reconcile-pass.ts`, `src/cron/restore-test-pass.ts`, `src/cron/retention-pass.ts`, `src/cron/runlog-index-advance.ts`, `src/cron/seal-loop-pass.ts`, `src/cron/siem-push-pass.ts`, `src/email.ts`, `src/format/keyless.ts`, `src/index.ts`, `src/notify-routing.ts`, `src/sched/scheduler-do-config-version.ts`, `src/sched/scheduler-do-expiry.ts`, `src/sched/scheduler-do-idp.ts`, `src/sched/scheduler-do-passkey.ts`, `src/sched/scheduler-do-recovery.ts`, `src/sched/scheduler-do-scheduling.ts`, `src/sched/scheduler-do.ts`, `src/seal/replicate-runlog.ts`, `src/seal/replicate.ts`, `src/seal/runseal-do.ts`, `src/seal/runstate.ts`, `src/seal/verify-at-seal.ts`, `src/sources/cloudflare-config.ts`), reproducible with:
+Measured: 286 `log(` call sites across 60 files (`src/admin/config-rewrap.ts`, `src/admin/drill.ts`, `src/admin/key-vintages.ts`, `src/admin/restore-apply.ts`, `src/admin/restore-plan-types.ts`, `src/admin/restore-plan.ts`, `src/admin/restore-receipt.ts`, `src/admin/restore-sinks.ts`, `src/admin/restore-verify.ts`, `src/admin/restore.ts`, `src/admin/router-audit.ts`, `src/admin/router-auth-flow.ts`, `src/admin/router-core.ts`, `src/admin/router-custody.ts`, `src/admin/router-identity.ts`, `src/admin/router-idp-web.ts`, `src/admin/router-keys.ts`, `src/admin/router-notify.ts`, `src/admin/router-posture.ts`, `src/admin/router-restore.ts`, `src/admin/router-runlog.ts`, `src/admin/router-session.ts`, `src/admin/router-sources.ts`, `src/admin/router-updates-shared.ts`, `src/admin/scim.ts`, `src/admin/update-support.ts`, `src/admin/updates.ts`, `src/attest/verify.ts`, `src/cron/alert-passes.ts`, `src/cron/beacon-emit.ts`, `src/cron/control-plane-pass.ts`, `src/cron/discovery-pass.ts`, `src/cron/drive.ts`, `src/cron/history-retention-pass.ts`, `src/cron/notify-passes.ts`, `src/cron/otlp-push-pass.ts`, `src/cron/posture-pass.ts`, `src/cron/reconcile-pass.ts`, `src/cron/restore-test-pass.ts`, `src/cron/retention-pass.ts`, `src/cron/runlog-index-advance.ts`, `src/cron/seal-loop-pass.ts`, `src/cron/siem-push-pass.ts`, `src/email.ts`, `src/format/keyless.ts`, `src/index.ts`, `src/notify-routing.ts`, `src/sched/scheduler-do-config-version.ts`, `src/sched/scheduler-do-expiry.ts`, `src/sched/scheduler-do-idp.ts`, `src/sched/scheduler-do-passkey.ts`, `src/sched/scheduler-do-recovery.ts`, `src/sched/scheduler-do-scheduling.ts`, `src/sched/scheduler-do.ts`, `src/seal/replicate-runlog.ts`, `src/seal/replicate.ts`, `src/seal/runseal-do.ts`, `src/seal/runstate.ts`, `src/seal/verify-at-seal.ts`, `src/sources/cloudflare-config.ts`), reproducible with:
 `grep -rn 'log("error"\|log("warn"\|log("info"\|log("debug"' src --include='*.ts' | grep -v '\.test\.ts' | grep -v '^src/log.ts' | wc -l`.
-The figure is a snapshot of the tree on the date shown.
+The figure counts the call sites in the release tree this document ships with.
 
 ### What the lines carry
 
@@ -383,8 +385,8 @@ call site, and the redaction discipline lives there.
 - Cron pass lines name the pass and, when an engine-internal call raised the fault (a Durable
   Object round trip, the wrap-key check, a delivery tail), the message of the exception that
   call raised; for example `siem push pass: configuration unreadable`
-  (`src/cron/siem-push-pass.ts:440`). The delivery senders return closed codes such as
-  `PUSH_PASS_FAIL_CODES` (`src/cron/siem-push-pass.ts:100`), never a response body, an
+  (`src/cron/siem-push-pass.ts:458`). The delivery senders return closed codes such as
+  `PUSH_PASS_FAIL_CODES` (`src/cron/siem-push-pass.ts:104`), never a response body, an
   endpoint or an auth header value.
 - Key install and source attach lines carry secret and binding names; never a value.
 
@@ -444,13 +446,13 @@ same Logpush job as Layer 2. Access is Cloudflare account IAM.
 ### What it is
 
 The engine's own outbound delivery of the Layer 1 events to an operator-configured service.
-`runSiemPushPass` (`src/cron/drive.ts:284`) runs on every cron tick. The pass
-(`runSiemPushPass` (`src/cron/siem-push-pass.ts:423`)) reads the events after the last-pushed
-cursor through `/audit/export` with `SIEM_PUSH_BATCH_CAP` (`src/cron/siem-push-pass.ts:466`),
+`runSiemPushPass` (`src/cron/drive.ts:293`) runs on every cron tick. The pass
+(`runSiemPushPass` (`src/cron/siem-push-pass.ts:441`)) reads the events after the last-pushed
+cursor through `/audit/export` with `SIEM_PUSH_BATCH_CAP` (`src/cron/siem-push-pass.ts:484`),
 500 events per tick (`SIEM_PUSH_BATCH_CAP` (`src/cron/siem-push-shape.ts:36`)), shapes them
 in one of `PUSH_FORMATS` (`src/sched/scheduler-do-limits.ts:276`) (`raw-json`, `ndjson`,
 `json-array`, `splunk-hec`, `datadog`, `cef`, `leef`, `gelf`), and dispatches on the sink kind
-in `deliverResolvedPush` (`src/cron/siem-push-pass.ts:324`).
+in `deliverResolvedPush` (`src/cron/siem-push-pass.ts:341`).
 
 ### Sink kinds
 
@@ -459,22 +461,22 @@ it writes, and the screen that refuses a private or metadata address:
 
 | Sink | Where the records go | Dispatch | Sender | Egress screen |
 |------|----------------------|----------|--------|---------------|
-| `http` | An HTTPS POST to the configured endpoint (a Splunk HEC intake, a Datadog intake, an HTTP collector); GELF sends one event per POST | `deliverSiemPush` (`src/cron/siem-push-pass.ts:348`), or with the token spliced into the URL (`deliverSiemPush` (`src/cron/siem-push-pass.ts:345`)) | `deliverSiemPush` (`src/notify/siem-push-sender.ts:158`) | `screenSinkHost` (`src/notify/siem-push-sender.ts:169`) and `screenResolvedIfHostname` (`src/notify/siem-push-sender.ts:174`) |
-| `s3` | One object per batch in the configured bucket, PutObject only, key `<prefix>/<timestamp>-<afterSeq>-<nextAfterSeq>.<ext>` | `"s3"` (`src/cron/siem-push-pass.ts:325`) to `putSiemBatchToS3` (`src/cron/siem-push-pass.ts:263`), which calls `dest.put` (`src/cron/siem-push-pass.ts:276`) | `S3Destination` (`src/dest/s3.ts:50`) | `isInternalSinkHost` (`src/dest/s3.ts:270`) on the endpoint, then `screenResolvedIfHostname` (`src/dest/s3.ts:351`) on what its name resolves to |
-| `syslog-tls` | RFC 5424 records, octet-framed, over one implicit-TLS socket per batch, in `SYSLOG_TLS_FORMATS` (`src/sched/scheduler-do-limits.ts:305`) (`cef`, `leef`) | `"syslog-tls"` (`src/cron/siem-push-pass.ts:329`) to `deliverSiemSyslog` (`src/cron/siem-push-pass.ts:331`) | `deliverSiemSyslog` (`src/notify/siem-syslog-sender.ts:226`) | `canonicaliseBareHost` (`src/notify/siem-syslog-sender.ts:241`) with `isInternalSinkHost`, then `screenResolvedSinkHost` (`src/notify/siem-syslog-sender.ts:252`) |
+| `http` | An HTTPS POST to the configured endpoint (a Splunk HEC intake, a Datadog intake, an HTTP collector); GELF sends one event per POST | `deliverSiemPush` (`src/cron/siem-push-pass.ts:366`), or with the token spliced into the URL (`deliverSiemPush` (`src/cron/siem-push-pass.ts:363`)) | `deliverSiemPush` (`src/notify/siem-push-sender.ts:158`) | `screenSinkHost` (`src/notify/siem-push-sender.ts:169`) and `screenResolvedIfHostname` (`src/notify/siem-push-sender.ts:174`) |
+| `s3` | One object per batch in the configured bucket, PutObject only, key `<prefix>/<timestamp>-<afterSeq>-<nextAfterSeq>.<ext>` | `"s3"` (`src/cron/siem-push-pass.ts:343`) to `putSiemBatchToS3` (`src/cron/siem-push-pass.ts:280`), which calls `dest.put` (`src/cron/siem-push-pass.ts:293`) | `S3Destination` (`src/dest/s3.ts:50`) | `isInternalSinkHost` (`src/dest/s3.ts:270`) on the endpoint, then `screenResolvedIfHostname` (`src/dest/s3.ts:351`) on what its name resolves to |
+| `syslog-tls` | RFC 5424 records, octet-framed, over one implicit-TLS socket per batch, in `SYSLOG_TLS_FORMATS` (`src/sched/scheduler-do-limits.ts:305`) (`cef`, `leef`) | `"syslog-tls"` (`src/cron/siem-push-pass.ts:347`) to `deliverSiemSyslog` (`src/cron/siem-push-pass.ts:349`) | `deliverSiemSyslog` (`src/notify/siem-syslog-sender.ts:226`) | `canonicaliseBareHost` (`src/notify/siem-syslog-sender.ts:241`) with `isInternalSinkHost`, then `screenResolvedSinkHost` (`src/notify/siem-syslog-sender.ts:252`) |
 
 Redirects are never followed on any sink, and no response body is read into the trail. The
 egress containment is described in `dangerous-functionality.md` section 3 and proven by
-`test/validate-egress-host-screen.ts` and `test/validate-ssrf-resolve-screen.ts`.
+`test/validate-egress-host-screen.ts`, `test/validate-ssrf-resolve-screen.ts` and `test/validate-push-egress-allowlist.ts`.
 
 ### Off unless an Owner configures it
 
-`fetchPushConfig` (`src/cron/siem-push-pass.ts:207`) answers `return null`
-(`src/cron/siem-push-pass.ts:211`) when no destination record exists, and the pass returns
-before any read when the record is not `enabled` (`src/cron/siem-push-pass.ts:448`). Setting,
+`fetchPushConfig` (`src/cron/siem-push-pass.ts:211`) answers `return null`
+(`src/cron/siem-push-pass.ts:215`) when no destination record exists, and the pass returns
+before any read when the record is not `enabled` (`src/cron/siem-push-pass.ts:466`). Setting,
 deleting and test-sending the destination are gated on `gate(caller, "keys.ceremony")`
-(`src/admin/router-push.ts:232`), (`src/admin/router-push.ts:297`) and
-(`src/admin/router-push.ts:309`). `OWNER_RESERVED_CAPABILITIES`
+(`src/admin/router-push.ts:266`), (`src/admin/router-push.ts:340`) and
+(`src/admin/router-push.ts:352`). `OWNER_RESERVED_CAPABILITIES`
 (`src/admin/identity-rbac.ts:149`) keeps `keys.ceremony` out of every custom role, so only an
 Owner can point the audit log at an external service. Each set and clear is audited as
 `push-destination-set` or `push-destination-cleared`.
@@ -506,9 +508,9 @@ reviewer should not read them as undocumented log sinks.
 
 | Path | What it carries | On when | Where it lands | Proof |
 |------|-----------------|---------|----------------|-------|
-| OTLP metrics push | The canonical backup-health snapshot, `OtlpDownpipeMetrics` (`src/sched/scheduler-do-limits.ts:549`): downpipe id and name, enabled flag, last success time, a 0/1 success flag, recent attempt, success and failure counts, duration, size, per-destination health. No audit event, no log line. | An Owner configures a collector (`gate(caller, "keys.ceremony")` (`src/admin/router-otlp-push.ts:101`)) and the record is `enabled` (`src/cron/otlp-push-pass.ts:184`). | The configured OTLP/HTTP collector, POSTed by `deliverOtlpPush` (`src/notify/otlp-push-sender.ts:122`) after `screenSinkHost` (`src/notify/otlp-push-sender.ts:126`); outcomes kept in the Durable Object up to `OTLP_PUSH_TRAIL_CAP` (`src/sched/scheduler-do-limits.ts:532`). Called from `runOtlpPushPass` (`src/cron/drive.ts:299`). | `test/validate-otlp-push.ts` |
-| Vendor beacon | The `"downpipe-beacon-v1"` (`src/cron/beacon-emit.ts:54`) aggregate: the account tag, which is the Cloudflare account id (`CF_ACCOUNT_ID`, `src/cron/beacon-emit.ts:43`), the engine version, the Cloudflare Worker version id, the downpipe count, a healthy/stalled split, one account-wide max RUNLOG index, and the emit time. Nothing per downpipe, no name, no value. | `beaconConfigured` (`src/cron/beacon-config.ts:33`): `BEACON_URL`, `BEACON_INGEST_KEY` and `CF_ACCOUNT_ID` all set. Absent any one, `runBeaconEmitPass` (`src/cron/beacon-emit.ts:26`) returns before building a payload. | `POST` to `new URL("/beacon", base)` (`src/cron/beacon-emit.ts:69`) under `BEACON_URL`, refused unless HTTPS and not `isInternalSinkHost` (`src/cron/beacon-emit.ts:70`), and refused when `screenResolvedIfHostname` (`src/cron/beacon-emit.ts:77`) finds an internal address in what the name resolves to, with `redirect: "manual"` (`src/cron/beacon-emit.ts:85`). The vendor control plane's beacon endpoint stores the aggregate in Workers KV and rejects any per-downpipe field. Called from `runBeaconEmitPass` (`src/cron/drive.ts:256`). | `test/validate-beacon-emit.ts` |
-| Notifications | Alert emissions built from the run-history ring: downpipe ids and names, statuses, freshness, enumerated error classes. | An operator configures a channel and a rule. | The operator's own endpoint through `deliverToChannel` (`src/notify-routing.ts:666`) and the adapters under `src/notify/channels/` (email, JSM, PagerDuty, ServiceNow, Slack, Teams, webhook). | `test/validate-notify.ts` |
+| OTLP metrics push | The canonical backup-health snapshot, `OtlpDownpipeMetrics` (`src/sched/scheduler-do-limits.ts:549`): downpipe id and name, enabled flag, last success time, a 0/1 success flag, recent attempt, success and failure counts, duration, size, per-destination health. No audit event, no log line. | An Owner configures a collector (`gate(caller, "keys.ceremony")` (`src/admin/router-otlp-push.ts:108`)) and the record is `enabled` (`src/cron/otlp-push-pass.ts:200`). | The configured OTLP/HTTP collector, POSTed by `deliverOtlpPush` (`src/notify/otlp-push-sender.ts:122`) after `screenSinkHost` (`src/notify/otlp-push-sender.ts:126`); outcomes kept in the Durable Object up to `OTLP_PUSH_TRAIL_CAP` (`src/sched/scheduler-do-limits.ts:532`). Called from `runOtlpPushPass` (`src/cron/drive.ts:308`). | `test/validate-otlp-push.ts` |
+| Vendor beacon | The `"downpipe-beacon-v1"` (`src/cron/beacon-emit.ts:54`) aggregate: the account tag, which is the Cloudflare account id (`CF_ACCOUNT_ID`, `src/cron/beacon-emit.ts:43`), the engine version, the Cloudflare Worker version id, the downpipe count, a healthy/stalled split, one account-wide max RUNLOG index, and the emit time. Nothing per downpipe, no name, no value. | `beaconConfigured` (`src/cron/beacon-config.ts:33`): `BEACON_URL`, `BEACON_INGEST_KEY` and `CF_ACCOUNT_ID` all set. Absent any one, `runBeaconEmitPass` (`src/cron/beacon-emit.ts:26`) returns before building a payload. | `POST` to `new URL("/beacon", base)` (`src/cron/beacon-emit.ts:69`) under `BEACON_URL`, refused unless HTTPS and not `isInternalSinkHost` (`src/cron/beacon-emit.ts:70`), and refused when `screenResolvedIfHostname` (`src/cron/beacon-emit.ts:77`) finds an internal address in what the name resolves to, with `redirect: "manual"` (`src/cron/beacon-emit.ts:85`). The vendor control plane's beacon endpoint stores the aggregate in Workers KV and rejects any per-downpipe field. Called from `runBeaconEmitPass` (`src/cron/drive.ts:265`). | `test/validate-beacon-emit.ts` |
+| Notifications | Alert emissions built from the run-history ring: downpipe ids and names, statuses, freshness, enumerated error classes. | An operator configures a channel and a rule. | The operator's own endpoint through `deliverToChannel` (`src/notify-routing.ts:667`) and the adapters under `src/notify/channels/` (email, JSM, PagerDuty, ServiceNow, Slack, Teams, webhook). | `test/validate-notify.ts` |
 | Support bundle | The signed, redaction-safe diagnostics bundle: version and provenance, presence-only status, the preflight report, coarse run rows, delivery outcomes, the licence tier. | The operator downloads it (`"GET /support/bundle"` (`src/admin/router-status.ts:302`)) or generates it from the console (`"POST /support/bundle"` (`src/admin/router-status.ts:326`)), both gated on `posture.read`; or vendor support pulls it with an Owner-minted `diagnostics` credential. | The ticket the operator attaches it to, or the vendor's pull. The console's client diagnostics ring is folded in request-scoped by `projectClientDiagnostics` (`src/admin/client-diag-receive.ts:463`) and never written to the Durable Object. | `test/validate-client-diag.ts` |
 
 ---
@@ -521,7 +523,7 @@ The console has its own emitter, `log` (`console/src/log.ts:55`), with the same 
 Layer 2 and `SERVICE` (`console/src/log.ts:42`) set to `console`. Errors go to
 `console.error` (`console/src/log.ts:76`) and everything else to `console.log`
 (`console/src/log.ts:78`). The Worker has one call site: the unhandled-request catch writes
-`"request.unhandled"` (`console/src/worker.ts:494`) with the method, the path, status 500 and
+`"request.unhandled"` (`console/src/worker.ts:500`) with the method, the path, status 500 and
 `error_code` `unhandled`, never the exception message. The lines land in Workers Logs through
 `[observability]` (`console/wrangler.toml:23`) with `enabled = true`
 (`console/wrangler.toml:24`); retention and access are as Layer 2.
@@ -553,14 +555,14 @@ class in `sessionStorage` across the reload that ends a console update, and dele
 
 ### Sinks that discard or are tour-only
 
-- CSP violation reports go to the same-origin `"/csp-report"` (`console/src/worker.ts:368`)
+- CSP violation reports go to the same-origin `"/csp-report"` (`console/src/worker.ts:374`)
   route, which answers 204 and stores nothing.
-- The public product tour and training deploys bind `TOUR_ANALYTICS` (`console/src/worker.ts:52`), a
+- The public product tour and training deploys bind `TOUR_ANALYTICS` (`console/src/worker.ts:53`), a
   Workers Analytics Engine dataset, only in `wrangler.public-demo.toml`
   (`TOUR_ANALYTICS` (`console/wrangler.public-demo.toml:59`)) and `wrangler.training.toml`
   (`TOUR_ANALYTICS` (`console/wrangler.training.toml:39`)). The `"/tour/event"`
-  (`console/src/worker.ts:378`) route records closed-name funnel events through
-  `writeDataPoint` (`console/src/worker.ts:401`). The genuine console has no such binding and
+  (`console/src/worker.ts:384`) route records closed-name funnel events through
+  `writeDataPoint` (`console/src/worker.ts:407`). The genuine console has no such binding and
   the route answers 204 without writing. This is funnel telemetry, not a log.
 
 ---
@@ -579,7 +581,7 @@ vendor service. It is not a log producer in the sense of this inventory.
 | Layer | Format | Storage | Retention | Access control | Integrity | Leaves the account |
 |-------|--------|---------|-----------|----------------|-----------|--------------------|
 | Audit log (Layer 1) | JSON, hash-chained | Scheduler Durable Object, `audit:` prefix | 10,000 entries, oldest rolled over and counted; no TTL | `audit.read`, held by every built-in role; Durable Object-only writes | SHA-384 chain; head hash rides every export | Through the mirror line (with a Logpush job), the pull feed (with a credential) and the push destination (Layer 4) |
-| Operational stream (Layer 2) | Single-line JSON from `src/log.ts`, 281 call sites / 60 files | Cloudflare Workers Logs | Account Workers Logs retention; the Logpush sink's beyond that | Cloudflare account IAM | None after collection | Only with a Logpush job |
+| Operational stream (Layer 2) | Single-line JSON from `src/log.ts`, 286 call sites / 60 files | Cloudflare Workers Logs | Account Workers Logs retention; the Logpush sink's beyond that | Cloudflare account IAM | None after collection | Only with a Logpush job |
 | Platform request logs (Layer 3) | Cloudflare invocation log | Cloudflare Workers Logs | Account Workers Logs retention | Cloudflare account IAM | None | Only with a Logpush job |
 | Push destination (Layer 4) | The Layer 1 events in one of eight formats | The operator's `http`, `s3` or `syslog-tls` sink | The sink's | Owner-only to configure; the sink's to read | `seq` and `hash` on every event | Yes, when an Owner configures it |
 | Console Worker stream | Single-line JSON from `console/src/log.ts` | Cloudflare Workers Logs | Account Workers Logs retention | Cloudflare account IAM | None after collection | Only with a Logpush job |

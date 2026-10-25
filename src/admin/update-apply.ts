@@ -22,6 +22,7 @@ import type { ArtefactMeta, DeployDriver, GuardMessages, HealthGate, StepLog } f
 // module so the apply/rollback/ramp orchestration files all share them without importing each other. They are
 // re-exported below so this module's public surface is unchanged. See update-types.ts.
 import { decideKeep, msg, optional, readBaseline, verifyAndGuard } from "./update-types.ts";
+import { deployRollbackTarget, NOT_CHECKED_TEXT, type RollbackIdentity } from "./update-rollback-deploy.ts";
 import { compareSemver, isEngineCompatible } from "./updates.ts";
 
 export { decideKeep };
@@ -134,6 +135,9 @@ export interface PromoteResult {
   // promotion. Present whenever the gate ran (warn or enforce); absent on off mode, dry-runs and
   // refusals that never reached the upload.
   readback?: ReadbackResult;
+  // uploadedSha384 is the SHA-384 of the bytes this promote uploaded, recorded against the new version id so a
+  // later rollback to it can check the identity of the code it fetches back.
+  uploadedSha384?: string;
 }
 
 // PROMOTE_GUARD_MESSAGES is the atomic-apply operator wording for the shared guard steps. The strings are
@@ -262,7 +266,7 @@ async function uploadAndPromote(
     return base({ outcome: "refused", fromVersion, toVersion, canaryBaseline, ...(readback !== undefined ? { readback } : {}), reason: `the new version was uploaded but promotion failed; your engine is unchanged (still on the prior version): ${msg(e)}` });
   }
   // Promoted but NOT yet verified, phase 2 (on the new version) must canary-gate it.
-  return base({ outcome: "promoted", fromVersion, toVersion, canaryBaseline, ...(carry.readFailed ? { canaryBaselineReadFailed: true as const } : {}), ...(readback !== undefined ? { readback } : {}) });
+  return base({ outcome: "promoted", fromVersion, toVersion, canaryBaseline, uploadedSha384: hexEncode(await sha384(input.artefact)), ...(carry.readFailed ? { canaryBaselineReadFailed: true as const } : {}), ...(readback !== undefined ? { readback } : {}) });
 }
 
 // readBackUploaded fetches the just-uploaded version's module bytes back from the platform and hashes
@@ -293,6 +297,8 @@ export interface SettleArgs {
   toVersion: string;
   recommendedVersion: string;
   canaryBaseline?: CanaryLiveness;
+  // fromDigest is the SHA-384 the engine recorded for fromVersion, when it has one (see update-rollback-deploy.ts).
+  fromDigest?: string;
 }
 
 export interface SettleResult {
@@ -312,6 +318,11 @@ export interface SettleResult {
   // confirmationPending: see UpdateApplyResult above; set true only on "applied" when the keep was decided
   // by the self-check (verdict not alive), never when the canary itself sang.
   confirmationPending?: boolean;
+  // Set when the auto-rollback re-uploaded the prior code because a secret changed since it was live: the
+  // identity check used and the digest of the code now live (recorded against fromVersion, which then names the
+  // new version id that is live).
+  rollbackIdentity?: RollbackIdentity;
+  liveSha384?: string;
 }
 
 // settleAfterPromote is PHASE 2, it MUST run on the NEW (now-live) version, so the canary it flies
@@ -373,15 +384,16 @@ export async function settleAfterPromote(driver: DeployDriver, gate: HealthGate,
   // ROLLBACK to the recorded prior version. If even the rollback fails, that is the loudest signal, but
   // DATA and RECOVERY are still safe (archives immutable; restore out-of-band), so say so.
   try {
-    await driver.deployVersion(fromVersion);
-    log("rollback", true, `rolled back to ${fromVersion}`);
-    return base({ outcome: "rolled-back", reason: `the update to ${rec} did not pass the canary (${decision.reason}); your engine was automatically rolled back to the prior version. Nothing was lost and no backup or restore was affected.` });
+    const d = await deployRollbackTarget(driver, fromVersion, args.fromDigest, log);
+    log("rollback", true, `rolled back to ${d.liveVersion}`);
+    const via = d.usedFallback ? ` A secret had changed since that version was live, so its code was uploaded as new version ${d.liveVersion} that keeps the current secrets. ${d.identity === "not-checked" ? NOT_CHECKED_TEXT : `Identity of the prior code: ${d.identity}.`}` : "";
+    return base({ outcome: "rolled-back", fromVersion: d.liveVersion, ...(d.identity !== undefined ? { rollbackIdentity: d.identity } : {}), ...(d.liveSha384 !== undefined ? { liveSha384: d.liveSha384 } : {}), reason: `the update to ${rec} did not pass the canary (${decision.reason}); your engine was automatically rolled back to the prior version. Nothing was lost and no backup or restore was affected.${via}` });
   } catch (e) {
     log("rollback", false, msg(e));
     // This branch must not return outcome "rolled-back": the engine is on the BAD version, and the enum
     // saying it had been reverted would be a lie nothing that reads this record could catch, since only a
     // prose `reason` field would tell the truth.
-    return base({ outcome: "rollback-failed", reason: `the update to ${rec} did not pass the canary AND the automatic rollback FAILED (${msg(e)}). The engine is on the new version; re-deploy version ${fromVersion} from the Cloudflare dashboard. Your DATA and RECOVERY are unaffected: archives are immutable and restore is out-of-band (the standalone reader + your recovery kit), so backups remain safe and restorable regardless.` });
+    return base({ outcome: "rollback-failed", reason: `the update to ${rec} did not pass the canary AND the automatic rollback FAILED (${msg(e)}). The engine is on the new version; use Roll back in the console to try again. Your DATA and RECOVERY are unaffected: archives are immutable and restore is out-of-band (the standalone reader + your recovery kit), so backups remain safe and restorable regardless.` });
   }
 }
 

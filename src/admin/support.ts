@@ -2,7 +2,6 @@ import { b64urlEncode, utf8 } from "../crypto/bytes.ts";
 import { recipientFingerprint, sealToRecipients } from "../crypto/capsule.ts";
 import { aesGcmSeal, hkdfSha384 } from "../crypto/primitives.ts";
 import { hybridSign } from "../crypto/sign.ts";
-import { unwiredSecretSinks } from "../dest/restore-sink.ts";
 import type { Env } from "../env.d.ts";
 import { canonicalJSON } from "../format/canonjson.ts";
 import { ENGINE_VERSION } from "../format/version.ts";
@@ -23,13 +22,14 @@ import { fetchExportState, fetchRecoveryStatus } from "./support-sections-recove
 import { flushAdminAuthMethodUsage } from "./auth-method-usage.ts";
 import { fetchAuthPosture, fetchAuthSignals, fetchIdpCertHealth, fetchLockoutPosture, fetchSsoFailures, fetchSsoFailuresByConn, fetchSsoFailuresByKind } from "./support-sections-auth.ts";
 import { buildKeysHealth, danglingDestinationRef, fetchBeaconState, fetchConfigIntegrity, fetchDestinationIdSet, fetchDestResolution, fetchDiscoveryHealth, fetchExpiryRegistry, fetchLicenceActivationRefusals, fetchLicenceExpiryTracker, fetchOwnerActionQueue, fetchRosterIntegrity, fetchSourcesDetached, fetchWrapKeyHealth } from "./support-sections-config.ts";
-import { capTruncationSubjectIndex, fetchAdminCounters, fetchDestFaults, fetchDroppedWrites, fetchMetricsHealth, fetchRateLimitHealth, fetchRestoreFaults, fetchSchedDiag, fetchSealErrors, fetchSourceFaults, fetchWebauthnFaults, freshnessUncomputableIndex } from "./support-sections-diag.ts";
-import { fetchRtoEstimates, projectDownpipeRow, type SupportDownpipeRow, type SupportDownpipeState, selfIdentityDegradedCount, stateRefusalIndex } from "./support-sections-downpipes.ts";
+import { fetchAdminCounters, fetchDestFaults, fetchDroppedWrites, fetchMetricsHealth, fetchRateLimitHealth, fetchRestoreFaults, fetchSchedDiag, fetchSealErrors, fetchSourceFaults, fetchWebauthnFaults } from "./support-sections-diag.ts";
+import { deriveFleetProjections, fetchRtoEstimates, projectDownpipeRow, type SupportDownpipeState } from "./support-sections-downpipes.ts";
 import { fetchAdminRefusals, fetchAdminRouteErrors, fetchBindingAlarms, fetchCostSizing, fetchCronHealth, fetchDestBuildHealth, fetchDestProbeFaults, fetchDispatchFaults, fetchIntegrityFaults, fetchUnwrapFaults, fetchUpdateFaults } from "./support-sections-faults.ts";
 import { fetchAlertCooldowns, fetchNotifyConfig, fetchNotifyHealth, fetchNotifyHistory } from "./support-sections-notify.ts";
 import { fetchOtlpPush, fetchSiemPush } from "./support-sections-push.ts";
 import { fetchDriveBudgetYield, fetchRunHistory, fetchSchedulerSignals, fetchStatusBaseline, fetchStatusDoOpts, fetchUpdateStatus } from "./support-sections-runs.ts";
 import { fetchCanaryHealth, fetchReconcileInventory, fetchReplication, fetchRetentionState, fetchSealFaults, fetchSealFaultSpans, fetchWormPosture, sealKnobs } from "./support-sections-seal.ts";
+import { joinDestResolution } from "./support-dest-join.ts";
 import { clampNonNegInt, nowIso } from "./support-shared.ts";
 
 // The section ROSTER + the health-vector summariser + the licence allowlist projection live in the pure
@@ -406,38 +406,14 @@ export async function buildSupportBundle(env: Env, scheduler: DurableObjectStub,
   // so the roster and the gather cannot drift.
   const sectionsSummary = summariseSections(sections);
 
-  // refusalIndex: the downpipeId -> state-refusal lookup, built from the scheduler section already fetched
-  // above (no extra DO round trip); empty when that section faulted or nothing was refused.
-  // selfIdentityDegradedFleet: the fleet count of downpipes whose source config can no longer re-identify
-  // itself, so a roster rebuild after a control-plane loss cannot reconstruct them.
-  const refusalIndex = stateRefusalIndex(schedulerSignals);
-  const selfIdentityDegradedFleet = selfIdentityDegradedCount(downpipes as unknown as SupportDownpipeRow[]);
-  // freshnessIndex: the downpipes whose staleness rule can never arm, from the schedDiag section already
-  // fetched above (no extra DO round trip). A downpipe in this index reads "Fresh" on the map and the overview
-  // forever, even while its backups have stopped: the per-downpipe boolean below is what lets the bot fire the
-  // staleness-uncomputable signal rather than trusting a green tile.
-  const freshnessIndex = freshnessUncomputableIndex(schedDiag);
-  // freshnessTruncation: the other half of the same join. The fault map refuses a downpipe once full, so the
-  // index above can only ever mark the downpipes inside the cap; a downpipe past the cap is absent from the
-  // map and carries no field there, so without this its row would assert a working staleness rule while
-  // `capTruncations` says only that some row was dropped. This names which downpipe was refused, so its row can
-  // carry that fact rather than a false "healthy".
-  const freshnessTruncation = capTruncationSubjectIndex(schedDiag, "freshness-faults");
-  // secretsRestorability: a pure, derivable standing posture, computed from the roster already fetched by
-  // calling the restore path's own leaf (unwiredSecretSinks) on the same bound-secret list a restore would
-  // build. Secrets Store bindings are read-only at runtime, so a secret whose operator never wired a write path
-  // cannot be restored in-account; without this section that is discovered during the disaster, on the restore
-  // receipt, when it is far too late to do anything about it. Because it is derived rather than recorded, it
-  // needs no write, cannot be dropped by an unavailable DO, and cannot drift from the refusal it describes.
-  // Counts only: a secret's name is a customer label and never rides.
-  const boundSecretSinks = downpipes.flatMap((d) => {
-    const src = d?.config?.source;
-    if (src?.type !== "secrets" || !Array.isArray(src.secrets)) return [];
-    // The restore path builds each secret's sink with a bindingVar and NO `put` (restore-sinks.ts), which is
-    // exactly what makes it unrestorable; reconstructing the list the same way keeps this honest by construction.
-    return src.secrets.map(() => ({ name: "", bindingVar: "SECRETS" }));
+  const { refusalIndex, selfIdentityDegradedFleet, freshnessIndex, freshnessTruncation, secretsRestorability } = deriveFleetProjections(downpipes, schedulerSignals, schedDiag);
+
+  // The current resolution of each destination, joined beside the red rows that name it (replication, replica faults, spans).
+  const joined = joinDestResolution(destResolution, {
+    downpipes: downpipes.map((d) => projectDownpipeRow(d, { replication, destIdSet, sealErrors, freshnessIndex, freshnessTruncation, refusalIndex })),
+    sealFaults,
+    sealFaultSpans,
   });
-  const secretsRestorability = unwiredSecretSinks(boundSecretSinks);
 
   return {
     kind: "downpipe-support-bundle",
@@ -496,7 +472,7 @@ export async function buildSupportBundle(env: Env, scheduler: DurableObjectStub,
     // support diagnose verify-at-seal-off, Tier-0-only-forced, an over-set slice budget, or a no-resume
     // large-value posture from the bundle alone. Redaction-safe by construction.
     sealKnobs: sealKnobs(env),
-    downpipes: downpipes.map((d) => projectDownpipeRow(d, { replication, destIdSet, sealErrors, freshnessIndex, freshnessTruncation, refusalIndex })),
+    downpipes: joined.downpipes,
     runs,
     notify,
     // notifyFailures: the failure-biased view of the same 1000-entry delivery ring. `recent` is the most recent
@@ -651,9 +627,9 @@ export async function buildSupportBundle(env: Env, scheduler: DurableObjectStub,
     // cleaned, a lost-lease abandon, an orphan-root reclaim plus WORM signal, a checkpoint-unwrap strand).
     // Omitted entirely when empty (the healthy fleet's steady state). Redaction-safe: a closed kind, the
     // customer's own ids, and ints / a boolean.
-    ...(sealFaults.length > 0 ? { sealFaults } : {}),
+    ...(joined.sealFaults.length > 0 ? { sealFaults: joined.sealFaults } : {}),
     // sealFaultSpans: first and last seen per seal or replication fault reason (and per replica target), from 0.3.7.
-    ...(Object.keys(sealFaultSpans).length > 0 ? { sealFaultSpans } : {}),
+    ...(Object.keys(joined.sealFaultSpans).length > 0 ? { sealFaultSpans: joined.sealFaultSpans } : {}),
     // retention: the latest retention-prune pass: the pass/destination skip codes, and per downpipe the closed
     // outcome (applied / dry-run / no-op / deferred / error) with its deferral or error class and the committed
     // counts, plus replicationUnreadable (the coverage gate ran on no proof, so every replicated run was held)

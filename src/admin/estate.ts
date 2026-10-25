@@ -111,7 +111,7 @@ function mostRecentOk(rows: unknown[]): RunRow | undefined {
 // carry it. A fleet that reads cleanly but has zero downpipes still resolves to a real (all-zero)
 // EstateRollup, never null -- null means the rollup itself could not be computed, not "nothing to show".
 export async function computeEstateRollup(scheduler: DurableObjectStub): Promise<EstateRollup | null> {
-  try {
+  try { // nosemgrep: incident-catch-returns-empty -- a failed rollup is null and never a zero so the licence read shows no estate
     // The two reads are separately guarded, because their failures produce the SAME wrong answer by
     // two different routes and support cannot act without knowing which. A faulted ROSTER read used to be
     // coerced to an empty array (`Array.isArray(raw) ? raw : []`), so the rollup aggregated over an EMPTY fleet
@@ -181,7 +181,7 @@ export async function computeEstateRollup(scheduler: DurableObjectStub): Promise
     }
 
     return { totalProtectedBytes, accounts: accounts.size, zones: zones.size, downpipes: downpipes.length, byType, asOf };
-  } catch {
+  } catch { // site-fault-waiver: src/admin/estate.ts:computeEstateRollup:catch:1 -- a failed rollup is null and never a zero so the licence read shows no estate
     return null;
   }
 }

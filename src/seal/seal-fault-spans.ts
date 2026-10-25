@@ -13,6 +13,7 @@
 // downpipe ids (the class the pack already carries in downpipes[] and sealFaults). Counts are clamped.
 // sanitiseSealFaultSpans re-gates all of it at the pack boundary.
 
+import { stampFields } from "../format/engine-stamp.ts";
 import { CONFIG_FAULT_CODES } from "./config-fault.ts";
 import {
   FANOUT_DISCARD_CLASSES,
@@ -62,6 +63,8 @@ export interface SealFaultSpan {
   maxStrandedRuns?: number; // replica-target-fault: the most runs ever stranded on this target in one pass
   downpipeIds?: string[]; // the downpipes that posted this span, capped at SPAN_DOWNPIPES_MAX
   downpipesTruncated?: true;
+  lastEngineVersion?: string; // the engine version that last folded a fault into this span
+  clearedAt?: number; // epoch ms the destination's replication returned to ok after lastSeenAt; absent while the fault is live
 }
 export interface SealFaultSpans {
   spans: SealFaultSpan[];
@@ -78,6 +81,44 @@ function reasonOf(f: Record<string, unknown>): { reasonField: SpanReasonField; r
 
 function spanKey(kind: string, r: { reasonField: string; reason: string } | undefined, destinationId: string | undefined): string {
   return `${kind}|${r ? `${r.reasonField}=${r.reason}` : ""}|${destinationId ?? ""}`;
+}
+
+/**
+ * openSealFaultSpans lists the spans for one destination that are still open at `now`: last seen at or before
+ * `now`, with no clearedAt at or after lastSeenAt. PURE.
+ *
+ * @param prev - the stored spans.
+ * @param destinationId - the destination to look up.
+ * @param now - epoch ms.
+ * @returns the open spans for that destination.
+ */
+export function openSealFaultSpans(prev: SealFaultSpans | undefined, destinationId: string, now: number): SealFaultSpan[] {
+  return (prev?.spans ?? []).filter((s) => s.destinationId === destinationId && s.lastSeenAt <= now && !(s.clearedAt !== undefined && s.clearedAt >= s.lastSeenAt));
+}
+
+/**
+ * closeSealFaultSpans marks the open spans for one destination as cleared at `now`. A span is one fault reason
+ * on one destination ACROSS downpipes, so one downpipe replicating ok does not show the fault has stopped for
+ * the others. A span closes only when none of the downpipes it lists is still failing on that destination
+ * (`stillFailing`), and never when its downpipe list is truncated, since the unlisted ones cannot be checked.
+ * PURE: returns the new spans, or undefined when no span changed.
+ *
+ * @param prev - the stored spans.
+ * @param destinationId - the destination whose replication returned to ok.
+ * @param now - epoch ms of the ok record.
+ * @param stillFailing - the downpipes whose current replication state for this destination is not ok.
+ * @returns the updated spans, or undefined when nothing was closed.
+ */
+export function closeSealFaultSpans(prev: SealFaultSpans | undefined, destinationId: string, now: number, stillFailing: ReadonlySet<string>): SealFaultSpans | undefined {
+  if (prev === undefined) return undefined;
+  const open = new Set(openSealFaultSpans(prev, destinationId, now));
+  let changed = false;
+  const spans = prev.spans.map((s) => {
+    if (!open.has(s) || s.downpipesTruncated === true || (s.downpipeIds ?? []).some((d) => stillFailing.has(d))) return s;
+    changed = true;
+    return { ...s, clearedAt: now };
+  });
+  return changed ? { ...prev, spans } : undefined;
 }
 
 /**
@@ -104,6 +145,10 @@ export function foldSealFaultSpan(prev: SealFaultSpans | undefined, fault: SealF
   span.count = Math.min(INT_MAX, span.count + 1);
   span.firstSeenAt = Math.min(span.firstSeenAt, at);
   span.lastSeenAt = Math.max(span.lastSeenAt, at);
+  // A fault folding into a closed span is a recurrence. The span keeps firstSeenAt (the fault is the same one
+  // that came back) and loses clearedAt, so clearedAt is present only while replication has been ok since lastSeenAt.
+  if (span.clearedAt !== undefined && span.clearedAt < span.lastSeenAt) delete span.clearedAt;
+  if (fault.engineVersion !== undefined) span.lastEngineVersion = fault.engineVersion;
   if (typeof fault.strandedRuns === "number" && fault.strandedRuns > (span.maxStrandedRuns ?? 0)) span.maxStrandedRuns = fault.strandedRuns;
   if (typeof fault.downpipeId === "string") {
     const ids = span.downpipeIds ?? [];
@@ -149,6 +194,8 @@ export function sanitiseSealFaultSpans(raw: unknown): { spans: SealFaultSpan[]; 
       ...(s.maxStrandedRuns !== undefined ? { maxStrandedRuns: clampInt(s.maxStrandedRuns) } : {}),
       ...(ids.length > 0 ? { downpipeIds: ids } : {}),
       ...(s.downpipesTruncated === true ? { downpipesTruncated: true as const } : {}),
+      ...(s.clearedAt !== undefined ? { clearedAt: clampTs(s.clearedAt) } : {}),
+      ...stampFields(s.lastEngineVersion, "lastEngineVersion"),
     });
   }
   const overflow = clampInt(r.overflow);

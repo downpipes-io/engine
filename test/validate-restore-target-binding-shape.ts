@@ -173,7 +173,7 @@ async function main(): Promise<void> {
     const r = await handleAdmin(
       new Request(`https://engine.example${path}`, {
         method: path === "/admin/whoami" ? "GET" : "POST",
-        headers: { "cf-access-jwt-assertion": await signer.tokenFor(email), "content-type": "application/json", origin: "https://engine.example" },
+        headers: { "cf-access-jwt-assertion": await signer.tokenFor(email), "content-type": "application/json" },
         ...(path === "/admin/whoami" ? {} : { body: JSON.stringify(body) }),
       }),
       env(),
@@ -280,7 +280,7 @@ async function main(): Promise<void> {
     ok(`an approval request for a non-string binding is refused 4xx (${raised.status})`, raised.status >= 400 && raised.status < 500);
     if (raised.status === 200) {
       const inbox = await handleAdmin(
-        new Request("https://engine.example/admin/restore/approvals", { headers: { "cf-access-jwt-assertion": await signer.tokenFor(APPROVER), origin: "https://engine.example" } }),
+        new Request("https://engine.example/admin/restore/approvals", { headers: { "cf-access-jwt-assertion": await signer.tokenFor(APPROVER) } }),
         env(),
       );
       const recs = (await inbox.json()) as Array<{ planHash: string; redirectBinding: unknown }>;
@@ -304,7 +304,7 @@ async function main(): Promise<void> {
   {
     const listInbox = async (): Promise<Array<{ planHash: string; redirectBinding: unknown; status: string }>> => {
       const r = await handleAdmin(
-        new Request("https://engine.example/admin/restore/approvals", { headers: { "cf-access-jwt-assertion": await signer.tokenFor(APPROVER), origin: "https://engine.example" } }),
+        new Request("https://engine.example/admin/restore/approvals", { headers: { "cf-access-jwt-assertion": await signer.tokenFor(APPROVER) } }),
         env(),
       );
       return (await r.json()) as Array<{ planHash: string; redirectBinding: unknown; status: string }>;

@@ -529,6 +529,26 @@ function hasNestedSecretAccessKey(src: Record<string, unknown>, field: string): 
   return v !== null && typeof v === "object" && !Array.isArray(v) && "secretAccessKey" in (v as Record<string, unknown>);
 }
 
+// endpointOriginOnly reduces an endpoint URL to its scheme and host (and port), so a credential carried in
+// the path, the query or the fragment never reaches a reader who may not hold it. A string that does not parse
+// as a URL reduces to "". The flag is true when anything was cut.
+export function endpointOriginOnly(url: string): { url: string; cut: boolean } {
+  let origin = "";
+  try { // nosemgrep: incident-catch-returns-empty -- an endpoint that does not parse shows nothing; it cannot have been saved
+    const u = new URL(url);
+    origin = `${u.protocol}//${u.host}`;
+  } catch { // site-fault-waiver: src/admin/owner-action.ts:endpointOriginOnly:catch:1 -- an endpoint that does not parse shows nothing; the set path refuses it
+    origin = "";
+  }
+  // A bare scheme and host (an optional trailing slash) is already all a reader may see: it comes back untouched.
+  if (origin !== "" && url.startsWith(origin) && (url.length === origin.length || (url.length === origin.length + 1 && url.endsWith("/")))) return { url, cut: false };
+  return { url: origin, cut: true };
+}
+
+// OWNER_ACTION_ENDPOINT_KINDS are the owner-action kinds whose params carry a push endpoint (flat "endpoint",
+// and "s3Target.endpoint" for the s3 sink; the OTLP push destination carries a flat "endpoint"). The inbox listing shows those endpoints as scheme and host only.
+const OWNER_ACTION_ENDPOINT_KINDS: readonly string[] = ["push-dest-set", "otlp-push-dest-set"];
+
 // redactOwnerActionParamsForListing returns a SHALLOW-ENOUGH redacted COPY of an action's params for the
 // inbox listing: the known secret-bearing fields (config.secretAccessKey, config.assumeRole.externalId,
 // s3Target.secretAccessKey, top-level secret/token/authHeaderValue) are stripped. It NEVER mutates the input
@@ -537,7 +557,36 @@ function hasNestedSecretAccessKey(src: Record<string, unknown>, field: string): 
 // secret fields) round-trips unchanged. It is deliberately conservative: it strips the EXACT known keys rather
 // than guessing, so a new secret-bearing kind must be added here deliberately (the validator asserts the
 // listing carries no secret for the secret-bearing kinds).
-function redactOwnerActionParamsForListing(params: unknown): unknown {
+function redactOwnerActionParamsForListing(params: unknown, kind?: string): unknown {
+  if (params === null || typeof params !== "object" || Array.isArray(params)) return params;
+  const afterEndpoints = kind !== undefined && OWNER_ACTION_ENDPOINT_KINDS.includes(kind) ? redactPushEndpoints(params as Record<string, unknown>) : params;
+  return redactOwnerActionSecrets(afterEndpoints);
+}
+
+// redactPushEndpoints returns a copy of push-dest-set params whose endpoint and s3Target.endpoint show scheme
+// and host only, with endpointRedacted:true when anything was cut; params with nothing to cut come back as is.
+function redactPushEndpoints(src: Record<string, unknown>): Record<string, unknown> {
+  let out = src;
+  let cut = false;
+  if (typeof src.endpoint === "string") {
+    const r = endpointOriginOnly(src.endpoint);
+    if (r.cut) {
+      out = { ...out, endpoint: r.url };
+      cut = true;
+    }
+  }
+  const s3 = src.s3Target;
+  if (s3 !== null && typeof s3 === "object" && !Array.isArray(s3) && typeof (s3 as { endpoint?: unknown }).endpoint === "string") {
+    const r = endpointOriginOnly((s3 as { endpoint: string }).endpoint);
+    if (r.cut) {
+      out = { ...out, s3Target: { ...(s3 as Record<string, unknown>), endpoint: r.url } };
+      cut = true;
+    }
+  }
+  return cut ? { ...out, endpointRedacted: true } : out;
+}
+
+function redactOwnerActionSecrets(params: unknown): unknown {
   if (params === null || typeof params !== "object" || Array.isArray(params)) return params;
   const src = params as Record<string, unknown>;
   // Only clone + strip when a known secret field is actually present, so a secret-free action's params are
@@ -591,7 +640,7 @@ function redactOwnerActionParamsForListing(params: unknown): unknown {
 // the params redaction.)
 export function viewOwnerAction(record: PendingOwnerAction, now: number): PendingOwnerAction {
   const status = effectiveOwnerActionStatus(record, now);
-  const params = redactOwnerActionParamsForListing(record.params);
+  const params = redactOwnerActionParamsForListing(record.params, record.kind);
   // Build the projection only when something changed (status or params), so a redaction-free, non-expired
   // record round-trips as-is.
   if (status === record.status && params === record.params) return record;

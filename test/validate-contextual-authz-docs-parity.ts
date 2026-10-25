@@ -228,7 +228,7 @@ expectRow("Source IP and target email on the recovery-code sign-in", [
 ]);
 expectRow("Source IP on the break-glass bearer", [rate(ADMIN_TOKEN_RATE_LIMIT_MAX_PER_WINDOW, RATE_LIMIT_WINDOW_MS), "ADMIN_TOKEN_RATE_LIMIT_MAX_PER_WINDOW", "429"]);
 expectRow("Verified caller identity on a mutating route", [rate(RATE_LIMIT_MAX_PER_WINDOW, RATE_LIMIT_WINDOW_MS), "RATE_LIMIT_MAX_PER_WINDOW", "429", "fail open"]);
-expectRow("Request Origin on a mutating cookie-session request", ["CONSOLE_ORIGIN", "403"]);
+expectRow("Request Origin on a mutating cookie-session request, or on a mutating Access request", ["CONSOLE_ORIGIN", "403"]);
 expectRow("Absent `CF-Connecting-IP`", ["allow"]);
 expectRow("Source IP prefix on a proven sign-in", [duration(SEEN_CONTEXT_TTL_MS), `${SEEN_CONTEXT_CAP} prefixes`, "/24", "/48", "notify"]);
 

@@ -25,6 +25,7 @@ import fc from "fast-check";
 import { validateCanonicalCounts } from "../src/format/canonnum.ts";
 import { parseShard } from "../src/format/record-codec.ts";
 import { parseRunlog, type RunlogEntry } from "../src/format/writer.ts";
+import { isIntegrityFailure } from "../src/format/integrity-error.ts";
 import { canonicalJSON } from "../src/format/canonjson.ts";
 import { checkRunlogFreshness } from "../src/format/freshness.ts";
 import { hybridSign } from "../src/crypto/sign.ts";
@@ -85,7 +86,8 @@ accepts("canonical integer accepted", () => validateCanonicalCounts('{"n":318}',
 accepts("zero accepted", () => validateCanonicalCounts('{"n":0}', "n"));
 accepts("max canonical (2^53-1) accepted", () => validateCanonicalCounts(`{"n":${2 ** 53 - 1}}`, "n"));
 accepts("missing field permitted", () => validateCanonicalCounts('{"other":1}', "n"));
-accepts("null field permitted", () => validateCanonicalCounts('{"n":null}', "n"));
+rejectsWith("null field refused", () => validateCanonicalCounts('{"n":null}', "n"), 'field "n" must be a canonical integer, not null');
+rejectsWith("nested null field refused with its path", () => validateCanonicalCounts('{"a":{"n":null}}', "a.n"), 'field "a.n" must be a canonical integer, not null');
 
 rejects("in-range value as string rejected", () => validateCanonicalCounts('{"n":"318"}', "n"));
 rejects("over-ceiling (2^53) number rejected", () => validateCanonicalCounts('{"n":9007199254740993}', "n"));
@@ -125,14 +127,16 @@ rejectsWith("unparseable JSON reason", () => validateCanonicalCounts("not json",
 // ---------------------------------------------------------------------------------------
 // resolvePath walks the parsed structure (Go resolvePath); these pin the per-segment guard
 // (cur === null || typeof cur !== "object" || Array.isArray(cur)) that stops the walk at a
-// non-object instead of indexing into it. A path that walks THROUGH a JSON null, and one that
-// walks through a missing nested object, must each be PERMITTED (the field is simply absent), not
-// throw: indexing null or undefined would throw, so the guard removal is caught. A path that
+// non-object instead of indexing into it. A path that walks through a missing nested object, or
+// through a JSON null at a step marked "?", must be PERMITTED (the field is simply absent), not
+// throw: indexing null or undefined would throw, so the guard removal is caught. A walk through
+// an unmarked JSON null is refused. A path that
 // would step into a STRING value must also stop (the field is absent), not read a JavaScript
 // property off the primitive: requesting ".constructor" under a string leaf stays permitted,
 // because the structural walk never descends into a non-object scalar.
 // ---------------------------------------------------------------------------------------
-accepts("walk through a JSON null is permitted, not a throw", () => validateCanonicalCounts('{"a":null}', "a.b"));
+rejectsWith("walk through a JSON null object is refused (Go c58e4c31 canonnum.go:101-120)", () => validateCanonicalCounts('{"a":null}', "a.b"), 'field "a" must be an object, not null');
+accepts("walk through a JSON null at a step marked ? is permitted", () => validateCanonicalCounts('{"a":null}', "a?.b"));
 accepts("walk through a missing nested object is permitted, not a throw", () => validateCanonicalCounts('{"a":{}}', "a.b.c"));
 accepts("walk does not descend into a string value (a.constructor under a string leaf stays permitted)", () => validateCanonicalCounts('{"a":"hello"}', "a.constructor"));
 
@@ -351,7 +355,7 @@ async function freshnessRollbackDetectedIsUnconditional(): Promise<void> {
 // record's packed offset/length and chunkRange bounds are count fields too (shard.go recordCountPaths).
 // Each verdict below was taken from the Go reference validateCounts on the same bytes.
 // ---------------------------------------------------------------------------------------
-const RECORD_PATHS = ["plaintextSize", "segments[].packed.offset", "segments[].packed.length", "segments[].chunkRange[]"];
+const RECORD_PATHS = ["plaintextSize", "segments[].packed?.offset", "segments[].packed?.length", "segments[].chunkRange[]"];
 rejectsWith("Go parity: fraction token 1.0 refused", () => validateCanonicalCounts('{"shardCount":1.0}', "shardCount"), "is not an integer");
 rejectsWith("Go parity: exponent token 1e2 refused", () => validateCanonicalCounts('{"shardCount":1e2}', "shardCount"), "is not an integer");
 rejectsWith("Go parity: exponent token 1E0 refused", () => validateCanonicalCounts('{"shardCount":1E0}', "shardCount"), "is not an integer");
@@ -368,13 +372,67 @@ rejects("Go parity: parseShard refuses a record whose chunkRange bound is 1.0", 
   parseShard(utf8('{"kind":"preamble","formatVersion":"downpipe/0.1.0","runId":"R","shardId":"00000","recordCountInShard":1}\n{"kind":"record","plaintextSize":1,"segments":[{"object":"seg/x.seg","chunkRange":[0,1.0]}]}\n')),
 );
 
+// A count present as JSON null is refused at every path the engine validates (SPEC 11.3); the same field
+// absent stays permitted. A null array, array element or intermediate object is refused too, except at a step marked ?.
+{
+  const rootPaths = ["declaredRecordCount", "shardCount", "freshness.runlogIndex"];
+  rejectsWith("null declaredRecordCount refused", () => validateCanonicalCounts('{"declaredRecordCount":null,"shardCount":1,"freshness":{"runlogIndex":1}}', ...rootPaths), 'field "declaredRecordCount"');
+  rejectsWith("null shardCount refused", () => validateCanonicalCounts('{"declaredRecordCount":1,"shardCount":null,"freshness":{"runlogIndex":1}}', ...rootPaths), 'field "shardCount"');
+  rejectsWith("null freshness.runlogIndex refused", () => validateCanonicalCounts('{"declaredRecordCount":1,"shardCount":1,"freshness":{"runlogIndex":null}}', ...rootPaths), 'field "freshness.runlogIndex"');
+  accepts("root counts all absent permitted", () => validateCanonicalCounts('{"kind":"root"}', ...rootPaths));
+  // Go TestValidateCountsRefusesNullParent and TestValidateCountsAllowsNullPackedAndAbsent (canonnum_test.go:152-196),
+  // same inputs and the same accept/refuse result. freshness carries no "?" in Go, so a null freshness is refused.
+  rejectsWith("Go parity: root freshness null refused", () => validateCanonicalCounts('{"freshness":null}', ...rootPaths), 'field "freshness" must be an object, not null');
+  rejectsWith("Go parity: record segments null refused", () => validateCanonicalCounts('{"segments":null}', ...RECORD_PATHS), 'field "segments" must be an array, not null');
+  rejectsWith("Go parity: record segment element null refused", () => validateCanonicalCounts('{"segments":[null]}', ...RECORD_PATHS), 'field "segments[0]" must be an object, not null');
+  rejectsWith("Go parity: record chunkRange null refused", () => validateCanonicalCounts('{"segments":[{"chunkRange":null,"packed":null}]}', ...RECORD_PATHS), 'field "segments[0].chunkRange" must be an array, not null');
+  accepts("Go parity: whole-segment record (packed null) accepted", () => validateCanonicalCounts('{"plaintextSize":5,"segments":[{"chunkRange":[0,1],"packed":null}]}', ...RECORD_PATHS));
+  accepts("Go parity: packed record accepted", () => validateCanonicalCounts('{"plaintextSize":5,"segments":[{"chunkRange":[0,1],"packed":{"offset":0,"length":5}}]}', ...RECORD_PATHS));
+  accepts("Go parity: absent freshness accepted", () => validateCanonicalCounts('{"declaredRecordCount":1,"shardCount":1}', ...rootPaths));
+  accepts("Go parity: absent segments accepted", () => validateCanonicalCounts('{"plaintextSize":5}', ...RECORD_PATHS));
+  // parseShard end to end: each null parent is a format violation (the same RunIntegrityError class as every
+  // other canonical-count refusal, which the reader maps to exit 6).
+  {
+    const pre = '{"kind":"preamble","formatVersion":"downpipe/0.1.0","runId":"R","shardId":"00000","recordCountInShard":1}\n';
+    for (const [label, rec] of [
+      ["segments null", '{"kind":"record","plaintextSize":1,"segments":null}'],
+      ["segments [null]", '{"kind":"record","plaintextSize":1,"segments":[null]}'],
+      ["chunkRange null", '{"kind":"record","plaintextSize":1,"segments":[{"object":"seg/x.seg","chunkRange":null,"packed":null}]}'],
+    ] as const) {
+      let cat = "(no throw)";
+      try {
+        parseShard(utf8(pre + rec + "\n"));
+      } catch (e) {
+        cat = isIntegrityFailure(e) ? "integrity" : `other: ${e instanceof Error ? e.message : String(e)}`;
+      }
+      ok(`parseShard refuses ${label} as a format violation (RunIntegrityError)`, cat === "integrity");
+      if (cat !== "integrity") console.log(`        got ${cat}`);
+    }
+  }
+  rejectsWith("null recordCountInShard refused", () => validateCanonicalCounts('{"kind":"preamble","recordCountInShard":null}', "recordCountInShard"), 'field "recordCountInShard"');
+  rejectsWith("null plaintextSize refused", () => validateCanonicalCounts('{"kind":"record","plaintextSize":null}', ...RECORD_PATHS), 'field "plaintextSize"');
+  rejectsWith("null packed offset refused (array element path)", () => validateCanonicalCounts('{"kind":"record","plaintextSize":1,"segments":[{"packed":{"offset":null,"length":1},"chunkRange":[0,1]}]}', ...RECORD_PATHS), 'field "segments[0].packed.offset"');
+  rejectsWith("null packed length refused (array element path)", () => validateCanonicalCounts('{"kind":"record","plaintextSize":1,"segments":[{"packed":{"offset":0,"length":null},"chunkRange":[0,1]}]}', ...RECORD_PATHS), 'field "segments[0].packed.length"');
+  rejectsWith("null in a later array element refused", () => validateCanonicalCounts('{"kind":"record","plaintextSize":1,"segments":[{"chunkRange":[0,1]},{"packed":{"offset":null,"length":1}}]}', ...RECORD_PATHS), 'field "segments[1].packed.offset"');
+  rejectsWith("null chunkRange bound refused", () => validateCanonicalCounts('{"kind":"record","plaintextSize":1,"segments":[{"chunkRange":[0,null]}]}', ...RECORD_PATHS), "segments[0].chunkRange[1]");
+  accepts("packed null as a whole object permitted", () => validateCanonicalCounts('{"kind":"record","plaintextSize":1,"segments":[{"packed":null,"chunkRange":[0,1]}]}', ...RECORD_PATHS));
+  rejectsWith("null RUNLOG index refused", () => validateCanonicalCounts('{"index":null,"recordCount":1}', "index", "recordCount"), 'field "index"');
+  rejectsWith("null RUNLOG recordCount refused", () => validateCanonicalCounts('{"index":1,"recordCount":null}', "index", "recordCount"), 'field "recordCount"');
+  rejects("parseShard refuses a preamble whose recordCountInShard is null", () =>
+    parseShard(utf8('{"kind":"preamble","formatVersion":"downpipe/0.1.0","runId":"R","shardId":"00000","recordCountInShard":null}\n')),
+  );
+  rejects("parseShard refuses a record whose plaintextSize is null", () =>
+    parseShard(utf8('{"kind":"preamble","formatVersion":"downpipe/0.1.0","runId":"R","shardId":"00000","recordCountInShard":1}\n{"kind":"record","plaintextSize":null,"segments":[]}\n')),
+  );
+}
+
 // A seeded differential sweep over generated count tokens and key spellings. The oracle is Go's token rule
 // written out here from canonnum.go (no fraction or exponent, no sign, no leading zero, at most 2^53-1, a
 // JSON number and not a string, no case-variant key), sharing no code with the port.
 function goVerdict(key: string, token: string): boolean {
   if (key !== "n" && key.toLowerCase() === "n") return false; // a case variant of the field
   if (key !== "n") return true; // another field entirely: n is missing, which is permitted
-  if (token === "null") return true;
+  if (token === "null") return false; // present as null: refused
   if (!/^-?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][+-]?[0-9]+)?$/.test(token)) return false; // a string, a bool, an object
   if (/[.eE]/.test(token) || token.startsWith("-")) return false;
   return BigInt(token) <= BigInt(2 ** 53 - 1);

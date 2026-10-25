@@ -327,7 +327,7 @@ export function classifyConfigReject(e: unknown): ConfigRejectReason {
   // 2. A JSON body that never parsed (a SyntaxError riding the same 400 funnel).
   if (e instanceof SyntaxError || /Unexpected token|JSON at position|is not valid JSON/i.test(m)) return "body-unparseable";
   // 3. The named validators, specific first.
-  if (/discovery-selected|not one of the discovery/i.test(m)) return "discovery-scope";
+  if (/discovery-selected|not one of the discovery|outside the discovery scope/i.test(m)) return "discovery-scope";
   if (/only proven copy/i.test(m)) return "orphan-guard";
   if (/Cloudflare API token/i.test(m)) return "token-shape";
   if (/cron/i.test(m)) return "cron-invalid";

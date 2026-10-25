@@ -63,7 +63,7 @@ async function main(): Promise<void> {
   const citations: Array<{ file: string; start: number; end: number; expect: string; label: string }> = [
     { file: "src/env.d.ts", start: 508, end: 508, expect: "DISCOVERY_API_TOKEN", label: "the discovery token binding" },
     { file: "src/admin/cf-api.ts", start: 263, end: 263, expect: "discoveryTokenExpiryVerdict", label: "the discovery term-limit function" },
-    { file: "src/admin/router-discovery.ts", start: 396, end: 396, expect: "discoveryTokenExpiryVerdict", label: "the discovery term limit enforced on the console-set path" },
+    { file: "src/admin/router-discovery.ts", start: 410, end: 410, expect: "discoveryTokenExpiryVerdict", label: "the discovery term limit enforced on the console-set path" },
     { file: "src/admin/preflight-probes.ts", start: 702, end: 702, expect: "discoveryTokenExpiryVerdict", label: "the discovery term limit enforced on the IaC fallback" },
     { file: "src/lib/outbound.ts", start: 20, end: 20, expect: "DOH_ENDPOINT", label: "the DoH endpoint constant" },
     { file: "src/notify/types.ts", start: 770, end: 770, expect: "DOH_ENDPOINT", label: "the DoH call site" },

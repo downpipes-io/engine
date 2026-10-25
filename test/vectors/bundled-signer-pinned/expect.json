@@ -1,0 +1,12 @@
+{
+  "mode": "positive",
+  "records": [
+    {
+      "name": "object-a",
+      "valueB64": "cmVjb3ZlciBtZSB3aXRob3V0IENsb3VkZmxhcmUgYW5kIHdpdGhvdXQgdGhlIHZlbmRvcg"
+    }
+  ],
+  "options": {
+    "signerFingerprint": "edmldsa1:93dd6cd5662e7aedd827836cc5baca9f030786c7c45a91a684d9d6556ee3867076d1d4f464ac108360cbe67a84b05c58"
+  }
+}

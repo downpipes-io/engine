@@ -77,6 +77,14 @@ export function classifyReadFailure(e: unknown): { aspect: "read-signature" | "r
   if (category === "format-unsupported") {
     return { aspect: "read-signature", dead: true, detail: "this build could not read the archive format it has just written" };
   }
+  // usage: an operator input was refused before any archive byte was judged (an incomplete pinned
+  // fingerprint, or no bundled signer.pub to check it against). The canary reads the archive it has just
+  // written, so the input at fault is the canary's own pin or configuration, not the data. Nothing about
+  // the bytes is in question, so this is ailing rather than dead: dead would page an evacuation and roll
+  // back a healthy self-update over a typo. The read-back did not complete, so it is still reported.
+  if (category === "usage") {
+    return { aspect: "read-signature", dead: false, detail: "the read-back input was refused (the canary's pinned fingerprint or signer.pub is not usable)" };
+  }
   // Below here the throw carried no category: a store fault, a runtime error, a non-Error rejection. The
   // nets are unchanged and remain the answer for those, including the fail-closed default.
   const message = e instanceof Error ? e.message : String(e);

@@ -921,7 +921,7 @@ async function defaultFetch(u: string, onStatus?: (status: number) => void): Pro
   // rather than silently following to another host. Treat any non-2xx (including 3xx)
   // as a failure so a redirected signed-update fetch cannot be steered elsewhere.
   let r: Response;
-  try {
+  try { // nosemgrep: incident-catch-returns-empty -- the site fault waiver at the handler gives the reason
     r = await fetch(u, { redirect: "manual" });
   } catch {
     // site-fault-waiver: src/admin/updates.ts:defaultFetch:catch:1 -- onStatus(0) hands the no-exchange status to the caller, which records it as the channel fault

@@ -17,6 +17,7 @@ import { loadConfigWrapKey, OTLP_PUSH_SECRET_AAD, resolveConfigSecret } from "..
 import { doURL, type schedulerStub } from "../admin/router-helpers.ts";
 import type { Env } from "../env.d.ts";
 import { log } from "../log.ts";
+import { PUSH_EGRESS_BLOCKED_CODE, pushTargetAllowed, requireEgressAllowlist } from "../notify/push-egress.ts";
 import { deliverOtlpPush, type OtlpPushSendResult } from "../notify/otlp-push-sender.ts";
 import type { OtlpPushDestinationRecord } from "../sched/scheduler-do-base.ts";
 import { causeDigest } from "../seal/slice.ts";
@@ -49,6 +50,9 @@ export interface ResolvedOtlpPushConfig {
   authHeaderValue: string;
   enabled: boolean;
   gen: string;
+  // egressAllowlist is the account's operator allowlist as the DO read it with this record; see
+  // ResolvedPushConfig.
+  egressAllowlist?: string[];
 }
 
 // OtlpPushDeliveryResult is the outcome the drain records: ok, an optional HTTP status, an optional coarse
@@ -78,10 +82,19 @@ export interface OtlpPushDeliveryResult {
 export async function fetchOtlpPushConfig(scheduler: ReturnType<typeof schedulerStub>, wrapKey: Uint8Array | undefined): Promise<ResolvedOtlpPushConfig | null> {
   const resp = await scheduler.fetch(doURL("/otlp-push-config"), { method: "GET" });
   if (!resp.ok) throw new Error(`${OTLP_CONFIG_UNREADABLE_PREFIX} (DO responded ${resp.status})`);
-  const { record } = (await resp.json()) as { record?: OtlpPushDestinationRecord | null };
+  const { record, egressAllowlist } = (await resp.json()) as { record?: OtlpPushDestinationRecord | null; egressAllowlist?: unknown };
   if (!record) return null;
+  // As fetchPushConfig: an answer without the allowlist is malformed and refuses, never reads as "no list".
+  const allowlist = requireEgressAllowlist(egressAllowlist, `${OTLP_CONFIG_UNREADABLE_PREFIX} (the answer carries no egress allowlist)`);
   const authHeaderValue = await resolveConfigSecret(wrapKey, record.authHeaderValue, OTLP_PUSH_SECRET_AAD);
-  return { endpoint: record.endpoint, authHeaderName: record.authHeaderName, authHeaderValue, enabled: record.enabled, gen: record.gen };
+  return {
+    endpoint: record.endpoint,
+    authHeaderName: record.authHeaderName,
+    authHeaderValue,
+    enabled: record.enabled,
+    gen: record.gen,
+    egressAllowlist: allowlist,
+  };
 }
 
 // deliverResolvedOtlpPush builds the OTLP ResourceMetrics body from the CURRENT snapshot and sends it,
@@ -90,6 +103,9 @@ export async function fetchOtlpPushConfig(scheduler: ReturnType<typeof scheduler
 // caller records what was really sent, not what it was handed (mon-otlp F3).
 export async function deliverResolvedOtlpPush(cfg: ResolvedOtlpPushConfig, downpipes: OtlpDownpipeMetrics[], nowMs: number): Promise<OtlpPushDeliveryResult> {
   const shaped = buildOtlpResourceMetrics(downpipes, nowMs);
+  if (!pushTargetAllowed(cfg.endpoint, "url", cfg.egressAllowlist)) {
+    return toDeliveryResult({ ok: false, code: PUSH_EGRESS_BLOCKED_CODE }, shaped.downpipeCount, shaped.truncated, shaped.droppedCount);
+  }
   const r = await deliverOtlpPush(cfg.endpoint, shaped.body, cfg.authHeaderName, cfg.authHeaderValue);
   return toDeliveryResult(r, shaped.downpipeCount, shaped.truncated, shaped.droppedCount);
 }
@@ -206,7 +222,9 @@ export async function runOtlpPushPass(env: Env, scheduler: ReturnType<typeof sch
   try {
     const chunks = buildOtlpResourceMetricsChunks(downpipes, Date.now());
     for (const chunk of chunks) {
-      const sent = await deliverOtlpPush(cfg.endpoint, chunk.body, cfg.authHeaderName, cfg.authHeaderValue);
+      const sent: OtlpPushSendResult = pushTargetAllowed(cfg.endpoint, "url", cfg.egressAllowlist)
+        ? await deliverOtlpPush(cfg.endpoint, chunk.body, cfg.authHeaderName, cfg.authHeaderValue)
+        : { ok: false, code: PUSH_EGRESS_BLOCKED_CODE };
       const result = toDeliveryResult(sent, chunk.downpipeCount, chunk.truncated, chunk.droppedCount);
       await recordOutcome(scheduler, {
         ok: result.ok,

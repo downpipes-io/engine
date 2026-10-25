@@ -300,7 +300,7 @@ export function serialiseControlPlaneExport(exp: ControlPlaneExport): Uint8Array
 // surrogate) instead of throwing. The signer canonicalises before it signs, so such an export can never be
 // one that was signed, and every caller turns null into the refusal for an altered export.
 export function controlPlaneExportBytesOrNull(exp: ControlPlaneExport): Uint8Array | null {
-  try {
+  try { // nosemgrep: incident-catch-returns-empty -- the site fault waiver at the handler gives the reason
     return serialiseControlPlaneExport(exp);
   } catch (e) {
     // site-fault-waiver: src/admin/control-plane.ts:controlPlaneExportBytesOrNull:catch:1 -- a body with no canonical form was never signed, and every caller records the altered-export refusal for the null

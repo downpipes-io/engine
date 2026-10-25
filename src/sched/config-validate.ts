@@ -327,18 +327,21 @@ export interface DiscoveryScopeConfig {
 // account-wide discovery token, so its accountId must be one the Owner's own discovery config actually
 // covers -- otherwise any downpipe.write-only caller could point a source at ANY account that shared
 // token can reach and use rediscover/trigger to probe or seal it (never checked before this; the cfId()
-// checks below only bound the hex SHAPE, never the scope). `cfg === null` is the honest env/IaC-only
+// checks below only bound the hex SHAPE, never the scope). `cfg === null` is the env/IaC-only
 // deployment (a bare DISCOVERY_API_TOKEN with no console-set config, resolveDiscoveryToken's documented
-// fallback): there is no Owner-curated list to check against, so this is a no-op there, matching every
-// other discovery reader's null-config fallback. Once a config exists, accountId must be in accountsSeen
+// fallback): there is no Owner-curated list, so only the engine's own account (engineAccountId: CF_ACCOUNT_ID,
+// else the verified engine account) is in scope, and an unknown engine account (null) puts nothing in scope.
+// A foreign account then needs an Owner discovery config. Once a config exists, accountId must be in accountsSeen
 // (a real account the token verified); once the Owner has narrowed the browsed set (selected non-empty),
 // it must be in `selected` too -- the SAME "known account" boundary setDiscoveryAccounts already enforces
 // when the OWNER picks which accounts to browse (scheduler-do-account-config.ts), re-applied here at the
 // point a downpipe's source actually NAMES one.
-export function accountInDiscoveryScope(accountId: string, cfg: DiscoveryScopeConfig | null): boolean {
-  if (cfg === null) return true;
-  if (!cfg.accountsSeen.some((a) => a.id === accountId)) return false;
-  if (cfg.selected.length > 0 && !cfg.selected.includes(accountId)) return false;
+export function accountInDiscoveryScope(accountId: string, cfg: DiscoveryScopeConfig | null, engineAccountId: string | null): boolean {
+  // Account ids are hex and the shape check accepts either case, so ids are compared lowercased.
+  const id = accountId.toLowerCase();
+  if (cfg === null) return engineAccountId !== null && id === engineAccountId.toLowerCase();
+  if (!cfg.accountsSeen.some((a) => a.id.toLowerCase() === id)) return false;
+  if (cfg.selected.length > 0 && !cfg.selected.some((s) => s.toLowerCase() === id)) return false;
   return true;
 }
 
@@ -465,3 +468,8 @@ export function validateConfig(c: DownpipeConfig): void {
   validateSchedule(c);
   validateSource(c);
 }
+
+// ENV_ONLY_SCOPE_REFUSAL is the reason given when an account is outside the scope of an estate that has no
+// discovery config: the environment token reaches more accounts than the engine's own, and only the engine's own
+// may be named.
+export const ENV_ONLY_SCOPE_REFUSAL = "with only the environment discovery token a source may name only the engine's own Cloudflare account (CF_ACCOUNT_ID, or the account the engine has verified); an Owner discovery token under Sources adds other accounts";

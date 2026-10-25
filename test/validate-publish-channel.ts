@@ -88,10 +88,13 @@ interface ReleaseFixtureOpts {
   // cosign v3 writes the protobuf Sigstore bundle (v0.3) for sign-blob: the Rekor index sits at
   // verificationMaterial.tlogEntries[0].logIndex, as a string, and there is no rekorBundle at all.
   sigstoreV3CosignBundle?: boolean;
+  // The shape of a flat release download: SHA256SUMS.txt and the SLSA subject name the bundle by its bare
+  // file name, and the bundle and its cosign bundle sit beside the sums file, with no dist/ folder.
+  flatBareNames?: boolean;
 }
 
 function writeReleaseFixture(base: string, o: ReleaseFixtureOpts): string {
-  const dir = path.join(base, `${o.component}-release-${o.version}${o.corruptArtefact ? "-corrupt" : ""}${o.wrongSubjectDigest ? "-badsubject" : ""}${o.omitIntoto ? "-nointoto" : ""}${o.omitCiFacts ? "-nofacts" : ""}${o.sigstoreV3CosignBundle ? "-v3bundle" : ""}`);
+  const dir = path.join(base, `${o.component}-release-${o.version}${o.corruptArtefact ? "-corrupt" : ""}${o.wrongSubjectDigest ? "-badsubject" : ""}${o.omitIntoto ? "-nointoto" : ""}${o.omitCiFacts ? "-nofacts" : ""}${o.sigstoreV3CosignBundle ? "-v3bundle" : ""}${o.flatBareNames ? "-flat" : ""}`);
   rmSync(dir, { recursive: true, force: true });
   const artefactName = o.component === "engine" ? `engine-${o.version}.mjs` : `console-${o.version}.json`;
   const sha256 = (b: Uint8Array) => createHash("sha256").update(b).digest("hex");
@@ -106,9 +109,10 @@ function writeReleaseFixture(base: string, o: ReleaseFixtureOpts): string {
     factsObj.runId = "123456789";
   }
   const facts = JSON.stringify(factsObj, null, 2);
-  const sums = `${trueDigest}  dist/${artefactName}\n${sha256(new TextEncoder().encode(facts))}  release-facts.json\n`;
+  const listedName = o.flatBareNames ? artefactName : `dist/${artefactName}`;
+  const sums = `${trueDigest}  ${listedName}\n${sha256(new TextEncoder().encode(facts))}  release-facts.json\n`;
   const subjectDigest = o.wrongSubjectDigest ? "f".repeat(64) : trueDigest;
-  const statement = { _type: "https://in-toto.io/Statement/v1", predicateType: "https://slsa.dev/provenance/v1", subject: [{ name: `dist/${artefactName}`, digest: { sha256: subjectDigest } }], predicate: { builder: { id: "https://github.com/slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@refs/tags/v2.1.0" } } };
+  const statement = { _type: "https://in-toto.io/Statement/v1", predicateType: "https://slsa.dev/provenance/v1", subject: [{ name: listedName, digest: { sha256: subjectDigest } }], predicate: { builder: { id: "https://github.com/slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@refs/tags/v2.1.0" } } };
   const bareEnvelope = { payloadType: "application/vnd.in-toto+json", payload: Buffer.from(JSON.stringify(statement)).toString("base64"), signatures: [] };
   const envelope = JSON.stringify(o.wrapInSigstoreBundle ? { mediaType: "application/vnd.dev.sigstore.bundle.v0.3+json", verificationMaterial: {}, dsseEnvelope: bareEnvelope } : bareEnvelope);
   const bundle = JSON.stringify(
@@ -124,11 +128,11 @@ function writeReleaseFixture(base: string, o: ReleaseFixtureOpts): string {
     }
     writeFileSync(p, content);
   };
-  write(`dist/${artefactName}`, written);
+  write(listedName, written);
   write("release-facts.json", facts);
   write("SHA256SUMS.txt", sums);
   if (!o.omitIntoto) write(`${o.component}.intoto.jsonl`, envelope + "\n");
-  write(`dist/${artefactName}.cosign-bundle`, bundle);
+  write(`${listedName}.cosign-bundle`, bundle);
   write("SHA256SUMS.txt.cosign-bundle", bundle);
   return dir;
 }
@@ -189,7 +193,7 @@ try {
   // ================================================================================================
   const stubPass = writeStubCosign(tmp, "pass");
   const stubFail = writeStubCosign(tmp, "fail");
-  const engineBytes = new TextEncoder().encode("// engine release bytes 0.0.2\nexport default {};\n");
+  const engineBytes = new TextEncoder().encode("// engine release bytes 0.0.2\nvar ENGINE_VERSION = \"0.0.2\";\nexport default {};\n");
   const consoleBytes = new TextEncoder().encode(JSON.stringify({ format: "downpipe-console-bundle/1", version: "0.0.9", worker: { mainModule: "worker.js", sourceB64: "" }, config: {}, assets: [] }, null, 2));
   const engineDir = writeReleaseFixture(tmp, { version: "0.0.2", component: "engine", artefactBytes: engineBytes });
   const consoleDir = writeReleaseFixture(tmp, { version: "0.0.9", component: "console", artefactBytes: consoleBytes });
@@ -241,6 +245,19 @@ try {
   const verified7c = out7c ? await verifyChannel(utf8(out7c.channel), b64urlDecode(out7c.signature), parseVerifier(b64urlDecode(out7c.updateSignerPublic))) : null;
   ok("a cosign v3 Sigstore bundle yields the signed rekorLogIndex from tlogEntries[0].logIndex", verified7c?.artefacts?.[0]?.provenance?.rekorLogIndex === "525252");
 
+  // V7d: a flat release download whose SHA256SUMS.txt and SLSA subject name the bundle by its bare file name
+  // ingests like the dist/ shape above, and signs the same digest.
+  const flatDir = writeReleaseFixture(tmp, { version: "0.0.2", component: "engine", artefactBytes: engineBytes, flatBareNames: true });
+  ok("the flat fixture lists the bare name and holds no dist/ folder", / {2}engine-0\.0\.2\.mjs\n/.test(readFileSync(path.join(flatDir, "SHA256SUMS.txt"), "utf8")) && !existsSync(path.join(flatDir, "dist")));
+  const v7d = run(["--version", "0.0.2", "--key-file", keyPath, "--allow-unsequenced", "--from-release-dir", flatDir, "--url", "https://u.example/e.mjs", "--provenance-out-dir", provOut], { PUBLISH_CHANNEL_COSIGN: stubPass });
+  const out7d = v7d.status === 0 ? (JSON.parse(v7d.stdout) as { channel: string; signature: string; updateSignerPublic: string }) : null;
+  const verified7d = out7d ? await verifyChannel(utf8(out7d.channel), b64urlDecode(out7d.signature), parseVerifier(b64urlDecode(out7d.updateSignerPublic))) : null;
+  ok("a flat download with bare names in SHA256SUMS.txt and the SLSA subject signs the same digest", v7d.status === 0 && typeof verified7d?.artefacts?.[0]?.sha384 === "string" && verified7d.artefacts[0].sha384 === verified7c?.artefacts?.[0]?.sha384);
+  // V7e: a flat download whose bare-name line carries another digest refuses.
+  writeFileSync(path.join(flatDir, "SHA256SUMS.txt"), readFileSync(path.join(flatDir, "SHA256SUMS.txt"), "utf8").replace(/^[0-9a-f]{64}( {2}engine-0\.0\.2\.mjs)/, `${"0".repeat(64)}$1`));
+  const v7e = run(["--version", "0.0.2", "--key-file", keyPath, "--allow-unsequenced", "--from-release-dir", flatDir, "--url", "https://u.example/e.mjs", "--provenance-out-dir", provOut], { PUBLISH_CHANNEL_COSIGN: stubPass });
+  ok("a bare-name line with another digest refuses", v7e.status !== 0 && /does not name the locally computed digest/.test(v7e.stderr));
+
   // V8: a corrupted artefact refuses before signing.
   const corruptDir = writeReleaseFixture(tmp, { version: "0.0.2", component: "engine", artefactBytes: engineBytes, corruptArtefact: true });
   const v8 = run(["--version", "0.0.2", "--key-file", keyPath, "--allow-unsequenced", "--from-release-dir", corruptDir, "--url", "https://u.example/e.mjs", "--provenance-out-dir", provOut], { PUBLISH_CHANNEL_COSIGN: stubPass });
@@ -288,8 +305,11 @@ try {
   const v17a = run(["--version", "0.0.2", "--key-file", keyPath, "--allow-unsequenced", "--from-release-dir", engineDir, "--url", "https://u.example/e.mjs", "--provenance-out-dir", provOut, "--console-bundle", looseConsole, "--console-url", "https://u.example/c.json"], { PUBLISH_CHANNEL_COSIGN: stubPass });
   ok("attested engine + local console bundle refuses (cross-component guard)", v17a.status !== 0 && /console artefact must also come from an attested release/.test(v17a.stderr));
   const looseEngine = path.join(tmp, "loose-engine.mjs");
-  writeFileSync(looseEngine, "// loose local engine bytes\n");
-  const v17b = run(["--version", "0.0.9", "--key-file", keyPath, "--allow-unsequenced", "--console-release-dir", consoleDir, "--console-url", "https://u.example/c.json", "--provenance-out-dir", provOut, "--bundle", looseEngine, "--url", "https://u.example/e.mjs"], { PUBLISH_CHANNEL_COSIGN: stubPass });
+  writeFileSync(looseEngine, "// loose local engine bytes\nvar ENGINE_VERSION = \"0.0.2\";\n");
+  // This run names 0.0.9, so its local engine bundle reports 0.0.9: the refusal under test is the mixing one.
+  const looseEngine009 = path.join(tmp, "loose-engine-009.mjs");
+  writeFileSync(looseEngine009, "// loose local engine bytes\nvar ENGINE_VERSION = \"0.0.9\";\n");
+  const v17b = run(["--version", "0.0.9", "--key-file", keyPath, "--allow-unsequenced", "--console-release-dir", consoleDir, "--console-url", "https://u.example/c.json", "--provenance-out-dir", provOut, "--bundle", looseEngine009, "--url", "https://u.example/e.mjs"], { PUBLISH_CHANNEL_COSIGN: stubPass });
   ok("attested console + local engine bundle refuses (cross-component guard)", v17b.status !== 0 && /engine artefact must also come from an attested release/.test(v17b.stderr));
 
   // V18: a failure AFTER self-verify (an unwritable sidecar dir) must not burn the sequence number.
@@ -408,6 +428,23 @@ try {
   // V33, a control: the internal channel still signs from a local bundle with the stdin seed.
   const v33 = runWithStdin(["--version", "0.0.2", "--channel", "internal", "--signer-seed-stdin", "--allow-unsequenced", "--bundle", looseEngine, "--url", "https://u.example/e.mjs"], throwawaySeed);
   ok("the internal channel signs from a local bundle with the stdin seed", v33.status === 0);
+
+  // V35: a channel names the version its bundle reports. The same bundle as V33 (it reports 0.0.2) under the
+  // label 0.0.3 is refused on the internal channel, and on a harness-named channel.
+  const v35 = runWithStdin(["--version", "0.0.3", "--channel", "internal", "--signer-seed-stdin", "--allow-unsequenced", "--bundle", looseEngine, "--url", "https://u.example/e.mjs"], throwawaySeed);
+  ok("a label that differs from the bundle's own version refuses on the internal channel", v35.status !== 0 && /--version 0\.0\.3 does not match the bundle's own ENGINE_VERSION 0\.0\.2/.test(v35.stderr) && /Nothing was signed/.test(v35.stderr) && v35.stdout.trim() === "");
+  const v35b = runWithStdin(["--version", "0.0.3", "--channel", "harness-warm", "--signer-seed-stdin", "--allow-unsequenced", "--bundle", looseEngine, "--url", "https://u.example/e.mjs"], throwawaySeed);
+  ok("...and on a harness channel", v35b.status !== 0 && /does not match the bundle's own ENGINE_VERSION 0\.0\.2/.test(v35b.stderr) && v35b.stdout.trim() === "");
+  // V36: a bundle that names no version cannot be checked, so it is refused.
+  const unnamedEngine = path.join(tmp, "unnamed-engine.mjs");
+  writeFileSync(unnamedEngine, "// engine bytes with no version constant\nexport default {};\n");
+  const v36 = runWithStdin(["--version", "0.0.2", "--channel", "internal", "--signer-seed-stdin", "--allow-unsequenced", "--bundle", unnamedEngine, "--url", "https://u.example/e.mjs"], throwawaySeed);
+  ok("a bundle that names no ENGINE_VERSION refuses", v36.status !== 0 && /names no ENGINE_VERSION/.test(v36.stderr) && v36.stdout.trim() === "");
+  // V37: a bundle that names two versions cannot be checked either.
+  const twoNamedEngine = path.join(tmp, "two-named-engine.mjs");
+  writeFileSync(twoNamedEngine, "var ENGINE_VERSION = \"0.0.2\";\nvar ENGINE_VERSION2 = 1;\n{ var ENGINE_VERSION = \"0.0.3\"; }\n");
+  const v37 = runWithStdin(["--version", "0.0.2", "--channel", "internal", "--signer-seed-stdin", "--allow-unsequenced", "--bundle", twoNamedEngine, "--url", "https://u.example/e.mjs"], throwawaySeed);
+  ok("a bundle that names more than one ENGINE_VERSION refuses", v37.status !== 0 && /more than one ENGINE_VERSION \(0\.0\.2, 0\.0\.3\)/.test(v37.stderr) && v37.stdout.trim() === "");
 
   // V34, a control: stable signs with the stdin seed from both attested release trees, with provenance.
   const v34 = runWithStdin(["--version", "0.0.2", "--channel", "stable", "--signer-seed-stdin", "--sequence", "40", "--sequence-state", path.join(tmp, "seq34.json"), "--issued-at", "2026-07-05T04:00:00.000Z", "--from-release-dir", engineDir, "--url", "https://u.example/e.mjs", "--console-release-dir", consoleDir, "--console-url", "https://u.example/c.json", "--console-risk-class", "routine", "--provenance-out-dir", path.join(tmp, "prov34")], throwawaySeed, { PUBLISH_CHANNEL_COSIGN: stubPass });

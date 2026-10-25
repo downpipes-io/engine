@@ -1784,13 +1784,13 @@ export class RunSealDO {
   // the uncatchable wedge. Returns null on an unreachable worker or one that already cleaned up (active
   // false) -- fail-safe: the caller treats null as no progress (a done range is skipped before this runs).
   private async pollRangeFingerprint(downpipeId: string, rangeIndex: number): Promise<string | null> {
-    try {
+    try { // nosemgrep: incident-catch-returns-empty -- an unreachable worker counts as no progress toward a strike and is not a coordinator fault
       const resp = await runSealStub(this.env, `${downpipeId}#r${rangeIndex}`).fetch(new Request("https://runseal.internal/status", { method: "GET" }));
       if (!resp.ok) return null;
       const s = (await resp.json()) as { active?: boolean; sliceCount?: number; attempt?: number; throttleAttempt?: number };
       if (s.active !== true) return null;
       return `${s.sliceCount ?? 0}:${s.attempt ?? 0}:${s.throttleAttempt ?? 0}`;
-    } catch {
+    } catch { // site-fault-waiver: src/seal/runseal-do.ts:RunSealDO.pollRangeFingerprint:catch:1 -- an unreachable worker counts as no progress toward a strike and is not a coordinator fault
       return null; // unreachable worker: fail-safe (counts toward a strike, never a coordinator fault)
     }
   }

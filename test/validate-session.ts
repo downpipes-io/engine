@@ -915,6 +915,55 @@ async function run(): Promise<void> {
     ok("a refused cross-origin logout does NOT terminate the session", (await getAdmin(env, "/admin/whoami", { cookie: cookie2 })).status === 200);
   }
 
+  // 3d. A LOGOUT WHOSE REVOCATION DID NOT LAND SAYS SO. The cookie is still cleared, but the answer is 503
+  //     {ok:false}, so the console warns that a copy of the session may still work until it expires. The three
+  //     ways the revocation can fail are driven: the DO refusing the kill, the DO call throwing, and the DO never
+//     answering (the engine gives up after its 2.5 s bound and still answers before the console's 3 s wait).
+  {
+    const { env, stub } = makeScheduler();
+    const auth = await makeAuthenticator();
+    const email = "owner@example.com";
+    await register(env, auth, email);
+    let sc = 0;
+    const freshLogin = async (): Promise<Resp> => { auth.signCount = sc; const r = await login(env, auth, email); sc++; return r; };
+    const realFetch = stub.fetch.bind(stub);
+    const failKill = (mode: "refuse" | "throw" | "hang"): void => {
+      (stub as { fetch: typeof stub.fetch }).fetch = (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+        const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+        if (url.endsWith("/passkey/session/logout")) {
+          if (mode === "throw") return Promise.reject(new Error("DO unreachable"));
+          if (mode === "hang") return new Promise<Response>(() => {});
+          return Promise.resolve(new Response(JSON.stringify({ error: "refused" }), { status: 500 }));
+        }
+        return realFetch(input, init);
+      };
+    };
+    for (const mode of ["refuse", "throw", "hang"] as const) {
+      const l = await freshLogin();
+      const cookie = cookiePair(l.setCookie)!;
+      failKill(mode);
+      // The test's own 4 s deadline: a logout that never answers fails this block by assertion instead of
+      // leaving the process to exit with the request still pending.
+      let deadline: ReturnType<typeof setTimeout> | undefined;
+      const answered = await Promise.race([
+        postAdmin(env, "/admin/auth/logout", {}, { cookie, origin: ORIGIN }),
+        new Promise<null>((resolve) => { deadline = setTimeout(() => resolve(null), 4000); }),
+      ]);
+      clearTimeout(deadline);
+      (stub as { fetch: typeof stub.fetch }).fetch = realFetch;
+      ok(`logout with a failed revocation (${mode}) answers within 4 s`, answered !== null);
+      if (answered === null) continue;
+      const out = answered;
+      ok(`logout with a failed revocation (${mode}) answers 503`, out.status === 503);
+      ok(`logout with a failed revocation (${mode}) answers ok:false`, out.json.ok === false);
+      ok(`logout with a failed revocation (${mode}) still clears the cookie`, /Max-Age=0/i.test(out.setCookie ?? ""));
+      ok(`after a failed revocation (${mode}) the session still authorises, which is what the 503 reports`, (await getAdmin(env, "/admin/whoami", { cookie })).status === 200);
+    }
+    const l = await freshLogin();
+    const out = await postAdmin(env, "/admin/auth/logout", {}, { cookie: cookiePair(l.setCookie)!, origin: ORIGIN });
+    ok("a logout whose revocation lands answers 200 ok:true", out.status === 200 && out.json.ok === true);
+  }
+
   // ============================================================================================
   // 4. ANTI-DOWNGRADE: an INVALID / EXPIRED / TAMPERED session cookie is rejected AND never falls
   //    through to the token path, even with ADMIN_TOKEN configured.
