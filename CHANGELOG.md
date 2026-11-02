@@ -15,6 +15,15 @@ format major stays 0), specified normatively in the format specification of the
 `downpipe` reader repository, not an entry here. This changelog
 tracks the engine Worker, its scheduler Durable Object and the admin API.
 
+## [0.3.10] - 2026-11-01
+
+### Fixed
+
+- After an update, the post-update canary flight writes, seals, reads back, restores and verifies on the new version.
+- A dead verdict on the new version rolls the update back. An ailing or pending verdict keeps it with confirmation pending, and the hourly canary confirms it.
+- A gradual ramp rolls back when the canary reads dead on the ramped version. It also rolls back when the canary sang before the ramp and does not sing after it.
+- A ramp completes when a verification that lands on the ramped version keeps it. A keep that lands elsewhere is inconclusive, and the ramp stays as it is.
+
 ## [0.3.9] - 2026-10-25
 
 ### Changed
@@ -1231,6 +1240,8 @@ This release includes the 0.3.4 changes.
 - A native identity-provider bridge: OIDC, OAuth2 and a native SAML service
   provider across the supported providers.
 
+[0.3.10]: https://github.com/downpipes-io/engine/releases/tag/v0.3.10
+[0.3.9]: https://github.com/downpipes-io/engine/releases/tag/v0.3.9
 [0.3.8]: https://github.com/downpipes-io/engine/releases/tag/v0.3.8
 [0.3.7]: https://github.com/downpipes-io/engine/releases/tag/v0.3.7
 [0.3.5]: https://github.com/downpipes-io/engine/releases/tag/v0.3.5

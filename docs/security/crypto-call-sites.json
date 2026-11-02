@@ -375,11 +375,6 @@
     "detail": "getRandomValues"
   },
   {
-    "file": "src/admin/update-gate.ts",
-    "kind": "random",
-    "detail": "randomUUID"
-  },
-  {
     "file": "src/attest/challenge.ts",
     "kind": "random",
     "detail": "getRandomValues"

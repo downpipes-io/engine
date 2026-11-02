@@ -291,11 +291,18 @@ export function judgeProofs(
       lapsed.push({ surface, why: claim.why, detail: `since "${claim.since}" is not a date, so the claim cannot be aged and cannot be believed` });
       continue;
     }
-    if (age > EXPIRY_DAYS) {
+    // A claim may carry a SHORTER window than a row, never a longer one. A window that is not a positive
+    // whole number of days cannot be read, so the claim lapses rather than falling back to the long window.
+    const window = claim.windowDays === undefined ? EXPIRY_DAYS : claim.windowDays;
+    if (!Number.isInteger(window) || window <= 0 || window > EXPIRY_DAYS) {
+      lapsed.push({ surface, why: claim.why, detail: `windowDays ${String(claim.windowDays)} is not a whole number of days from 1 to ${EXPIRY_DAYS}, so the claim cannot be aged` });
+      continue;
+    }
+    if (age > window) {
       lapsed.push({
         surface,
         why: claim.why,
-        detail: `no counting ${claim.banks} row, and the claim that ${claim.repo}/${claim.prover} covers it has stood unbacked for ${Math.round(age)} days`,
+        detail: `no counting ${claim.banks} row, and the claim that ${claim.repo}/${claim.prover} covers it has stood unbacked for ${Math.round(age)} days, past its ${window}-day window`,
       });
     }
   }

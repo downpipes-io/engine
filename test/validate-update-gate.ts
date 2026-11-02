@@ -6,12 +6,16 @@
 // deploy, no network beyond the stub. Run:
 //   node test/validate-update-gate.ts
 
-import { makeHealthGate, CRITICAL_PREFLIGHT_CHECK_IDS } from "../src/admin/update-gate.ts";
-import { confirmUpdateIfSettled } from "../src/cron/notify-passes.ts";
+import { x25519 } from "@noble/curves/ed25519.js";
+import { CRITICAL_PREFLIGHT_CHECK_IDS, makeHealthGate, probeSettleVerdict } from "../src/admin/update-gate.ts";
+import { settleAfterRamp } from "../src/admin/update-ramp.ts";
 import { decideKeep } from "../src/admin/update-types.ts";
-import { ENGINE_VERSION } from "../src/format/version.ts";
 import type { CanaryCheckResult } from "../src/canary/types.ts";
+import { confirmUpdateIfSettled } from "../src/cron/notify-passes.ts";
+import { b64urlEncode, concat } from "../src/crypto/bytes.ts";
+import { mlkemKeygen } from "../src/crypto/pq.ts";
 import type { Env } from "../src/env.d.ts";
+import { ENGINE_VERSION } from "../src/format/version.ts";
 import { verdictReached } from "./lib/verdict-guard.ts";
 
 let failures = 0;
@@ -234,9 +238,141 @@ function testBreakGlassOnlyCanNowRollBack(): void {
   ok("a self-check failure alongside an incomplete flight still keeps", decideKeep("alive", "ailing", false).keep === true);
 }
 
+// ---- the REAL gate, flown for real ----
+// Every other settle test stubs flyNow. These drive makeHealthGate's own flight (runCanaryCycle: write probe,
+// seal, read-back, decrypt, restore, verify) against an in-memory R2 binding, so the run id the gate mints
+// has to survive the seal path (format/writer.ts decodeULID, reached through buildArchive).
+
+function randomBytes(n: number): Uint8Array {
+  return crypto.getRandomValues(new Uint8Array(n));
+}
+
+// memoryBucket is a working R2Bucket double. When corruptRestored is set, every read of an object under the
+// canary cell's restored/ directory returns its bytes with one bit flipped, which is how a destination that
+// returns wrong bytes looks to the flight's restore-verify step.
+function memoryBucket(corruptRestored: boolean): Record<string, unknown> {
+  const store = new Map<string, Uint8Array>();
+  const drain = async (body: unknown): Promise<Uint8Array> => {
+    if (body instanceof Uint8Array) return body;
+    if (body instanceof ArrayBuffer) return new Uint8Array(body);
+    const reader = (body as ReadableStream<Uint8Array>).getReader();
+    const parts: Uint8Array[] = [];
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) parts.push(value);
+    }
+    return concat(...parts);
+  };
+  const objectFor = (key: string, stored: Uint8Array): Record<string, unknown> => {
+    const bytes = stored.slice();
+    if (corruptRestored && key.includes("/restored/") && bytes.length > 0) {
+      const mid = bytes.length >> 1;
+      bytes[mid] = (bytes[mid] ?? 0) ^ 0x01;
+    }
+    return {
+      key,
+      size: bytes.length,
+      etag: `e${bytes.length}`,
+      httpEtag: `"e${bytes.length}"`,
+      uploaded: new Date(0),
+      arrayBuffer: async () => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
+      body: new ReadableStream<Uint8Array>({
+        start(c): void {
+          c.enqueue(bytes);
+          c.close();
+        },
+      }),
+    };
+  };
+  return {
+    put: async (key: string, body: unknown): Promise<Record<string, unknown>> => {
+      const bytes = await drain(body);
+      store.set(key, bytes);
+      return objectFor(key, bytes);
+    },
+    get: async (key: string): Promise<Record<string, unknown> | null> => {
+      const v = store.get(key);
+      return v ? objectFor(key, v) : null;
+    },
+    head: async (key: string): Promise<Record<string, unknown> | null> => {
+      const v = store.get(key);
+      return v ? objectFor(key, v) : null;
+    },
+    delete: async (key: string): Promise<void> => {
+      store.delete(key);
+    },
+    list: async (opts?: { prefix?: string }): Promise<{ objects: Array<Record<string, unknown>>; truncated: false }> => {
+      const prefix = opts?.prefix ?? "";
+      return { objects: [...store.entries()].filter(([k]) => k.startsWith(prefix)).map(([k, v]) => objectFor(k, v)), truncated: false };
+    },
+  };
+}
+
+function realFlightEnv(corruptRestored: boolean): Env {
+  const xk = x25519.keygen();
+  return {
+    DEST_KIND: "r2",
+    DEST_R2: memoryBucket(corruptRestored),
+    SIGNER_PRIVATE: b64urlEncode(concat(randomBytes(32), randomBytes(32))),
+    BREAK_GLASS_PUBLIC: b64urlEncode(concat(xk.publicKey, mlkemKeygen(randomBytes(64)).encapKey)),
+  } as unknown as Env;
+}
+
+// flightScheduler answers the routes the gate and the flight reach: the canary view (baseline "alive"),
+// the tick-info round trip the self-check needs, and an empty answer for everything else.
+function flightScheduler(): DurableObjectStub {
+  const json = (v: unknown): Response => new Response(JSON.stringify(v), { status: 200, headers: { "content-type": "application/json" } });
+  return {
+    async fetch(input: RequestInfo | URL): Promise<Response> {
+      const path = new URL(typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url).pathname;
+      if (path === "/canary") return json({ status: "alive" });
+      if (path === "/tick-info") return json({ lastTickAt: Date.now() });
+      if (path === "/downpipes") return json([]);
+      return json({});
+    },
+  } as unknown as DurableObjectStub;
+}
+
+async function testRealGateFlight(): Promise<void> {
+  console.log("-- the real gate flies a real canary --");
+  // (a) the real flyNowMeasured against a healthy in-memory destination.
+  {
+    const gate = makeHealthGate(realFlightEnv(false), flightScheduler(), ENGINE_VERSION);
+    const flown = await gate.flyNowMeasured?.();
+    ok(`[real-gate] flyNowMeasured on a healthy destination is alive (got ${flown?.status})`, flown?.status === "alive");
+    ok(`[real-gate] ...and it measured something (got ${flown?.measured})`, flown?.measured === true);
+  }
+  // (b) through probeSettleVerdict, nothing stubbed.
+  const noSleep = { backoffMs: [1], selfCheckBackoffMs: 1, sleep: async () => {} };
+  {
+    const gate = makeHealthGate(realFlightEnv(false), flightScheduler(), ENGINE_VERSION);
+    const probe = await probeSettleVerdict(gate, noSleep);
+    ok(`[real-gate] the settle probe on a healthy destination reads alive (got ${probe.verdict})`, probe.verdict === "alive");
+    ok(`[real-gate] ...on the first flight, with no retry (attempts: ${probe.attempts.length})`, probe.attempts.length === 1 && probe.attempts[0]?.ok === true);
+  }
+  {
+    const gate = makeHealthGate(realFlightEnv(true), flightScheduler(), ENGINE_VERSION);
+    const probe = await probeSettleVerdict(gate, noSleep);
+    ok(`[real-gate] a destination that returns wrong bytes reads dead (got ${probe.verdict})`, probe.verdict === "dead");
+    ok(`[real-gate] ...and a dead flight is never retried (attempts: ${probe.attempts.length})`, probe.attempts.length === 1);
+  }
+  // (c) the ramp settle, real gate, baseline alive, healthy destination: the build is kept and no deploy is attempted.
+  {
+    const calls: string[] = [];
+    const driver = new Proxy({}, { get: (_t, prop) => async () => { calls.push(String(prop)); return undefined; } }) as never;
+    const gate = makeHealthGate(realFlightEnv(false), flightScheduler(), ENGINE_VERSION);
+    const settled = await settleAfterRamp(driver, gate, { fromVersion: "v-old", toVersion: "v-new", recommendedVersion: ENGINE_VERSION });
+    ok(`[real-gate] ramp settle keeps a healthy ramped build (outcome ${settled.outcome}; reason: ${settled.reason ?? "none"})`, settled.outcome === "applied");
+    ok(`[real-gate] ...with canaryVerdict alive (got ${settled.canaryVerdict})`, settled.canaryVerdict === "alive");
+    ok(`[real-gate] ...and no rollback deploy was attempted (calls: ${calls.join(",") || "none"})`, calls.length === 0);
+  }
+}
+
 async function main(): Promise<void> {
   await testCriticalAllowlist();
   await testSelfCheck();
+  await testRealGateFlight();
   await testConfirmUpdateIfSettled();
   testBreakGlassOnlyCanNowRollBack();
   console.log(failures === 0 ? "\nUPDATE-GATE VECTORS PASS" : `\n${failures} FAILURE(S)`);

@@ -7,15 +7,16 @@
 import { runCanaryCycle } from "../canary/cycle.ts";
 import type { CanaryLiveness, CanaryView } from "../canary/types.ts";
 import { destBuildFaultOf } from "../dest/build-health.ts";
-import { buildDestination, resolveDefaultDestConfig, type RuntimeDestConfig } from "../dest/factory.ts";
+import { buildDestination, type RuntimeDestConfig, resolveDefaultDestConfig } from "../dest/factory.ts";
+import { doURL } from "../do-url.ts";
 import type { Env } from "../env.d.ts";
 import { ENGINE_VERSION } from "../format/version.ts";
+import { newULID } from "../sched/scheduler-helpers.ts";
 import { loadConfigWrapKey } from "./config-secret.ts";
 import { bumpAdminCounter } from "./diag-counters.ts";
 import { type AdminCounterName, unwrapFaultCauseOf } from "./diag-records.ts";
 import { selfCheckDegradationCounter } from "./posture-counters.ts";
 import { runPreflight } from "./preflight.ts";
-import { doURL } from "../do-url.ts";
 import type { HealthGate, StepLog } from "./update-apply.ts";
 
 // CRITICAL_PREFLIGHT_CHECK_IDS is the narrow allowlist selfCheck gates on: a
@@ -169,7 +170,8 @@ export function makeHealthGate(env: Env, scheduler: DurableObjectStub, recommend
     } catch {
       destinationId = null; // null = the account/env default; runCanaryCycle resolves it
     }
-    const run = { runId: `update-gate-${crypto.randomUUID()}`, runSeq: 0, destinationId, cleanupRunId: null };
+    // The run id is a ULID: the seal path decodes it (format/writer.ts decodeULID), as it does for the hourly flight.
+    const run = { runId: newULID(Date.now()), runSeq: 0, destinationId, cleanupRunId: null };
     // runCanaryCycle never throws and touches only the isolated _CANARY/ cell; its status IS the verdict.
     const result = await runCanaryCycle(env, scheduler, run);
     const measured = result.aspects.some((a) => a.outcome !== "skip");
