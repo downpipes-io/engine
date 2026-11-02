@@ -449,18 +449,6 @@
     "path": "/accounts/{}/magic/bgp/filter_profiles",
     "why": null
   },
-  "magic-cloud-onramps": {
-    "body": {
-      "cloud_type": "AWS",
-      "dynamic_routing": false,
-      "install_routes_in_cloud": false,
-      "install_routes_in_magic_wan": false,
-      "name": "dp-v60491",
-      "type": "OnrampTypeSingle"
-    },
-    "path": "/accounts/{}/magic/cloud/onramps",
-    "why": null
-  },
   "mnm-rules": {
     "body": {
       "duration": "1m0s",

@@ -80,8 +80,7 @@ export const CF_CONFIG_SURFACES_GAPS: CfConfigSurface[] = [
   { id: "flagship-apps", scope: "account", restoreTier: "ordered", read: list((i) => `/accounts/${i.accountId}/flagship/apps`) },
 
   // ---- account: registrar control layer. Domain lapse or hijack is existential and nobody archives it. ----
-  { id: "registrar-domains", scope: "account", restoreTier: "reprovision", read: one((i) => `/accounts/${i.accountId}/registrar/domains`) }, /* one(), not list(): the registrar API errors "Page bigger than the number of pages" on page 1 of an EMPTY collection, so paginating it fails precisely on the accounts that have no domains */ /* transfer locks and auth codes are registry state, never replayable by API */
-  { id: "registrar-registrations", scope: "account", restoreTier: "reprovision", read: listCapped((i) => `/accounts/${i.accountId}/registrar/registrations`, 50) },
+  { id: "registrar-registrations", scope: "account", restoreTier: "reprovision", read: listCapped((i) => `/accounts/${i.accountId}/registrar/registrations`, 50) }, /* transfer locks and auth codes are registry state, never replayable by API */
 
   // ---- account: store and namespace inventories. These are the CONFIGURATION of stores whose CONTENTS
   // the engine already backs up through its own source types, so they complete the picture rather than
