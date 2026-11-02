@@ -1,6 +1,6 @@
 {
   "name": "@downpipes/engine",
-  "version": "0.3.9",
+  "version": "0.3.10",
   "private": true,
   "type": "module",
   "engines": {
@@ -400,10 +400,23 @@
     "wrangler": "~4.140.0"
   },
   "overrides": {
+    "@stryker-mutator/core": {
+      "minimatch": "^11.0.1"
+    },
+    "@typescript-eslint/typescript-estree": {
+      "minimatch": "^11.0.1"
+    },
+    "test-exclude": {
+      "glob": {
+        ".": "^14.0.2",
+        "minimatch": "^11.0.1"
+      },
+      "minimatch": "^11.0.1"
+    },
     "browserslist": "^4.28.8",
     "brace-expansion": "^5.0.12",
     "fast-uri": "^3.1.9",
-    "qs": "^6.16.0",
+    "qs": "6.16.1",
     "sharp": "^0.35.4",
     "smol-toml": "^1.8.0",
     "undici": "^7.30.1",

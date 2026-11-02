@@ -83,13 +83,9 @@ jobs:
     needs: [lint, typecheck, push-dedupe]
     if: needs.push-dedupe.outputs.duplicate != 'true'
     runs-on: ubuntu-24.04
-    # 90, raised from 25. The 25-minute ceiling was itself a raise from 10 that still ran into the same
-    # shape it was meant to fix: on the public export (engine-public-staging run 34108195141, with a real
-    # downpipe sibling checked out for the first time since that sibling went public) this job took 20m28s
-    # against the 25-minute ceiling, 82 per cent of it -- the same marginal band the previous raise's own
-    # ceiling audit flagged as the one to watch. The sibling companion job below (Coverage) was CANCELLED
-    # outright at its old 45-minute ceiling in that same run (45:16 wall clock), taking CI Success down with
-    # it. Both jobs run the same underlying validator chain (this one without c8, Coverage with it), so a
+    # 90 minutes. On the public export, with a real downpipe sibling checked out, a 25-minute ceiling leaves
+    # this job in a marginal band. The sibling companion job below (Coverage) needs the same headroom: a
+    # cancellation at its ceiling takes CI Success down with it. Both jobs run the same underlying validator chain (this one without c8, Coverage with it), so a
     # ceiling that is merely adequate for one is not safely adequate for the other, and the two are raised
     # together here rather than independently re-measured and re-argued job by job.
     #
@@ -112,9 +108,8 @@ jobs:
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with: { egress-policy: audit }
       # Both repos are checked out into named subdirectories of GITHUB_WORKSPACE, matching the
-      # e2e-writer-reader job further down this file. The Go reader used to use `path: ../downpipe`,
-      # which resolves OUTSIDE GITHUB_WORKSPACE; actions/checkout refuses that, so this step could
-      # not succeed on a runner and took the whole validate job with it.
+      # e2e-writer-reader job further down this file. The Go reader is checked out into a named subdirectory, not `path: ../downpipe`,
+      # which resolves OUTSIDE GITHUB_WORKSPACE; actions/checkout refuses that path.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { path: engine, persist-credentials: false }
       - name: Checkout the Go reader (for the format schema cross-check)
@@ -123,7 +118,7 @@ jobs:
           repository: downpipes-io/downpipe
           path: downpipe
           # pinned to the public downpipe release tag that the private source checks out, so the cross-implementation validators against the Go reader run here too
-          ref: v0.3.5
+          ref: v0.3.6
           persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with: { node-version: "${{ env.NODE_VERSION }}" }
@@ -253,11 +248,9 @@ jobs:
     needs: [validate]
     if: (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-24.04
-    # 90, raised from 45. Each previous raise (20 -> 35 -> 45) chased the same cancellation shape without
-    # closing it: this job was CANCELLED outright at the 45-minute ceiling on the public export
-    # (engine-public-staging run 34108195141, started 09:57:01Z, killed 10:42:17Z at exactly 45:16), taking
-    # the required `CI Success` check down with it (every other job in that run, including the sibling
-    # `validate` job below at 82 per cent of ITS ceiling, passed). It PASSES on its own merits: .c8rc.json's
+    # 90 minutes. A cancellation at the ceiling on the public export takes the required `CI Success` check
+    # down with it. The sibling `validate` job above runs the same validator chain and carries the same
+    # 90-minute ceiling. Coverage PASSES on its own merits: .c8rc.json's
     # `//thresholds` note says plainly that 59/31/85/59 are a RATCHET set just under the measured figures to
     # block a regression, deliberately not the 90 standard, and the cancellation is the whole failure, not a
     # genuine threshold miss.
@@ -284,7 +277,7 @@ jobs:
           repository: downpipes-io/downpipe
           path: downpipe
           # pinned to the public downpipe release tag that the private source checks out, so the cross-implementation validators against the Go reader run here too
-          ref: v0.3.5
+          ref: v0.3.6
           persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with: { node-version: "${{ env.NODE_VERSION }}" }
@@ -376,15 +369,14 @@ jobs:
       # strict superset of it, so the two cannot disagree in a direction that hurts: if this line fails
       # the gate must fail too, and if the gate is ever broken into passing, this line still blocks.
       #
-      # THREE OUTCOMES OUT OF A COMMAND THAT HAS TWO, and this step was one line until it cost a night.
+      # THREE OUTCOMES OUT OF A COMMAND THAT HAS TWO.
       # `npm audit` exits 1 both when it finds an advisory at or above --audit-level and when it never
-      # reached the advisory endpoint at all, so the exit code alone cannot say which happened. On
-      # run 31266196222 on main logged `read ECONNRESET` against registry.npmjs.org and
-      # `npm error audit endpoint returned an error`, exited 1, and reddened main with a dependency
-      # verdict it had not formed. Two other runs at the SAME 40-character sha, 31264913802 and
-      # 31264908120, were green in this job, which is what makes it a transport fault rather than the
-      # tree. Reproduced away from CI by pointing npm at a dead registry: identical output, identical
-      # exit 1, and a critical advisory planted in a scratch production tree gives the same 1.
+      # reached the advisory endpoint at all, so the exit code alone cannot say which happened. A
+      # transport fault logs `read ECONNRESET` against registry.npmjs.org and
+      # `npm error audit endpoint returned an error`, exits 1, and would redden main with a dependency
+      # verdict it had not formed. The same sha is green when the registry answers, which is what makes it
+      # a transport fault rather than the tree. Pointing npm at a dead registry gives identical output and
+      # an identical exit 1, and a critical advisory planted in a scratch production tree gives the same 1.
       #
       # So the transport case is separated from the finding, and NEITHER of them may exit 0. A retry
       # survives one reset. A registry that is unreachable on every attempt REFUSES, non-zero and by
@@ -735,10 +727,7 @@ jobs:
     # restore. Proves the two halves agree on real bytes in the production direction, and that
     # tamper-evidence holds, in CI, not just by manual discipline.
     name: Writer->Reader interop demo (engine writes, Go reader restores + rejects tamper)
-    # The Go reader is a SIBLING checkout. It used to come from a private copy of the reader and needed
-    # the cross-repo token, so on pull request #17 (run 30282875482) it failed at the checkout on a
-    # Dependabot pull request and skipped the write, the restore and the tamper rejection behind it. The
-    # checkout is now of the public reader and needs no token. The job still carries the same Dependabot
+    # The Go reader is a SIBLING checkout of the public reader and needs no token. The job carries the same Dependabot
     # condition as `validate`, because the ci-success mirror at the foot of this file reads it
     # (CROSS_REPO_MAY_SKIP); see the probe job's header.
     runs-on: ubuntu-24.04
@@ -760,7 +749,7 @@ jobs:
           repository: downpipes-io/downpipe
           path: downpipe
           # pinned to the public downpipe release tag that the private source checks out, so the cross-implementation validators against the Go reader run here too
-          ref: v0.3.5
+          ref: v0.3.6
           persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with: { node-version: "${{ env.NODE_VERSION }}" }

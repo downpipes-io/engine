@@ -32,7 +32,7 @@ import { rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { cfConfigCatalogue } from "../src/sources/cf-config-catalogue.ts";
-import { LIVE_ROUTE_ELSEWHERE, NO_LIVE_ROUTE_HERE, PROVEN_WRITE_SURFACES } from "../src/sources/cf-config-write-generated.ts";
+import { LIVE_ROUTE_ELSEWHERE, type LiveRouteElsewhere, NO_LIVE_ROUTE_HERE, PROVEN_WRITE_SURFACES } from "../src/sources/cf-config-write-generated.ts";
 import { cfWriterFingerprints } from "../src/sources/cf-config-writer-fingerprint.ts";
 import {
   appendRows,
@@ -211,12 +211,43 @@ for (const cause of [...LIVE_KINDS].length > 0 ? ["counted", "writer-changed", "
 
 // AN EXEMPTION THAT NOTHING BACKS, AGED PAST THE WINDOW, LAPSES. Driven against a clock far enough forward
 // that every LIVE_ROUTE_ELSEWHERE claim has outlived its window with no row behind it.
-const farFuture = new Date(Date.parse("2026-07-31T00:00:00Z") + (EXPIRY_DAYS + 2) * 86_400_000);
+const newestSince = Math.max(...[...LIVE_ROUTE_ELSEWHERE.values()].map((c) => Date.parse(c.since)));
+const farFuture = new Date(newestSince + (EXPIRY_DAYS + 2) * 86_400_000);
 const lapsedThen = judgeProofs([], fps, productPath, farFuture);
 check(
   lapsedThen.lapsed.length === LIVE_ROUTE_ELSEWHERE.size,
   `an exemption claiming a prover elsewhere lapses when no row of its kind is ever banked (${lapsedThen.lapsed.length} of ${LIVE_ROUTE_ELSEWHERE.size} lapsed at +${EXPIRY_DAYS + 2} days)`,
 );
+// A claim with its own shorter window lapses when THAT window ends, not at EXPIRY_DAYS: it stands the day
+// before its window ends and has lapsed the day after.
+for (const [id, claim] of LIVE_ROUTE_ELSEWHERE) {
+  if (claim.windowDays === undefined) continue;
+  const at = (days: number) => new Date(Date.parse(claim.since) + days * 86_400_000);
+  const before = judgeProofs([], fps, productPath, at(claim.windowDays - 1)).lapsed.some((l) => l.surface === id);
+  const after = judgeProofs([], fps, productPath, at(claim.windowDays + 1)).lapsed.some((l) => l.surface === id);
+  check(!before && after, `${id}'s ${claim.windowDays}-day window is the one that ages it (standing at day ${claim.windowDays - 1}: ${!before}, lapsed at day ${claim.windowDays + 1}: ${after})`);
+  const onLastDay = judgeProofs([], fps, productPath, at(claim.windowDays)).lapsed.some((l) => l.surface === id);
+  check(!onLastDay, `${id}'s claim still stands on day ${claim.windowDays}, the last day of its window`);
+}
+// A window that cannot be read lapses the claim at once, even one day after its since date, rather than
+// falling back to EXPIRY_DAYS. Driven by putting each unreadable window on a real entry, then putting the
+// entry back.
+const [windowProbeId, real] = [...LIVE_ROUTE_ELSEWHERE.entries()][0] ?? [];
+check(windowProbeId !== undefined && real !== undefined, "there is a LIVE_ROUTE_ELSEWHERE entry to put an unreadable window on");
+if (windowProbeId !== undefined && real !== undefined) {
+  const entries = LIVE_ROUTE_ELSEWHERE as Map<string, LiveRouteElsewhere>;
+  const dayOne = new Date(Date.parse(real.since) + 86_400_000);
+  for (const bad of [0, -1, 1.5, EXPIRY_DAYS + 1, Number.NaN, Number.POSITIVE_INFINITY, "14" as unknown as number, null as unknown as number]) {
+    entries.set(windowProbeId, { ...real, windowDays: bad });
+    let hit: string | undefined;
+    try {
+      hit = judgeProofs([], fps, productPath, dayOne).lapsed.find((l) => l.surface === windowProbeId)?.detail;
+    } finally {
+      entries.set(windowProbeId, real);
+    }
+    check(hit?.includes("windowDays") === true, `a windowDays of ${typeof bad === "string" ? JSON.stringify(bad) : String(bad)} lapses ${windowProbeId}'s claim on day 1 instead of reading as ${EXPIRY_DAYS} days`);
+  }
+}
 // And it does NOT lapse while a counting row of its own kind exists, or the check would just be a clock.
 const elsewhereId = [...LIVE_ROUTE_ELSEWHERE.keys()][0];
 if (elsewhereId !== undefined) {
@@ -242,6 +273,10 @@ const notProven = [...LIVE_ROUTE_ELSEWHERE.keys()].filter((id) => !PROVEN_WRITE_
 check(notProven.length === 0, `every LIVE_ROUTE_ELSEWHERE entry is a proven surface${notProven.length === 0 ? "" : `: ${notProven.join(", ")}`}`);
 for (const [id, claim] of LIVE_ROUTE_ELSEWHERE) {
   check(!Number.isNaN(Date.parse(claim.since)), `${id}'s exemption carries a parseable since date, so it can be aged`);
+  check(
+    claim.windowDays === undefined || (Number.isInteger(claim.windowDays) && claim.windowDays >= 1 && claim.windowDays <= EXPIRY_DAYS),
+    `${id}'s exemption window is absent or a whole number of days from 1 to ${EXPIRY_DAYS} (${String(claim.windowDays ?? EXPIRY_DAYS)})`,
+  );
   check(LIVE_KINDS.has(claim.banks), `${id}'s exemption names a live ledger kind (${claim.banks}), so something could satisfy it`);
   check(claim.prover.trim() !== "" && claim.repo.trim() !== "", `${id}'s exemption names a prover and a repo, so the claim can be checked by hand as well as by clock`);
 }

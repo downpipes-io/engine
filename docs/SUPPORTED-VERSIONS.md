@@ -16,13 +16,13 @@ and how the engine tells an operator that the running release is near its end of
 
 ### Example
 
-`0.3.8` ships at `2026-10-11T02:44:52.944Z`, the time the signed channel records for it.
+`0.3.9` ships at `2026-10-26T09:15:03.134Z`, the time the signed channel records for it.
 
-- `0.3.7` is supported until `2027-01-09T02:44:52.944Z`, which is 90 days later.
-- From `2026-12-10T02:44:52.944Z`, 30 days before that date, the console shows a notice for `0.3.7`.
-- After `2027-01-09T02:44:52.944Z`, `0.3.7` is end of life, and the console shows a stronger notice.
-- `0.3.8` is supported until 90 days after the time the channel records for `0.3.9`.
-- `0.3.9` is the latest release, so it has no `supportedUntil`.
+- `0.3.8` is supported until `2027-01-24T09:15:03.134Z`, which is 90 days later.
+- From `2026-12-25T09:15:03.134Z`, 30 days before that date, the console shows a notice for `0.3.8`.
+- After `2027-01-24T09:15:03.134Z`, `0.3.8` is end of life, and the console shows a stronger notice.
+- `0.3.9` is supported until 90 days after the time the channel records for `0.3.10`.
+- `0.3.10` is the latest release, so it has no `supportedUntil`.
 
 The severity of a security fix, and the time to ship it, follow the remediation SLA in
 [SECURITY.md](../SECURITY.md#risk-based-remediation-sla).
@@ -35,7 +35,8 @@ release version to the time it shipped:
 ```jsonc
 "releases": {
   "0.3.7": "2026-10-05T08:36:27.777Z",
-  "0.3.8": "2026-10-11T02:44:52.944Z"
+  "0.3.8": "2026-10-11T02:44:52.944Z",
+  "0.3.9": "2026-10-26T09:15:03.134Z"
 }
 ```
 

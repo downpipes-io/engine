@@ -247,11 +247,11 @@ downpipes makes no claim against the OWASP ASVS 5.0 standard for the platform. A
 assessment of the identity and SSO component records no high or critical findings. It records three gaps, and none of them is an
 authentication bypass. This is their status in the code:
 
-- **G1 (low), fixed: per-caller rate limit on the IdP connection-management routes.** All
+- **G1 (low), closed: per-caller rate limit on the IdP connection-management routes.** All
   four (`POST /idp/connections`, `/delete`, `/enabled` and `/cert`) call `rateLimited` after
   their `keys.ceremony` gate (`src/admin/router-identity.ts:867`,
   `895`, `909`, `931`).
-- **G2 (low), fixed: SAML assertion id replay.** The ACS refuses an assertion id it has
+- **G2 (low), closed: SAML assertion id replay.** The ACS refuses an assertion id it has
   seen before `notOnOrAfter`
   (`src/sched/scheduler-do-idp-saml.ts:224-227`), and the alarm sweep prunes the expired
   ids (`src/sched/scheduler-do-scheduling.ts:775-776`).

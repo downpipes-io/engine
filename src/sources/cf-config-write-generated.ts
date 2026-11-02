@@ -196,6 +196,8 @@ export interface LiveRouteElsewhere {
   banks: string;
   /** The date the route was established, ISO. Read as a claim with a clock on it, not as a fact. */
   since: string;
+  /** Days the claim stands unbacked, from 1 to the ledger's EXPIRY_DAYS. Absent means EXPIRY_DAYS. */
+  windowDays?: number;
   why: string;
 }
 export const LIVE_ROUTE_ELSEWHERE: ReadonlyMap<string, LiveRouteElsewhere> = new Map([
@@ -205,8 +207,9 @@ export const LIVE_ROUTE_ELSEWHERE: ReadonlyMap<string, LiveRouteElsewhere> = new
       prover: "spec/journeys/cf-config-roundtrip.spec.ts",
       repo: "harness",
       banks: "console-product",
-      since: "2026-07-31",
-      why: "hand-written writer, and no engine harness drives it. The console round trip arms a WAF custom-phase rule, damages it, restores through the console and matches on description because the restore mints fresh server ids",
+      since: "2026-10-29",
+      windowDays: 14,
+      why: "hand-written writer, and no engine harness drives it. The console round trip arms a WAF custom-phase rule, damages it, restores through the console and matches on description because the restore mints fresh server ids. No console-product row is banked and no recent run is on record, so the claim is unproven and stands for 14 days",
     },
   ],
   [
@@ -215,8 +218,9 @@ export const LIVE_ROUTE_ELSEWHERE: ReadonlyMap<string, LiveRouteElsewhere> = new
       prover: "spec/journeys/cf-config-roundtrip.spec.ts",
       repo: "harness",
       banks: "console-product",
-      since: "2026-07-31",
-      why: "the inline hand-written keyed-member writer, PATCHing only changed members at their own endpoints. No engine harness reaches it; the console round trip overwrites a member and reads it back",
+      since: "2026-10-29",
+      windowDays: 14,
+      why: "the inline hand-written keyed-member writer, PATCHing only changed members at their own endpoints. No engine harness reaches it; the console round trip overwrites a member and reads it back. No console-product row is banked and no recent run is on record, so the claim is unproven and stands for 14 days",
     },
   ],
 ]);

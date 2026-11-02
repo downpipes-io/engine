@@ -48,9 +48,8 @@
 // configuration fault in CI, where the ref is always there. CI sets it.
 //
 // A RELEASE-TAG PIN is graded against the newest release tag, not against main. CI checks the reader out at
-// a v* tag on purpose, so every later commit on the reader's main (a SECURITY.md edit is enough) made that
-// checkout "behind" and turned the nightly red with nothing graded having changed (engine run 38276133304,
-// 12 Oct). A checkout whose HEAD is exactly the newest v* tag it has fetched is fresh. One at an OLDER v* tag
+// a v* tag on purpose, so every later commit on the reader's main (a SECURITY.md edit is enough) makes that
+// checkout "behind" and would turn the nightly red with nothing graded having changed. A checkout whose HEAD is exactly the newest v* tag it has fetched is fresh. One at an OLDER v* tag
 // while a newer one exists is exit 1, "pin bump owed": a finding, and the hatch above does not suppress it,
 // because suppressing it is how an engine silently falls behind a released reader.
 //
