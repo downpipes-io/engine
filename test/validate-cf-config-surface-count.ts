@@ -54,15 +54,19 @@ import { verdictReached } from "./lib/verdict-guard.ts";
 // across the website, docs and console still cites "216 surfaces" and needs a later (P5) regeneration
 // from the canonical line this validator prints.
 const DOCUMENTED = {
-  total: 313,
+  total: 309,
   inband: 85,
   // `proven` is the count that may be QUOTED as automated restore. `inband` counts every surface
   // carrying a write(), most of which are generated from Cloudflare's schema and are off by default.
   proven: 60,
-  tiers: { idempotent: 176, ordered: 76, reprovision: 61 },
+  tiers: { idempotent: 175, ordered: 76, reprovision: 58 },
   zone: 118,
-  account: 195,
+  account: 191,
 };
+
+// Surfaces for Cloudflare APIs that Cloudflare has retired. None of them may be in the registry:
+// the legacy Registrar domains API and the Magic Cloud Networking API (on-ramps, providers, catalog syncs).
+const RETIRED_SURFACE_IDS = ["registrar-domains", "magic-cloud-onramps", "magic-cloud-providers", "r2-catalog-syncs"];
 
 let failures = 0;
 function check(name: string, expected: number, actual: number): void {
@@ -117,6 +121,14 @@ if (liveTiers.idempotent + liveTiers.ordered + liveTiers.reprovision !== liveTot
 if (liveScope.zone + liveScope.account !== liveTotal) {
   failures += 1;
   console.error(`  FAIL scope counts do not sum to total: ${JSON.stringify(liveScope)} != ${liveTotal}`);
+}
+
+// [1d] no retired Cloudflare API is in the registry
+for (const id of RETIRED_SURFACE_IDS) {
+  if (CF_CONFIG_SURFACES.some((s) => s.id === id)) {
+    failures += 1;
+    console.error(`  FAIL retired surface "${id}" is in the registry`);
+  }
 }
 
 // [2] EMIT the canonical line. Always printed (even on failure, so a CI log shows the live numbers to

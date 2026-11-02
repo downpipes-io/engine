@@ -97,8 +97,6 @@ export const CF_CONFIG_SURFACES_EXPANDED: CfConfigSurface[] = [
   { id: "log-retention-flag", scope: "zone", restoreTier: "idempotent", read: one((i) => `/zones/${i.zoneId}/logs/control/retention/flag`) },
   { id: "cni-cnis", scope: "account", restoreTier: "idempotent", read: listEnvelope((i) => `/accounts/${i.accountId}/cni/cnis`, "items", { moreKey: "next" }) },
   { id: "connectivity-services", scope: "account", restoreTier: "idempotent", read: list((i) => `/accounts/${i.accountId}/connectivity/directory/services`) },
-  { id: "magic-cloud-onramps", scope: "account", restoreTier: "idempotent", read: list((i) => `/accounts/${i.accountId}/magic/cloud/onramps`) },
-  { id: "magic-cloud-providers", scope: "account", restoreTier: "reprovision", read: list((i) => `/accounts/${i.accountId}/magic/cloud/providers`) }, /* value-free: carries secrets */
   { id: "gateway-locations", scope: "account", restoreTier: "idempotent", read: list((i) => `/accounts/${i.accountId}/gateway/locations`) },
   { id: "gateway-proxy-endpoints", scope: "account", restoreTier: "idempotent", read: list((i) => `/accounts/${i.accountId}/gateway/proxy_endpoints`) },
   { id: "gateway-pac-files", scope: "account", restoreTier: "idempotent", read: list((i) => `/accounts/${i.accountId}/gateway/pacfiles`) },
@@ -163,7 +161,6 @@ export const CF_CONFIG_SURFACES_EXPANDED: CfConfigSurface[] = [
   { id: "pipelines", scope: "account", restoreTier: "ordered", read: list((i) => `/accounts/${i.accountId}/pipelines/v1/pipelines`) },
   { id: "workers-custom-domains", scope: "account", restoreTier: "ordered", read: list((i) => `/accounts/${i.accountId}/workers/domains`) },
   { id: "r2-catalog", scope: "account", restoreTier: "ordered", read: list((i) => `/accounts/${i.accountId}/r2-catalog`) },
-  { id: "r2-catalog-syncs", scope: "account", restoreTier: "reprovision", read: list((i) => `/accounts/${i.accountId}/magic/cloud/catalog-syncs`) }, /* value-free: carries secrets */
   { id: "workflows", scope: "account", restoreTier: "ordered", read: listCapped((i) => `/accounts/${i.accountId}/workflows`, 100) },
   { id: "tiered-caching", scope: "zone", restoreTier: "idempotent", read: one((i) => `/zones/${i.zoneId}/argo/tiered_caching`), write: writeSingleObject((i) => `/zones/${i.zoneId}/argo/tiered_caching`, "PATCH", "tiered-caching") },
   { id: "cache-reserve", scope: "zone", restoreTier: "idempotent", read: one((i) => `/zones/${i.zoneId}/cache/cache_reserve`) },

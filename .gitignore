@@ -27,6 +27,8 @@ wrangler.live.toml
 # source bindings, regenerated on every deploy. Never committed (per-deployment, derived).
 wrangler.deploy.toml
 wrangler.*.deploy.toml
+# The filled keystone config: it holds account and resource ids for one deployment, so it is never committed.
+wrangler.keystone.toml
 
 # The real-workerd runtime test (npm run test:runtime) bundles the test Worker entry here on every
 # run via esbuild; it is a derived artefact, never committed.

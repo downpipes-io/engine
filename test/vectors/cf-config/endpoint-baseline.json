@@ -1,7 +1,7 @@
 {
   "_comment": "Drift-guard baseline for engine/src/sources/cf-config-surfaces.ts (test/validate-cf-config-drift.ts). Regenerate after an INTENTIONAL change: node test/validate-cf-config-drift.ts --write-baseline",
-  "surfaceCount": 313,
-  "endpointCount": 451,
+  "surfaceCount": 309,
+  "endpointCount": 447,
   "surfaces": [
     {
       "id": "access-apps",
@@ -919,16 +919,6 @@
       "restoreTier": "ordered"
     },
     {
-      "id": "magic-cloud-onramps",
-      "scope": "account",
-      "restoreTier": "idempotent"
-    },
-    {
-      "id": "magic-cloud-providers",
-      "scope": "account",
-      "restoreTier": "reprovision"
-    },
-    {
       "id": "magic-gre-tunnels",
       "scope": "account",
       "restoreTier": "reprovision"
@@ -1094,11 +1084,6 @@
       "restoreTier": "ordered"
     },
     {
-      "id": "r2-catalog-syncs",
-      "scope": "account",
-      "restoreTier": "reprovision"
-    },
-    {
       "id": "rate-limits",
       "scope": "zone",
       "restoreTier": "idempotent"
@@ -1117,11 +1102,6 @@
       "id": "regional-tiered-cache",
       "scope": "zone",
       "restoreTier": "idempotent"
-    },
-    {
-      "id": "registrar-domains",
-      "scope": "account",
-      "restoreTier": "reprovision"
     },
     {
       "id": "registrar-registrations",
@@ -1698,9 +1678,6 @@
     "GET /accounts/{}/magic/bgp/settings",
     "GET /accounts/{}/magic/cf1_sites",
     "GET /accounts/{}/magic/cf_interconnects",
-    "GET /accounts/{}/magic/cloud/catalog-syncs",
-    "GET /accounts/{}/magic/cloud/onramps",
-    "GET /accounts/{}/magic/cloud/providers",
     "GET /accounts/{}/magic/gre_tunnels",
     "GET /accounts/{}/magic/ipsec_tunnels",
     "GET /accounts/{}/magic/routes",
@@ -1729,7 +1706,6 @@
     "GET /accounts/{}/r2/buckets/{}/lock",
     "GET /accounts/{}/r2/buckets/{}/sippy",
     "GET /accounts/{}/realtime/kit/apps",
-    "GET /accounts/{}/registrar/domains",
     "GET /accounts/{}/registrar/registrations",
     "GET /accounts/{}/roles",
     "GET /accounts/{}/rules/lists",
