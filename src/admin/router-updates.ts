@@ -948,6 +948,9 @@ export async function handleUpdates(ctx: RouterCtx): Promise<Response | null> {
       // the eventual confirmation can arrive) WITHOUT first attempting an apply. UpdateRecord otherwise
       // carries no destination field at all, so it is added here rather than duplicated onto a second endpoint.
       const rec = (await resp.json()) as Record<string, unknown>;
+      // `unconfirmed` is the DO's alert bookkeeping (a read count and a dedupe flag); it stays in storage and is
+      // not part of the status response.
+      delete rec.unconfirmed;
       // runningVersion (ADDITIVE): the version of the code answering this read, so a client waiting on a
       // pending verification can tell when the promoted version has started to answer.
       return jsonResponse({ ...rec, destinationConfigured: await destinationConfigured(env, scheduler), runningVersion: ENGINE_VERSION });

@@ -341,7 +341,7 @@ Each row states the asset's level. Section 1.3 is the requirement set the row mu
 | Source file | `engine/src/notify/types.ts:394` (`NotifyChannel`), `engine/src/sched/scheduler-do-notify.ts:187` (`NOTIFY_CHANNEL_PREFIX`) |
 | Protection level | **L1** (the URL); a JSM or ServiceNow API key on the same channel is L3 and is section 2.18 |
 | Confidentiality | The URL is the customer's own operational endpoint. It may embed a path-based authentication token on the customer's side; the engine treats it opaquely. It is returned verbatim from `GET /admin/notify/channels` to the authenticated console, which is why that read gates on `notify.config` rather than any authenticated role. A PagerDuty `routingKey` is stored unsealed and returned the same way. |
-| Integrity | Validated at write time as HTTPS-only with no userinfo component and no `workers.dev` host (`engine/src/notify/types.ts:1024` (`isAllowedWebhookUrl`)). |
+| Integrity | Validated at write time as HTTPS-only with no userinfo component and no `workers.dev` host (`engine/src/notify/types.ts:1026` (`isAllowedWebhookUrl`)). |
 | Transit | Transmitted over HTTPS (engine to the customer's own endpoint). |
 | Logging | Not logged. The config-history snapshot records the destination host and a presence flag only (`engine/src/admin/config-snapshot.ts:112` (`urlHost`)), never the path, query or full URL. It records a `routingKey` as a presence flag only. |
 | Access control | Read, write and delete: `notify.config`. |
@@ -466,7 +466,7 @@ Each row states the asset's level. Section 1.3 is the requirement set the row mu
 | Attribute | Detail |
 |-----------|--------|
 | Description | A read-only Cloudflare API token the customer creates in their own account for account-wide source discovery. Either the `DISCOVERY_API_TOKEN` binding (IaC fallback) or the console-set token stored in the scheduler Durable Object; the stored token wins when both exist. |
-| Source file | `engine/src/env.d.ts:508` (`DISCOVERY_API_TOKEN`), `engine/src/admin/router-discovery.ts:421` (`maybeWrapConfigSecret`), `engine/src/sched/scheduler-do-account-config.ts:170` (`DISCOVERY_KEY`) |
+| Source file | `engine/src/env.d.ts:508` (`DISCOVERY_API_TOKEN`), `engine/src/admin/router-discovery.ts:421` (`maybeWrapConfigSecret`), `engine/src/sched/scheduler-do-account-config.ts:175` (`DISCOVERY_KEY`) |
 | Protection level | **L3** |
 | Confidentiality | The binding is a Worker secret. The console-set token is sealed under `CONFIG_WRAP_KEY` with `DISCOVERY_SECRET_AAD` before it reaches the Durable Object (section 2.18), so a storage read yields ciphertext; absent the wrap key it sits at the platform floor. The vendor never sees it. |
 | Integrity | Verified live against the Cloudflare API before storage. |

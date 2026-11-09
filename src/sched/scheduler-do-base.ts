@@ -1517,6 +1517,13 @@ export interface SchedulerDOSurface {
   }): Promise<{
     cleared: boolean;
   }>;
+  claimUnconfirmedUpdate(req: {
+    recommendedVersion?: unknown;
+    verdict?: unknown;
+  }): Promise<{
+    shouldAlert: boolean;
+    reads: number;
+  }>;
   claimRollbackNeeded(req: {
     recommendedVersion?: unknown;
     toVersion?: unknown;

@@ -6,17 +6,23 @@
 // deploy, no network beyond the stub. Run:
 //   node test/validate-update-gate.ts
 
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { x25519 } from "@noble/curves/ed25519.js";
 import { CRITICAL_PREFLIGHT_CHECK_IDS, makeHealthGate, probeSettleVerdict } from "../src/admin/update-gate.ts";
 import { settleAfterRamp } from "../src/admin/update-ramp.ts";
 import { decideKeep } from "../src/admin/update-types.ts";
 import type { CanaryCheckResult } from "../src/canary/types.ts";
-import { confirmUpdateIfSettled } from "../src/cron/notify-passes.ts";
+import { alertUnconfirmedUpdateIfStuck, confirmUpdateIfSettled } from "../src/cron/notify-passes.ts";
 import { b64urlEncode, concat } from "../src/crypto/bytes.ts";
 import { mlkemKeygen } from "../src/crypto/pq.ts";
 import type { Env } from "../src/env.d.ts";
 import { ENGINE_VERSION } from "../src/format/version.ts";
+import { isNotifyEvent, severityOf } from "../src/notify.ts";
+import { SchedulerDO } from "../src/sched/scheduler-do.ts";
 import { verdictReached } from "./lib/verdict-guard.ts";
+import { MockStorage } from "./mock-storage.ts";
 
 let failures = 0;
 function ok(label: string, cond: boolean): void {
@@ -211,6 +217,203 @@ async function testConfirmUpdateIfSettled(): Promise<void> {
   }
 }
 
+// ---- alertUnconfirmedUpdateIfStuck (a kept update the hourly canary never confirms) ----
+// Driven against the REAL SchedulerDO (MockStorage) so the count and the one-shot claim are the DO's own. The
+// wrapper counts the update-unconfirmed emissions the cron routes (POST /notify/resolve) and can inject a fault.
+function makeUnconfirmedHarness(opts: { fault?: boolean } = {}): { stub: DurableObjectStub; storage: MockStorage; alerts: Array<{ severity: string; detail: string }>; emissionAdmitted: () => boolean } {
+  const storage = new MockStorage();
+  const dobj = new SchedulerDO({ storage } as unknown as DurableObjectState);
+  const alerts: Array<{ severity: string; detail: string }> = [];
+  let admitted = false;
+  const stub = {
+    fetch: async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      if (opts.fault && new URL(url).pathname === "/update-unconfirmed-claim") throw new Error("scheduler fault (test)");
+      const res = await dobj.fetch(new Request(url, init));
+      if (new URL(url).pathname === "/notify/resolve" && init?.method === "POST") {
+        const sent = JSON.parse(String(init.body ?? "{}")) as { emission?: { event?: string; severity?: string; detail?: string } };
+        if (sent.emission?.event === "update-unconfirmed") {
+          alerts.push({ severity: String(sent.emission.severity), detail: String(sent.emission.detail) });
+          admitted = ((await res.clone().json()) as { emission: unknown }).emission !== null;
+        }
+      }
+      return res;
+    },
+  } as unknown as DurableObjectStub;
+  return { stub, storage, alerts, emissionAdmitted: () => admitted };
+}
+
+async function seedKept(stub: DurableObjectStub, recommendedVersion: string, opts: { confirmationPending?: boolean; at?: number } = {}): Promise<void> {
+  const confirmationPending = opts.confirmationPending ?? true;
+  await stub.fetch("https://do/update-settled", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ outcome: "applied", recommendedVersion, fromVersion: "v-old", toVersion: "v-new", at: opts.at ?? Date.now(), by: "a@b.c", ...(confirmationPending ? { confirmationPending: true } : {}) }) });
+}
+
+async function testUnconfirmedAlert(): Promise<void> {
+  ok("[unconfirmed] severityOf(update-unconfirmed) is warning, not critical", severityOf("update-unconfirmed") === "warning");
+  ok("[unconfirmed] update-unconfirmed is a known notify event", isNotifyEvent("update-unconfirmed") === true);
+  const AT = "2026-10-26T00:00:00.000Z";
+  const env = {} as Env;
+  const SCHED = true; // the cron caller passes scheduled:true
+  const read = (h: { stub: DurableObjectStub }, r: CanaryCheckResult, scheduled = SCHED) => alertUnconfirmedUpdateIfStuck(env, h.stub, [r], AT, scheduled);
+  const pendingResult: CanaryCheckResult = { ...ailingResult, status: "pending" };
+  // The kept-update text names the scheduled canary, the 3-read warning, canary-dead, the one-shot token and the data guarantee.
+  {
+    const kept = decideKeep("alive", "ailing", true).reason;
+    ok("[unconfirmed] the kept-update text states what the code does and no longer promises an hourly read, an instant page or one click", /scheduled canary \(hourly by default\) confirms it when it sings on this version/.test(kept) && /after 3 consecutive scheduled canary reads that do not sing the engine raises one update-unconfirmed warning/.test(kept) && /a destination that turns dead also raises canary-dead/.test(kept) && /roll back from the console with a one-shot deploy token/.test(kept) && /data and recovery are unaffected/.test(kept) && !/will confirm|at once|one click|roll it back and alert/.test(kept));
+  }
+  // 2 scheduled reads = no alert; the 3rd = one alert; the 4th and 5th = no second alert.
+  {
+    const h = makeUnconfirmedHarness();
+    await seedKept(h.stub, ENGINE_VERSION);
+    await read(h, ailingResult);
+    await read(h, ailingResult);
+    ok("[unconfirmed] 2 ailing scheduled reads raise no alert", h.alerts.length === 0);
+    const third = await read(h, ailingResult);
+    ok("[unconfirmed] the 3rd ailing scheduled read raises one alert", h.alerts.length === 1 && third.claimed === true);
+    const d = h.alerts[0]?.detail ?? "";
+    ok("[unconfirmed] the alert is a warning that names the version, says 3 scheduled reads did not sing, names the latest verdict and the one-shot token", h.alerts[0]?.severity === "warning" && d.includes(ENGINE_VERSION) && /did not sing on the last 3 scheduled reads \(latest: ailing\)/.test(d) && /roll back from the console with a one-shot deploy token/.test(d) && /data and recovery are unaffected/i.test(d) && !/one click|hourly/.test(d));
+    ok("[unconfirmed] the DO admits the update-unconfirmed emission (it is not dropped at parseEmission)", h.emissionAdmitted() === true);
+    await read(h, ailingResult);
+    await read(h, ailingResult);
+    ok("[unconfirmed] the 4th and 5th reads raise no second alert (one page per apply)", h.alerts.length === 1);
+  }
+  // A pending verdict counts the same way as ailing.
+  {
+    const h = makeUnconfirmedHarness();
+    await seedKept(h.stub, ENGINE_VERSION);
+    for (let i = 0; i < 3; i++) await read(h, pendingResult);
+    ok("[unconfirmed] 3 pending scheduled reads raise one alert", h.alerts.length === 1 && /latest: pending/.test(h.alerts[0]?.detail ?? ""));
+  }
+  // A DEAD read counts: ailing, dead, ailing alerts on the 3rd, and the alert names the latest verdict only as latest.
+  {
+    const h = makeUnconfirmedHarness();
+    await seedKept(h.stub, ENGINE_VERSION);
+    await read(h, ailingResult);
+    await read(h, deadResult);
+    ok("[unconfirmed] ailing + dead raise no alert yet", h.alerts.length === 0);
+    await read(h, ailingResult);
+    ok("[unconfirmed] ailing, dead, ailing alerts on the 3rd scheduled read", h.alerts.length === 1 && /latest: ailing/.test(h.alerts[0]?.detail ?? ""));
+  }
+  {
+    const h = makeUnconfirmedHarness();
+    await seedKept(h.stub, ENGINE_VERSION);
+    for (let i = 0; i < 3; i++) await read(h, deadResult);
+    ok("[unconfirmed] 3 dead scheduled reads raise one alert (canary-dead is a separate alert)", h.alerts.length === 1 && /latest: dead/.test(h.alerts[0]?.detail ?? ""));
+  }
+  // A fly-now (unscheduled) read does not count and does not reset.
+  {
+    const h = makeUnconfirmedHarness();
+    await seedKept(h.stub, ENGINE_VERSION);
+    await read(h, ailingResult);
+    for (let i = 0; i < 5; i++) await read(h, ailingResult, false);
+    ok("[unconfirmed] five fly-now reads do not advance the count", h.alerts.length === 0);
+    await read(h, ailingResult);
+    ok("[unconfirmed] 2 scheduled reads with fly-now reads between them raise no alert", h.alerts.length === 0);
+    await read(h, ailingResult);
+    ok("[unconfirmed] the 3rd scheduled read alerts", h.alerts.length === 1);
+  }
+  {
+    const h = makeUnconfirmedHarness();
+    await seedKept(h.stub, ENGINE_VERSION);
+    const dflt = await alertUnconfirmedUpdateIfStuck(env, h.stub, [ailingResult], AT);
+    await alertUnconfirmedUpdateIfStuck(env, h.stub, [ailingResult], AT);
+    await alertUnconfirmedUpdateIfStuck(env, h.stub, [ailingResult], AT);
+    ok("[unconfirmed] with no flag the read does not count (default is not scheduled)", h.alerts.length === 0 && dflt.claimed === false);
+  }
+  // An alive read from any path resets the count: 2 ailing, alive (fly-now), 2 ailing = none; the next alerts.
+  {
+    const h = makeUnconfirmedHarness();
+    await seedKept(h.stub, ENGINE_VERSION);
+    await read(h, ailingResult);
+    await read(h, ailingResult);
+    await read(h, aliveResult, false);
+    await read(h, ailingResult);
+    await read(h, ailingResult);
+    ok("[unconfirmed] an alive fly-now read resets the count (2 + alive + 2 raises nothing)", h.alerts.length === 0);
+    await read(h, ailingResult);
+    ok("[unconfirmed] the third scheduled read after the reset raises the alert", h.alerts.length === 1);
+  }
+  // A cleared pending resets the count too.
+  {
+    const h = makeUnconfirmedHarness();
+    await seedKept(h.stub, ENGINE_VERSION);
+    await read(h, ailingResult);
+    await read(h, ailingResult);
+    await seedKept(h.stub, ENGINE_VERSION, { confirmationPending: false });
+    await read(h, ailingResult);
+    await seedKept(h.stub, ENGINE_VERSION);
+    await read(h, ailingResult);
+    ok("[unconfirmed] a read after the pending cleared restarts the count (no alert)", h.alerts.length === 0);
+  }
+  // Re-applying the SAME version re-arms the alert: the dedupe is keyed to the apply (version + its own time).
+  {
+    const h = makeUnconfirmedHarness();
+    await seedKept(h.stub, ENGINE_VERSION, { at: 1_000 });
+    for (let i = 0; i < 3; i++) await read(h, ailingResult);
+    ok("[unconfirmed] the first apply alerts on its 3rd read", h.alerts.length === 1);
+    await read(h, ailingResult);
+    ok("[unconfirmed] a 4th read of the same apply stays quiet", h.alerts.length === 1);
+    await seedKept(h.stub, ENGINE_VERSION, { at: 2_000 });
+    await read(h, ailingResult);
+    await read(h, ailingResult);
+    ok("[unconfirmed] a re-apply of the same version restarts the count (2 reads, no new alert yet)", h.alerts.length === 1);
+    await read(h, ailingResult);
+    ok("[unconfirmed] a re-apply of the same version re-arms the alert (the 3rd read after it alerts again)", h.alerts.length === 2);
+  }
+  // A pending for a different version does not count.
+  {
+    const h = makeUnconfirmedHarness();
+    await seedKept(h.stub, "0.0.1-superseded");
+    for (let i = 0; i < 4; i++) await read(h, ailingResult);
+    ok("[unconfirmed] a kept update for a different version than the running engine never alerts", h.alerts.length === 0);
+  }
+  {
+    const h = makeUnconfirmedHarness();
+    for (let i = 0; i < 4; i++) await read(h, ailingResult);
+    ok("[unconfirmed] no update record at all never alerts", h.alerts.length === 0);
+  }
+  // Fail-open: a DO fault never throws and raises nothing.
+  {
+    const h = makeUnconfirmedHarness({ fault: true });
+    await seedKept(h.stub, ENGINE_VERSION);
+    let threw = false;
+    let res = { claimed: true };
+    try {
+      for (let i = 0; i < 4; i++) res = await read(h, ailingResult);
+    } catch {
+      threw = true;
+    }
+    ok("[unconfirmed][fail-open] a DO fault never throws and raises no alert", threw === false && res.claimed === false && h.alerts.length === 0);
+    const dead = { fetch: async () => { throw new Error("scheduler unreachable (test)"); } } as unknown as DurableObjectStub;
+    let threw2 = false;
+    try {
+      await alertUnconfirmedUpdateIfStuck(env, dead, [ailingResult], AT, true);
+    } catch {
+      threw2 = true;
+    }
+    ok("[unconfirmed][fail-open] an unreachable scheduler never throws", threw2 === false);
+  }
+}
+
+// The unconfirmed-update count advances only on a cron-scheduled read. drive.ts has no harness here, so this
+// reads both call sites and pins their exact forms: the cron path passes `scheduled: true` and the fly-now path
+// (index.ts canaryNow) passes no options at all.
+function testScheduledCallSites(): void {
+  const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+  const drive = readFileSync(join(root, "src/cron/drive.ts"), "utf8");
+  const driveCalls = drive.match(/runCanaryIfDue\(/g) ?? [];
+  ok("[call-sites] drive.ts calls runCanaryIfDue exactly once", driveCalls.length === 1);
+  ok("[call-sites] the cron path in drive.ts passes `{ scheduled: true }`", drive.includes("await runCanaryIfDue(env, scheduler, { scheduled: true });"));
+  const index = readFileSync(join(root, "src/index.ts"), "utf8");
+  const start = index.indexOf("canaryNow: () =>");
+  const end = start < 0 ? -1 : index.indexOf("recordDispatchFault(", start);
+  const fly = start >= 0 && end > start ? index.slice(start, end) : "";
+  ok("[call-sites] index.ts canaryNow was found", fly.length > 0);
+  ok("[call-sites] the fly-now path calls runCanaryIfDue with no options", fly.includes("runCanaryIfDue(env, schedulerStub(env))"));
+  ok("[call-sites] the fly-now path never passes `scheduled`", fly.length > 0 && !/scheduled/.test(fly));
+  ok("[call-sites] index.ts holds no `scheduled: true` call into runCanaryIfDue", !/runCanaryIfDue\([^)]*scheduled\s*:\s*true/.test(index));
+}
+
 // A break-glass-only estate could never roll back a bad self-update. Its canary returned "ailing" on
 // every flight, forever, because the engine held no in-account key to read its own cell back, so
 // decideKeep only ever saw ailing and only ever took the optimistic keep branch. "dead" was structurally
@@ -374,6 +577,8 @@ async function main(): Promise<void> {
   await testSelfCheck();
   await testRealGateFlight();
   await testConfirmUpdateIfSettled();
+  await testUnconfirmedAlert();
+  testScheduledCallSites();
   testBreakGlassOnlyCanNowRollBack();
   console.log(failures === 0 ? "\nUPDATE-GATE VECTORS PASS" : `\n${failures} FAILURE(S)`);
   verdictReached(failures);

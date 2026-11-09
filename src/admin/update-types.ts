@@ -122,6 +122,13 @@ export async function readBaseline(gate: Pick<HealthGate, "baseline" | "baseline
   }
 }
 
+// KEPT_UNCONFIRMED_NEXT is the operator-facing sentence for what happens after a kept, unconfirmed update. It
+// states only what the code does: the scheduled canary (hourly by default) confirms the update when it sings on
+// this version, 3 consecutive scheduled reads that do not sing raise one update-unconfirmed warning, a
+// destination that turns dead also raises canary-dead, and an Owner can roll back from the console with a one-shot deploy token.
+// Nothing rolls back unattended, and data and recovery do not depend on the engine version.
+const KEPT_UNCONFIRMED_NEXT = "the scheduled canary (hourly by default) confirms it when it sings on this version; after 3 consecutive scheduled canary reads that do not sing the engine raises one update-unconfirmed warning; a destination that turns dead also raises canary-dead; an Owner can roll back from the console with a one-shot deploy token; data and recovery are unaffected";
+
 // decideKeep is the gate rule (pure, so the validator drives every branch). It is OPTIMISTIC: a verified
 // atomic promote is trusted and KEPT unless there is POSITIVE evidence the new build is bad.
 //   alive -> KEEP (confirmed: the canary sings on the new version, every byte exact).
@@ -132,10 +139,12 @@ export async function readBaseline(gate: Pick<HealthGate, "baseline" | "baseline
 //            round-trip that DO -- so in the post-swap window they routinely fail to COMPLETE. That is NOT
 //            evidence the build is bad; it is the health check sitting inside its own blast radius, and
 //            rolling back on it would roll back perfectly healthy updates on every swap. So a non-dead
-//            verdict does not roll back: the verified new version is kept and the HOURLY canary -- which
-//            runs from well clear of the swap window -- is the real health gate (it auto-rolls-back and
-//            alerts if the build proves genuinely unhealthy; the operator's one-click rollback covers the
-//            meantime). The self-check result is RECORDED for diagnosis (it shapes the reason and the
+//            verdict does not roll back: the verified new version is kept and the scheduled canary -- which
+//            runs from well clear of the swap window -- is the real health gate: it confirms the update when
+//            it sings, a dead verdict raises canary-dead, and 3 consecutive scheduled reads that do not sing
+//            raise the update-unconfirmed warning. Nothing rolls back unattended (the engine holds no deploy
+//            credential): an Owner rolls back from the console with a one-shot deploy token.
+//            The self-check result is RECORDED for diagnosis (it shapes the reason and the
 //            confidence) but NEVER gates: a check that cannot run in this window must not decide a rollback.
 // Data safety is independent of this choice: archives are immutable and recovery does not depend on the
 // engine version, so a rare keep-then-genuinely-unhealthy build is an availability blip, never data loss.
@@ -149,9 +158,9 @@ export function decideKeep(_baseline: import("../canary/types.ts").CanaryLivenes
   if (verdict === "dead") return { keep: false, reason: "the canary is dead on the new version (a bit strayed), rolling back" };
   // verdict is ailing | pending (the canary could not complete a clean flight) -> KEEP, confirmation pending.
   if (selfCheckOk) {
-    return { keep: true, reason: `the canary could not complete a flight in the post-deploy window (${verdict}), but the new version self-checked healthy (booted, answered, reported the expected version); keeping it -- the hourly canary will confirm` };
+    return { keep: true, reason: `the canary could not complete a flight in the post-deploy window (${verdict}), but the new version self-checked healthy (booted, answered, reported the expected version); keeping it -- ${KEPT_UNCONFIRMED_NEXT}` };
   }
-  return { keep: true, reason: `the canary could not complete a flight in the post-deploy window (${verdict}) and the self-check was inconclusive (the same Durable Object reset the swap causes); keeping the verified new version -- the hourly canary will confirm it, or roll it back and alert if it proves unhealthy` };
+  return { keep: true, reason: `the canary could not complete a flight in the post-deploy window (${verdict}) and the self-check was inconclusive (the same Durable Object reset the swap causes); keeping the verified new version -- ${KEPT_UNCONFIRMED_NEXT}` };
 }
 
 // DeployRefusal is the error a driver throws when Cloudflare refuses a deployment. It carries the numeric

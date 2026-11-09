@@ -502,6 +502,11 @@ export function RoutingConfigMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
       // page; records the rollbackNeeded flag the console surfaces. Internal (the cron driver calls it).
       case "POST /update-rollback-needed-claim":
         return this.json(await this.blockConcurrencyWhile(async () => this.claimRollbackNeeded((await req.json()) as { recommendedVersion?: unknown; toVersion?: unknown; canaryVerdict?: unknown })));
+      // The canary cron counts the scheduled reads that did not sing on a KEPT update and claims the one-shot
+      // "update-unconfirmed" alert on the third. Bookkeeping only; wrapped in blockConcurrencyWhile so two ticks
+      // cannot both claim. Internal (the cron driver calls it).
+      case "POST /update-unconfirmed-claim":
+        return this.json(await this.blockConcurrencyWhile(async () => this.claimUnconfirmedUpdate((await req.json()) as { recommendedVersion?: unknown; verdict?: unknown })));
       case "GET /downpipes/dest-for-run":
         // Internal: resolve which destination a run's downpipe writes to, so a restore/drill reads
         // from the run's OWN bucket. Redaction-safe (an opaque destination id only, never a credential).

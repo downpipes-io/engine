@@ -3,7 +3,7 @@
   // them. tsconfig.test.json cannot do this job: it runs in the single-repo `quality` CI job, where
   // ../console does not exist, so a validator that imports across the repo boundary fails there with TS2307
   // "cannot find module". Those validators are excluded there and included here instead, and this config is
-  // run by `npm run typecheck:workspace` inside the Cross-repo gates job, which checks out the siblings.
+  // run by `npm run typecheck:workspace` in a checkout that has the sibling repos beside it.
   //
   // scripts/crossrepo-typecheck-gate.mjs holds the two configs to that split, in both directions: a test file
   // that imports a sibling repo must be out of tsconfig.test.json and in this one, and nothing may be excluded

@@ -927,6 +927,14 @@ export interface UpdateRecord {
   // is CLEARED on any settle/rollback (setUpdateSettled) since the pending is then resolved. Additive +
   // presence-safe (absent reads as none).
   rollbackNeeded?: { recommendedVersion: string; toVersion: string; canaryVerdict: string; at: number } | null;
+  // unconfirmed counts the consecutive SCHEDULED canary reads that did not sing (ailing, pending or dead) on a KEPT
+  // update (the engine's `last` is applied with confirmationPending and the running engine is that version). It is
+  // keyed to one apply: the recommendedVersion plus appliedAt (last.at, which every apply writes anew), so a
+  // re-apply of the same version restarts the count at one. At the third read the DO hands out ONE alert (alerted
+  // becomes true), so a stuck apply pages once, not every read (claimUnconfirmedUpdate). An alive verdict, or a
+  // pending that has cleared, removes it. Sticky, so every read-modify-write of this record carries it forward.
+  // Storage bookkeeping only: GET /admin/update/status strips it. Additive + presence-safe (absent reads as no count).
+  unconfirmed?: { recommendedVersion: string; appliedAt: number; reads: number; alerted: boolean } | null;
   // settledHighWaterMark is the MONOTONIC highest engine version ever successfully SETTLED ("applied",
   // canary-passed), bumped by setUpdateSettled and NEVER lowered. The safe-apply route reads it as the
   // anti-rollback floor: an apply/ramp targeting a version below it is refused even with allowDowngrade, so a

@@ -1,7 +1,8 @@
 // The safe-apply update module: apply a newer, vendor-signed engine version FROM THE CONSOLE (no CLI),
 // such that a bad release can NEVER brick the customer's platform. The model is verify -> record the
 // rollback target -> upload the new version -> promote it -> prove health with a real canary flight ->
-// AUTO-ROLLBACK to the recorded version if it does not sing.
+// AUTO-ROLLBACK to the recorded version if the canary is dead (a canary that cannot complete a flight keeps
+// the update, marked as awaiting confirmation from the scheduled canary).
 //
 // WHY THIS IS SAFE TO ATTEMPT AT ALL: an update only replaces the engine WORKER (the moving part). The
 // two things that matter are independent of the running engine and cannot be harmed by a bad deploy:
@@ -71,7 +72,7 @@ export interface UpdateApplyResult {
   reason?: string; // a plain-words explanation, present for every non-"applied" outcome
   // confirmationPending is additive: true only on an "applied" outcome that was
   // KEPT via the self-check (the canary itself never sang alive), so the keep is honest-but-provisional
-  // until the hourly canary confirms it in the background (see notify-passes.ts confirmUpdateIfSettled).
+  // until the scheduled canary confirms it in the background (see notify-passes.ts confirmUpdateIfSettled).
   // Absent on every other outcome, and absent on a keep the canary itself confirmed (verdict alive).
   confirmationPending?: boolean;
 }
@@ -375,7 +376,7 @@ export async function settleAfterPromote(driver: DeployDriver, gate: HealthGate,
     log("decision", true, decision.reason);
     // confirmationPending: the canary itself only decides on an ALIVE verdict; anything else
     // that still kept (ailing/pending, the self-check passed) is a KEEP the canary never confirmed, so the
-    // record is honest-but-provisional until the hourly canary sings on this version in the background.
+    // record is honest-but-provisional until the scheduled canary sings on this version in the background.
     const confirmationPending = canaryVerdict !== "alive";
     return base({ outcome: "applied", ...(confirmationPending ? { confirmationPending: true } : {}) });
   }

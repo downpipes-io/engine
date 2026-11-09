@@ -41,6 +41,10 @@ const LICENCE_REFUSAL_REASON_CODES = new Set<string>([
   "supersedes-current-term",
 ]);
 
+// UNCONFIRMED_ALERT_READS is how many consecutive scheduled canary reads must fail to sing on a kept update before
+// the one-shot "update-unconfirmed" alert is handed out.
+const UNCONFIRMED_ALERT_READS = 3;
+
 // stickyUpdateFields carries the MONOTONIC or never-cleared fields of the update record forward through
 // every read-modify-write: the anti-rollback floors (the per-component map + its legacy engine-scalar
 // mirror), the freshness watermark (sequence + issuedAt), the console component's last outcome, and the
@@ -56,6 +60,7 @@ function stickyUpdateFields(rec: UpdateRecord): Partial<UpdateRecord> {
     ...(rec.lastConsole != null ? { lastConsole: rec.lastConsole } : {}),
     ...(rec.history != null ? { history: rec.history } : {}),
     ...(rec.lastChannelSeq != null ? { lastChannelSeq: rec.lastChannelSeq } : {}),
+    ...(rec.unconfirmed != null ? { unconfirmed: rec.unconfirmed } : {}),
     ...(rec.lastChannelIssuedAt != null ? { lastChannelIssuedAt: rec.lastChannelIssuedAt } : {}), ...(rec.versionDigests != null ? { versionDigests: rec.versionDigests } : {}),
   };
 }
@@ -605,6 +610,34 @@ export function AccountConfigMixin<TBase extends SchedulerDOCtor>(Base: TBase) {
       };
       await this.state.storage.put(UPDATE_KEY, next);
       return { shouldAlert: !already };
+    }
+
+    // claimUnconfirmedUpdate counts the SCHEDULED canary reads that did not sing on a KEPT update, and hands out
+    // the one-shot "update-unconfirmed" alert on the third consecutive read. It runs inside one read-modify-write
+    // (the route wraps it in blockConcurrencyWhile) so two ticks cannot both page. The cron calls it with the
+    // aggregate verdict, and only for a scheduled read (a fly-now read never reaches here unless it is alive);
+    // the DO checks the record itself: a read counts when the verdict is ailing, pending or dead AND `last` is an
+    // applied outcome with confirmationPending for this recommendedVersion. Anything else (an alive verdict, a
+    // pending that cleared, another version) removes the count. The count is keyed to the apply, not the version
+    // string alone: the recommendedVersion plus last.at (the settle writes a new `at` on every apply), so a
+    // re-apply of the same version restarts the count at one and re-arms the alert. Pure bookkeeping: it never
+    // deploys and never rolls back.
+    async claimUnconfirmedUpdate(req: { recommendedVersion?: unknown; verdict?: unknown }): Promise<{ shouldAlert: boolean; reads: number }> {
+      const recommendedVersion = typeof req.recommendedVersion === "string" ? req.recommendedVersion.trim() : "";
+      const rec = await this.getUpdateRecord();
+      const { unconfirmed: prior, ...rest } = rec;
+      const last = rec.last;
+      const counts = (req.verdict === "ailing" || req.verdict === "pending" || req.verdict === "dead") && recommendedVersion !== "" && last?.outcome === "applied" && last.confirmationPending === true && last.recommendedVersion === recommendedVersion;
+      if (!counts) {
+        if (prior != null) await this.state.storage.put(UPDATE_KEY, rest);
+        return { shouldAlert: false, reads: 0 };
+      }
+      const same = prior != null && prior.recommendedVersion === recommendedVersion && prior.appliedAt === last.at;
+      const reads = Math.min((same ? prior.reads : 0) + 1, UNCONFIRMED_ALERT_READS);
+      const alreadyAlerted = same && prior.alerted === true;
+      const shouldAlert = reads >= UNCONFIRMED_ALERT_READS && !alreadyAlerted;
+      await this.state.storage.put(UPDATE_KEY, { ...rest, unconfirmed: { recommendedVersion, appliedAt: last.at, reads, alerted: alreadyAlerted || shouldAlert } });
+      return { shouldAlert, reads };
     }
 
     // claimUpdateAlert is the one-shot update-alert dedupe, run inside one read-modify-write so two concurrent cron

@@ -60,6 +60,24 @@ const IP = "203.0.113.7";
 const say = (s) => console.log(s);
 let couldNotCheck = false;
 
+/**
+ * settleFor waits for an arm's deferred records. It is idle for SETTLE_IDLE_MS first, so no request of the
+ * drive's own is in flight while a dropped write would be torn down, then polls `done` and returns as soon
+ * as it holds. An arm that never reaches it (a lost record, a negative control) still waits the full
+ * SETTLE_MS, so a late write has the same window to appear that a plain SETTLE_MS sleep gave it.
+ */
+const SETTLE_MS = 1500;
+const SETTLE_IDLE_MS = 250;
+/** @param {() => Promise<boolean>} done */
+async function settleFor(done) {
+  const end = Date.now() + SETTLE_MS;
+  await new Promise((r) => setTimeout(r, SETTLE_IDLE_MS));
+  while (Date.now() < end) {
+    if (await done()) return;
+    await new Promise((r) => setTimeout(r, 50));
+  }
+}
+
 // ---------------------------------------------------------------------------------------------------------
 // THE CASES. Each names ONE call site, the request that reaches it, the DO fault that makes it fire, and the
 // EXACT key its record must land under. `expect` is what the site is believed to do: "keep" (the record
@@ -542,14 +560,19 @@ async function main() {
         });
         statuses.push(r.status);
       }
-      await new Promise((r) => setTimeout(r, 1500));
+      /** @param {any} snap */
+      const seenIn = (snap) =>
+        c.exact === undefined
+          ? Object.fromEntries(c.keys.map((k) => [k, countOf(snap[c.agg], k) - (before[k] ?? 0)]))
+          : { [c.keys[0]]: matches(atPath(snap[c.agg], c.exact.path), c.exact.value) ? N : 0 };
+      await settleFor(async () => {
+        const s = await hit("/signal/read");
+        return s.status === 200 && Object.values(seenIn(JSON.parse(s.text))).every((v) => v >= N);
+      });
       const afterRaw = await hit("/signal/read");
       if (afterRaw.status !== 200) return { statuses, kpOk, readerReached: false, seen: {} };
       const after = JSON.parse(afterRaw.text);
-      const seen =
-        c.exact === undefined
-          ? Object.fromEntries(c.keys.map((k) => [k, countOf(after[c.agg], k) - (before[k] ?? 0)]))
-          : { [c.keys[0]]: matches(atPath(after[c.agg], c.exact.path), c.exact.value) ? N : 0 };
+      const seen = seenIn(after);
       // The aggregate SHAPE rides alongside, so a case whose key never appears shows what the DO actually
       // stored rather than leaving a zero that could be a lost record or a mistyped key.
       const aggKeys = after[c.agg] !== null && typeof after[c.agg] === "object" ? Object.keys(after[c.agg]) : [];

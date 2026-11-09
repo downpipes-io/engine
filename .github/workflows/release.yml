@@ -61,7 +61,7 @@ jobs:
           # The checkout above is a full one (fetch-depth 0), so origin/main is already here; a
           # second fetch would need credentials the checkout deliberately does not persist
           # (persist-credentials false), and on a private repository it fails with "could not
-          # read Username", which is what stopped the first attested cut.
+          # read Username".
           git rev-parse --verify --quiet origin/main >/dev/null || { echo "::error::origin/main is missing from the checkout; the roster cannot be read"; exit 1; }
           git show origin/main:.github/allowed_signers > "${RUNNER_TEMP}/allowed_signers"
           if ! grep -qE '^[^#[:space:]]' "${RUNNER_TEMP}/allowed_signers"; then
@@ -159,8 +159,8 @@ jobs:
       - name: Install cosign
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
         with:
-          # Pinned: the installer's default cosign moved from 2 to 3 with v4 and changed sign-blob's
-          # output form under the downpipe release; a release tool never floats here.
+          # Pinned: cosign 3 changes sign-blob's output form from cosign 2, so a release tool never
+          # floats here.
           cosign-release: v3.1.3
       - name: Sign every release file, then verify what was minted
         env:

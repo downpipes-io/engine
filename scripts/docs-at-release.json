@@ -1,0 +1,4 @@
+{
+  "_about": "Notifiable events this engine has that the newest release tag does not. test/validate-posture-and-docs-parity.ts derives that set from NOTIFY_EVENT_NAMES at HEAD and at the tag, and this list must equal it exactly. The docs document released engines only, so each event listed here owes a docs alert-events row that merges once the release that carries the event is tagged. The release commit clears this list, and its cut checks each listed event's docs change.",
+  "events": ["update-unconfirmed"]
+}

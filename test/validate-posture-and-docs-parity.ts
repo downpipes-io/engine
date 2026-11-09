@@ -29,6 +29,7 @@
 // Run with `node test/validate-posture-and-docs-parity.ts [--require]`.
 //
 
+import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -163,37 +164,152 @@ const SMALL: Record<number, string> = { 1: "one", 2: "two", 3: "three", 4: "four
 const breakdown = `${SMALL[counts.critical ?? 0]} critical, ${SMALL[counts.high ?? 0]} high, ${SMALL[counts.medium ?? 0]} medium and ${SMALL[counts.low ?? 0]} low`;
 ok(`the severity breakdown matches the code (${breakdown})`, page.includes(breakdown));
 
-// ---- the alert-events page, the same shape and currently CORRECT ------------------------------------------
+// ---- the alert-events page, graded against the RELEASED engine ---------------------------------------------
 // day-2/alert-events.mdx enumerates NOTIFY_EVENT_NAMES with a severity each and states the count three times.
-// It is complete and accurate today. It is gated anyway, for the reason the posture page teaches: that page
-// was also correct once, and the four checks that drifted onto it did so with nothing watching. A gate is
-// cheapest to add while the thing it guards is right.
+// It is gated for the reason the posture page teaches: that page was also correct once, and the four checks
+// that drifted onto it did so with nothing watching.
+//
+// THE DOCS DOCUMENT RELEASED ENGINES ONLY. Grading the page against the events at HEAD made an engine change
+// that adds an event and the docs change that documents it each wait for the other: the engine stayed red
+// until the docs carried the row, and the docs could not carry a row for an engine nobody had released. So
+// the page is graded against the events at the NEWEST RELEASE TAG, and an event added since then must be
+// named in scripts/docs-at-release.json. That file lists EXACTLY the events HEAD has and the tag does not:
+// an unlisted new event is a finding (it would reach a release with no docs row owed), and a listed event
+// that is not new is a finding too (a stale entry would excuse nothing and hide the next real one). The
+// release that ships those events clears the list, and its cut checks each listed event's docs change.
+const DOCS_AT_RELEASE = "scripts/docs-at-release.json";
+const git = (...args: string[]): string => execFileSync("git", ["-C", HERE, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+
+/** parseEventNames reads the NOTIFY_EVENT_NAMES array out of src/notify/types.ts source text. Only lines that
+ * start with a quoted kebab-case name count, so the prose comments inside the array are never read as names. */
+function parseEventNames(src: string): string[] | undefined {
+  const m = /^export const NOTIFY_EVENT_NAMES = \[\n([\s\S]*?)^\] as const;/m.exec(src);
+  if (m === null) return undefined;
+  return [...(m[1] as string).matchAll(/^\s*"([a-z0-9-]+)",/gm)].map((x) => x[1] as string);
+}
+
+/** newestReleaseTag is the highest plain vX.Y.Z tag in numeric order (v0.3.10 is newer than v0.3.9). */
+function newestReleaseTag(): string | undefined {
+  // A git that cannot list tags at all is CANNOT CHECK, the same as a checkout with none, never a crash.
+  let listed = "";
+  try {
+    listed = git("tag", "--list", "v*");
+  } catch {
+    return undefined;
+  }
+  const tags = listed.split("\n").filter((t) => /^v\d+\.\d+\.\d+$/.test(t));
+  const key = (t: string) => t.slice(1).split(".").map(Number);
+  tags.sort((a, b) => {
+    const [x, y] = [key(a), key(b)];
+    for (let i = 0; i < 3; i++) if ((x[i] as number) !== (y[i] as number)) return (y[i] as number) - (x[i] as number);
+    return 0;
+  });
+  return tags[0];
+}
+
+/** docsAtReleaseDrift compares the listed events with the derived set: events new at HEAD and not listed,
+ * and listed events that are not new at HEAD (absent from HEAD, or already in the release). */
+function docsAtReleaseDrift(head: readonly string[], released: readonly string[], listed: readonly string[]): { unlisted: string[]; notNew: string[] } {
+  const derivedNew = head.filter((e) => !released.includes(e));
+  return { unlisted: derivedNew.filter((e) => !listed.includes(e)), notNew: listed.filter((e) => !derivedNew.includes(e)) };
+}
+
+console.log("\n-- the docs-at-release comparison, on fixed inputs (each wrong list must be refused) --\n");
+{
+  const head = ["a", "b", "c"];
+  const rel = ["a", "b"];
+  const exact = docsAtReleaseDrift(head, rel, ["c"]);
+  ok("self-test: the exact list of new events passes", exact.unlisted.length === 0 && exact.notNew.length === 0);
+  ok("self-test: a new event left off the list is refused", docsAtReleaseDrift(head, rel, []).unlisted.join() === "c");
+  ok("self-test: a listed event that does not exist is refused", docsAtReleaseDrift(head, rel, ["c", "ghost"]).notNew.join() === "ghost");
+  ok("self-test: a listed event the release already has is refused", docsAtReleaseDrift(head, rel, ["c", "a"]).notNew.join() === "a");}
+
+let cannotCheck = "";
+let releasedEvents: string[] = [];
+const releaseTag = newestReleaseTag();
+const headParsed = parseEventNames(readFileSync(resolve(HERE, "src/notify/types.ts"), "utf8"));
+if (releaseTag === undefined) {
+  cannotCheck = "no plain vX.Y.Z release tag in this engine checkout (fetch the tags)";
+} else if (headParsed === undefined || headParsed.join(",") !== NOTIFY_EVENT_NAMES.join(",")) {
+  // The parser's own control: read at HEAD it must give exactly the imported list, or it cannot be trusted
+  // on the tag's copy either.
+  cannotCheck = "the NOTIFY_EVENT_NAMES parser does not reproduce the imported list at HEAD";
+} else {
+  let tagSrc = "";
+  try {
+    tagSrc = git("show", `${releaseTag}:src/notify/types.ts`);
+  } catch {
+    cannotCheck = `src/notify/types.ts could not be read at ${releaseTag}`;
+  }
+  const parsed = cannotCheck === "" ? parseEventNames(tagSrc) : undefined;
+  if (cannotCheck === "" && parsed === undefined) cannotCheck = `NOTIFY_EVENT_NAMES was not found in src/notify/types.ts at ${releaseTag}`;
+  releasedEvents = parsed ?? [];
+}
+
+if (cannotCheck !== "") {
+  console.log(`\n  CANNOT CHECK the alert-events page: ${cannotCheck}`);
+} else {
+  console.log(`\n-- the alert-events page documents the released engine, ${releaseTag} (${git("rev-parse", `${releaseTag}^{commit}`)}) --\n`);
+  const derivedNew = NOTIFY_EVENT_NAMES.filter((e) => !releasedEvents.includes(e));
+  const dropped = releasedEvents.filter((e) => !(NOTIFY_EVENT_NAMES as readonly string[]).includes(e));
+  const listed = (JSON.parse(readFileSync(resolve(HERE, DOCS_AT_RELEASE), "utf8")) as { events: string[] }).events;
+  const { unlisted, notNew } = docsAtReleaseDrift(NOTIFY_EVENT_NAMES, releasedEvents, listed);
+  ok(`every event added since ${releaseTag} is listed in ${DOCS_AT_RELEASE} (${derivedNew.length} new)`, unlisted.length === 0);
+  if (unlisted.length > 0) console.log(`       new since ${releaseTag} and not listed: ${unlisted.join(", ")}`);
+  ok(`${DOCS_AT_RELEASE} lists only events added since ${releaseTag}`, notNew.length === 0);
+  if (notNew.length > 0) console.log(`       listed but not new since ${releaseTag}: ${notNew.join(", ")}`);
+  const dupes = listed.filter((e, i) => listed.indexOf(e) !== i);
+  ok(`${DOCS_AT_RELEASE} names each event once`, dupes.length === 0);
+  if (dupes.length > 0) console.log(`       listed more than once: ${dupes.join(", ")}`);
+  // The tag is the newest in the repo, not the newest this branch contains: the CI checkout is shallow, so
+  // ancestry is not readable there. An event the tag has and HEAD lacks therefore means one of two things,
+  // and the gate names both rather than grading a severity for an event HEAD cannot map.
+  ok(`HEAD has every event ${releaseTag} has`, dropped.length === 0);
+  if (dropped.length > 0) {
+    console.log(`       at ${releaseTag} but not at HEAD: ${dropped.join(", ")}`);
+    console.log(`       either this branch predates ${releaseTag} (rebase it onto main), or it removes an event, which this gate does not yet cover`);
+  }
+}
+
 const eventsPath = resolve(root, "src/content/docs", EVENTS_PAGE);
-if (!existsSync(eventsPath)) {
+if (cannotCheck !== "") {
+  // Nothing below can be graded without the released set.
+} else if (!existsSync(eventsPath)) {
   ok(`the alert-events page exists at ${EVENTS_PAGE}`, false);
 } else {
   const events = readFileSync(eventsPath, "utf8");
-  const missingEvents = NOTIFY_EVENT_NAMES.filter((e) => !new RegExp(`\\|\\s*\`${e}\`\\s*\\|`).test(events));
-  ok(`every notifiable event is documented (${NOTIFY_EVENT_NAMES.length} events)`, missingEvents.length === 0);
+  const rowFor = (e: string) => new RegExp(`\\|\\s*\`${e}\`\\s*\\|`);
+  const missingEvents = releasedEvents.filter((e) => !rowFor(e).test(events));
+  ok(`every event at ${releaseTag} is documented (${releasedEvents.length} events)`, missingEvents.length === 0);
   if (missingEvents.length > 0) console.log(`       missing from the page: ${missingEvents.join(", ")}`);
+  const unreleased = NOTIFY_EVENT_NAMES.filter((e) => !releasedEvents.includes(e) && rowFor(e).test(events));
+  ok(`the page documents no event newer than ${releaseTag}`, unreleased.length === 0);
+  if (unreleased.length > 0) console.log(`       documented before any release has it: ${unreleased.join(", ")}`);
 
   // The severity column is the engine's own mapping, so it must AGREE with severityOf. It is matched as a
   // PREFIX rather than equality on purpose: three events carry a compound severity ("info, or warning on a
   // shortfall") because the emit site escalates above the static base, and the page is being MORE precise
   // than the mapping there. Demanding equality would punish that precision.
-  const wrongSeverity = NOTIFY_EVENT_NAMES.filter((e) => {
+  // Only events HEAD still has carry a severity it can map; a dropped one is the finding above.
+  const wrongSeverity = releasedEvents.filter((e) => (NOTIFY_EVENT_NAMES as readonly string[]).includes(e)).filter((e) => {
     const m = new RegExp(`\\|\\s*\`${e}\`\\s*\\|\\s*([^|]+?)\\s*\\|`).exec(events);
     const documented = m?.[1];
-    return documented === undefined || !documented.startsWith(severityOf(e));
+    return documented === undefined || !documented.startsWith(severityOf(e as (typeof NOTIFY_EVENT_NAMES)[number]));
   });
   ok("each documented severity starts with the engine's own severityOf value", wrongSeverity.length === 0);
   if (wrongSeverity.length > 0) console.log(`       severity drift: ${wrongSeverity.join(", ")}`);
 
-  const evWord = WORDS[NOTIFY_EVENT_NAMES.length];
-  ok(`the event total ${NOTIFY_EVENT_NAMES.length} has a spelled form this gate knows`, evWord !== undefined);
+  const evWord = WORDS[releasedEvents.length];
+  ok(`the event total ${releasedEvents.length} has a spelled form this gate knows`, evWord !== undefined);
   if (evWord !== undefined) ok(`the page states ${evWord} events`, events.includes(`${evWord} events`));
 }
 
+// A finding wins over a could-not-check; a could-not-check is exit 2 and never reads as a pass.
+if (failures === 0 && cannotCheck !== "") {
+  console.log("\nPOSTURE-AND-DOCS-PARITY CANNOT CHECK\n");
+  verdictSkipped(`CANNOT CHECK the alert-events page: ${cannotCheck}`);
+  process.exit(2);
+}
 console.log(`\n${failures === 0 ? "POSTURE-AND-DOCS-PARITY PASS" : `POSTURE-AND-DOCS-PARITY: ${failures} FAILED`}\n`);
 verdictReached(failures);
 process.exit(failures === 0 ? 0 : 1);

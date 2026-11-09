@@ -135,10 +135,11 @@ async function testDecideKeepAndCoreApply(fx: Fixtures): Promise<void> {
     // A non-dead verdict ALWAYS keeps now -- self-check true OR false, any baseline. Only the REASON differs.
     const keptSelf = decideKeep("alive", "pending", true);
     ok("decideKeep: pending + selfcheck ok -> KEEP", keptSelf.keep === true);
-    ok("decideKeep: the self-checked keep reason says the hourly canary will confirm", /hourly canary will confirm/.test(keptSelf.reason));
+    ok("decideKeep: the self-checked keep reason states the scheduled-canary confirmation, the 3-read warning, canary-dead, the one-shot-token rollback and that data is unaffected", /scheduled canary \(hourly by default\) confirms it when it sings on this version/.test(keptSelf.reason) && /after 3 consecutive scheduled canary reads that do not sing the engine raises one update-unconfirmed warning/.test(keptSelf.reason) && /a destination that turns dead also raises canary-dead/.test(keptSelf.reason) && /roll back from the console with a one-shot deploy token/.test(keptSelf.reason) && /data and recovery are unaffected/.test(keptSelf.reason) && !/will confirm|roll it back and alert|pages at once|one click|rolls? (it )?back (on its own|automatically)/.test(keptSelf.reason));
     const keptOptimistic = decideKeep("alive", "pending", false);
     ok("decideKeep: pending + selfcheck INCONCLUSIVE -> KEEP (optimistic, no longer a rollback)", keptOptimistic.keep === true);
-    ok("decideKeep: the optimistic keep reason names the swap-window DO reset + the hourly canary safety net", /Durable Object|hourly canary/.test(keptOptimistic.reason));
+    ok("decideKeep: the inconclusive keep reason states what the code does and claims no unattended rollback", /scheduled canary \(hourly by default\) confirms it/.test(keptOptimistic.reason) && /a destination that turns dead also raises canary-dead/.test(keptOptimistic.reason) && /after 3 consecutive scheduled canary reads that do not sing/.test(keptOptimistic.reason) && /roll back from the console with a one-shot deploy token/.test(keptOptimistic.reason) && !/roll it back and alert|proves unhealthy|pages at once|one click/.test(keptOptimistic.reason));
+    ok("decideKeep: the optimistic keep reason names the swap-window DO reset + the scheduled canary safety net", /Durable Object|scheduled canary/.test(keptOptimistic.reason));
     ok("decideKeep: ailing + selfcheck ok -> KEEP", decideKeep("alive", "ailing", true).keep === true);
     ok("decideKeep: ailing + selfcheck FAIL -> KEEP (optimistic)", decideKeep("alive", "ailing", false).keep === true);
     ok("decideKeep: no-baseline + pending + selfcheck FAIL -> KEEP (optimistic)", decideKeep("pending", "pending", false).keep === true);
@@ -289,7 +290,7 @@ async function testDecideKeepAndCoreApply(fx: Fixtures): Promise<void> {
     const g = new FakeGate({ baseline: "alive", verdict: "pending", selfCheck: true });
     const r = await runSafeApply(d, g, input());
     ok("alive baseline + pending verdict + passing self-check -> APPLIED (kept, no rollback deploy)", r.outcome === "applied" && d.deployCalls.length === 1 && d.deployCalls[0] === NEW_ID);
-    ok("the decision step reason defers to the hourly canary", r.steps.some((st) => st.step === "decision" && /hourly canary will confirm/.test(st.detail ?? "")));
+    ok("the decision step reason defers to the scheduled canary", r.steps.some((st) => st.step === "decision" && /scheduled canary \(hourly by default\) confirms it/.test(st.detail ?? "")));
     // a keep decided while the canary never sang is honest-but-provisional.
     ok("a self-check-decided keep sets confirmationPending:true", r.confirmationPending === true);
   }

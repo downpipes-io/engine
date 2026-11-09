@@ -23,8 +23,8 @@ update channel, and (from your own account's records) applied byte-exactly where
 ## Release integrity
 
 This repository's own source-control and build gates sit upstream of everything above: every
-change reaches `main` through a pull request and a green CI check, `main` and release tags
-require signatures, and the release workflow checks a tag's signature against this repository's
+change reaches `main` through a pull request and a green CI check, release tags cannot be moved
+or deleted, and the release workflow checks a tag's signature against this repository's
 allowed-signers file before it builds. See [What protects the release
 path](https://docs.downpipes.io/operations/verify-a-release/#what-protects-the-release-path) for
 the full picture, including reproducible builds and the update-channel's own signing.

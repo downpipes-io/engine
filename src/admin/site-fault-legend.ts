@@ -267,6 +267,11 @@ export const SITE_FAULT_LEGEND = {
     what: "The tick could not hand CF_ACCOUNT_ID to the scheduler. The scheduler keeps any engine account it already holds. With none held, an env-only discovery token puts no account in scope until a later tick or write records one.",
     fixClass: "transient-platform",
   },
+  "cron.update-unconfirmed": {
+    subsystem: "notify",
+    what: "The alert pass could not read the update status from the scheduler, or lost the scheduler's answer to the unconfirmed-update claim. No update-unconfirmed alert was raised on this read. When the claim reached the scheduler before its answer was lost, the scheduler may already have counted this read or used the one alert for this apply, and that alert is not raised again. While the canary is enabled, the next scheduled read checks again.",
+    fixClass: "transient-platform",
+  },
 } as const satisfies Record<string, SiteFaultLegendEntry>;
 
 export type SiteFaultId = keyof typeof SITE_FAULT_LEGEND;

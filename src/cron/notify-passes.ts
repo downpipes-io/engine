@@ -11,6 +11,7 @@
 // canary-tick spoke (router-test-fault.ts) imports runCanaryIfDue from here and is itself imported by
 // router.ts (router.ts -> router-test-fault -> notify-passes would otherwise close a cycle via doURL).
 import { doURL } from "../do-url.ts";
+import { noteSiteFault } from "../admin/site-faults.ts";
 import { checkUpdates } from "../admin/updates.ts";
 import { runCanaryCycle } from "../canary/cycle.ts";
 // HARNESS-ONLY: a no-op unless HARNESS_TEST_FAULTS is set (see src/admin/test-faults.ts), so a production
@@ -241,7 +242,11 @@ export async function routeNotification(env: Env, scheduler: DurableObjectStub, 
 // result back. On a TRANSITION only (the bird fell dead, or recovered) it routes exactly one
 // notification, so a persistent death does not page every hour and a steady-alive bird is silent. It
 // is fully fail-open: a fault degrades to no flight, never a crashed cron, and never alters a backup.
-export async function runCanaryIfDue(env: Env, scheduler: DurableObjectStub): Promise<{ shouldAlert: boolean }> {
+//
+// `opts.scheduled` is true ONLY for the cron caller (drive.ts). A fly-now flight (index.ts canaryNow) or a test-fault
+// tick forces the canary due out of schedule, so its read must not advance the update-unconfirmed count; the
+// default is "does not count".
+export async function runCanaryIfDue(env: Env, scheduler: DurableObjectStub, opts: { scheduled?: boolean } = {}): Promise<{ shouldAlert: boolean }> {
   const dueResp = await scheduler.fetch(doURL("/canary/due"), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ nowMs: Date.now() }) });
   const { due, run } = (await dueResp.json()) as { due: boolean; run?: CanaryFlightPlan };
   if (!due || !run || !Array.isArray(run.dests) || run.dests.length === 0) return { shouldAlert: false };
@@ -271,6 +276,7 @@ export async function runCanaryIfDue(env: Env, scheduler: DurableObjectStub): Pr
   // assert the FOLD-1 dedupe. confirmUpdateIfSettled is unchanged.
   const escalation = await escalateRollbackIfNeeded(env, scheduler, results, at);
   await confirmUpdateIfSettled(scheduler, results);
+  await alertUnconfirmedUpdateIfStuck(env, scheduler, results, at, opts.scheduled === true);
 
   if (Array.isArray(transitions) && transitions.length > 0) {
     const reasonByDest = new Map(results.map((r) => [r.destinationId ?? null, r.deadReason]));
@@ -357,6 +363,52 @@ export async function confirmUpdateIfSettled(scheduler: DurableObjectStub, resul
     noteUpdateConfirmClearFailure();
     log("error", `update confirmation-pending clear skipped (non-critical): ${(e as Error).message}`);
   }
+}
+
+// alertUnconfirmedUpdateIfStuck closes the gap confirmUpdateIfSettled leaves: a KEPT update (applied, with
+// confirmationPending) that the scheduled canary keeps reading as anything but alive never clears and, for an
+// ailing or pending read, never pages (an ailing canary is quiet and the dead path needs a dead verdict). It
+// sends the aggregate verdict to the DO (/update-unconfirmed-claim), which counts the consecutive SCHEDULED
+// reads that did not sing (ailing, pending or dead) on the running version and hands out ONE alert on the third.
+// Only a scheduled read counts: a fly-now or test-fault flight (scheduled=false) neither counts nor resets,
+// so the 3 reads are 3 cron-scheduled flights. An alive read from any path removes the count. A dead read
+// counts too, and still raises canary-dead on its own transition (a different alert). The alert is a WARNING:
+// it names the version and says an Owner can roll back with a one-shot deploy token. It NEVER deploys and never
+// rolls back (the engine holds no deploy credential). The claim is spent before delivery, so an undelivered
+// alert is latched (the update-available precedent), never dropped. Fully fail-open: a fault degrades to "no
+// alert this tick", never a crashed cron.
+export async function alertUnconfirmedUpdateIfStuck(env: Env, scheduler: DurableObjectStub, results: CanaryCheckResult[], at: string, scheduled = false): Promise<{ claimed: boolean }> {
+  try {
+    const verdict = aggregateLiveness(results.map((r) => r.status));
+    if (verdict !== "alive" && !scheduled) return { claimed: false };
+    const statusResp = await scheduler.fetch(doURL("/update-status"), { method: "GET" });
+    const { last } = (await statusResp.json()) as { last: null | { outcome?: string; confirmationPending?: boolean; recommendedVersion?: string } };
+    const counts = verdict !== "alive" && last != null && last.outcome === "applied" && last.confirmationPending === true && last.recommendedVersion === ENGINE_VERSION;
+    const claimResp = await scheduler.fetch(doURL("/update-unconfirmed-claim"), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ recommendedVersion: counts ? ENGINE_VERSION : "", verdict }),
+    });
+    const { shouldAlert } = (await claimResp.json()) as { shouldAlert: boolean };
+    if (counts && shouldAlert === true) {
+      const delivered = await routeNotification(env, scheduler, {
+        event: "update-unconfirmed",
+        severity: severityOf("update-unconfirmed"),
+        downpipeId: null,
+        downpipeName: "Engine update",
+        detail: `The update to ${ENGINE_VERSION} was kept, but the canary did not sing on the last 3 scheduled reads (latest: ${verdict}). An Owner can roll back from the console with a one-shot deploy token. Your data and recovery are unaffected.`,
+        at,
+      });
+      if (!delivered) noteUndeliveredCriticalAlert("update-unconfirmed", true);
+      return { claimed: true };
+    }
+  } catch (e) {
+    // A fault here (the update-status read, the claim call or its JSON) leaves a kept update with no warning
+    // behind it on this read. It records under its own site id, because it is not a confirm-clear failure.
+    noteSiteFault("cron.update-unconfirmed", e);
+    log("error", `update unconfirmed alert skipped (non-critical): ${(e as Error).message}`);
+  }
+  return { claimed: false };
 }
 
 // notifyCanaryTransitions routes exactly ONE notification per destination that crossed a threshold this
