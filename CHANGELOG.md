@@ -15,6 +15,16 @@ format major stays 0), specified normatively in the format specification of the
 `downpipe` reader repository, not an entry here. This changelog
 tracks the engine Worker, its scheduler Durable Object and the admin API.
 
+## [0.3.11] - 2026-11-09
+
+### Added
+
+- The notify event `update-unconfirmed` (warning) reports a kept engine update that the scheduled canary did not sing on for 3 consecutive reads (ailing, pending or dead). The engine raises it once per apply, delivered to the channels whose notification rules include it, and its text says a rollback is available from the console with a one-shot deploy token. Data and recovery are unaffected. A destination that turns dead also raises `canary-dead`. This applies while the canary is enabled (a disabled canary never confirms or alerts on a kept update).
+
+### Changed
+
+- config backup does not include Cloudflare's retired legacy Registrar domain API or Magic Cloud Networking.
+
 ## [0.3.10] - 2026-11-01
 
 ### Fixed
@@ -1240,6 +1250,7 @@ This release includes the 0.3.4 changes.
 - A native identity-provider bridge: OIDC, OAuth2 and a native SAML service
   provider across the supported providers.
 
+[0.3.11]: https://github.com/downpipes-io/engine/releases/tag/v0.3.11
 [0.3.10]: https://github.com/downpipes-io/engine/releases/tag/v0.3.10
 [0.3.9]: https://github.com/downpipes-io/engine/releases/tag/v0.3.9
 [0.3.8]: https://github.com/downpipes-io/engine/releases/tag/v0.3.8

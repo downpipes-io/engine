@@ -233,7 +233,7 @@ async function runScheduledTick(env: Env, scheduler: ReturnType<typeof scheduler
   await guarded("canary", "canary flight", async () => {
     // runCanaryIfDue returns the one-shot rollbackNeeded claim (for the on-demand canary-tick route); the
     // cron ignores it here, so discard it to keep the guarded() Promise<void> contract.
-    await runCanaryIfDue(env, scheduler);
+    await runCanaryIfDue(env, scheduler, { scheduled: true });
   });
 
   tallyPass("discovery", await runDiscoveryPass(env, scheduler, budget));

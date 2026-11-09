@@ -18,10 +18,10 @@ jobs:
   analysis:
     name: Scorecard analysis
     # OSSF Scorecard scores PUBLIC supply chains. On a private repo its action cannot even check the code
-    # out ("Repository not found"), and it had failed every run since it was added. A permanently red
+    # out ("Repository not found"). A permanently red
     # workflow is worse than none: it teaches the reader that red here means nothing, which is the last
-    # thing to teach about a security job. It SKIPS while private and starts running by itself if the
-    # repo is ever made public. No token and no settings change either way.
+    # thing to teach about a security job. It SKIPS while private and runs on a public repo.
+    # No token and no settings change either way.
     if: github.event.repository.private == false
     runs-on: ubuntu-24.04
     timeout-minutes: 15

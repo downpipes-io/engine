@@ -12,13 +12,10 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
-  # THE COVERAGE JOB RUNS ON THIS SCHEDULE AND ON DISPATCH, NOT ON EVERY PUSH. Decided from the
-  # org billing ledger: this workflow billed 9,399 minutes in the first ten days of September, 4,095 of
-  # them in `coverage`, which runs the same 340 validators `validate` already runs, under c8, at about
-  # 31 billed minutes a run, on every push and every pull request synchronise. It now grades main once a
-  # day (16:00 UTC is 02:00 in Sydney) and on `gh workflow run CI`; a regression below the .c8rc.json
-  # floors opens the red-main issue the next morning instead of blocking the push, which is the trade the
-  # allowance forces. `validate` and `runtime` still run on every push and pull request.
+  # THE COVERAGE JOB RUNS ON THIS SCHEDULE AND ON DISPATCH, NOT ON EVERY PUSH.
+  # `coverage` runs the same validator chain `validate` already runs, under c8, at about 31 billed
+  # minutes a run, so it grades main once a day (16:00 UTC is 02:00 in Sydney) and on
+  # `gh workflow run CI`. `validate` and `runtime` still run on every push and pull request.
   schedule:
     - cron: "0 16 * * *"
 
@@ -32,31 +29,15 @@ permissions:
 
 env:
   NODE_VERSION: "22"
-  # SIBLING FRESHNESS. Six gates in this repo now measure how far each sibling checkout they read is behind
-  # that sibling's own origin/main, and four of them refuse with exit 2 rather than print a verdict about a
-  # tree they never named (scripts/sibling-freshness.mjs, scripts/lib/sibling-lag.mjs).
+  # SIBLING FRESHNESS. The gates in this repo that read a sibling checkout measure how far that checkout is
+  # behind the sibling's own origin/main (scripts/sibling-freshness.mjs, scripts/lib/sibling-lag.mjs).
   #
   # "1" turns FRESHNESS UNKNOWN into a refusal as well. A checkout with no origin/main ref supports no
-  # conclusion about its currency: that is ordinary on a single-repo clone and a configuration fault here,
-  # where actions/checkout always leaves the ref.
+  # conclusion about its currency.
   #
-  # THIS DOES NOT DISARM IN CI, and that is not an accident of ours. Every private sibling here is checked out
-  # at that repository's DEFAULT BRANCH. The public reader is pinned to its release tag with full history, so
-  # its origin/main exists and its lag is measured against it. No workflow in this repo rewrites a sibling's
-  # origin/main afterwards. Measured on NON-COMMENT lines only, across all
-  # six workflow files: 0 rewrites, against a control of 53, 3, 15, 3, 5 and 4 non-comment `uses:` lines. The
-  # comment restriction is load-bearing rather than tidiness, and this paragraph is why: the sentence you are
-  # reading names the command, so the naive count over the whole file returns 2 and would be measuring the
-  # claim rather than the workflow. The same non-comment count over the harness file returns 1, and that one
-  # is real.
-  #
-  # So the lag reads 0 here because the tree really is at main. A sibling repository's own CI workflow rewrites an
-  # engine checkout's origin/main to its pin, for a stated and sound reason, and that makes every
-  # HEAD..origin/main guard inside that checkout compute 0 whatever the pin is. A guard that cannot tell those
-  # two zeroes apart is decoration, so every line these gates print carries the sha beside the number.
-  # The only sibling this public workflow checks out is the downpipe reader, pinned to a release tag on
-  # purpose, so its lag against its own main is unknown by construction and the requirement below can
-  # never be met here. It stays on in the private workflow, which checks out default branches.
+  # The only sibling this workflow checks out is the downpipe reader, pinned to a release tag on purpose, so
+  # its lag against its own main is unknown by construction and the requirement below can never be met
+  # here. The value stays "0".
   DOWNPIPES_REQUIRE_SIBLING_FRESHNESS: "0"
 
 jobs:
@@ -79,18 +60,17 @@ jobs:
   validate:
     name: Crypto/format validators
     # lint and typecheck are in `needs` for cost: they are the two cheapest jobs here and
-    # a red on either would otherwise still buy this job's three sibling checkouts and 340 validators.
+    # a red on either would otherwise still buy this job's checkouts and the validator chain.
     needs: [lint, typecheck, push-dedupe]
     if: needs.push-dedupe.outputs.duplicate != 'true'
     runs-on: ubuntu-24.04
     # 90 minutes. On the public export, with a real downpipe sibling checked out, a 25-minute ceiling leaves
     # this job in a marginal band. The sibling companion job below (Coverage) needs the same headroom: a
     # cancellation at its ceiling takes CI Success down with it. Both jobs run the same underlying validator chain (this one without c8, Coverage with it), so a
-    # ceiling that is merely adequate for one is not safely adequate for the other, and the two are raised
-    # together here rather than independently re-measured and re-argued job by job.
+    # ceiling that is merely adequate for one is not safely adequate for the other, and the two carry the
+    # same ceiling.
     #
-    # `npm run validate` is 383 validators run serially, measured 466s (7m46s) locally on Node 22 across the
-    # two halves: 297s for members 1 to 219 and 169s for the 164 behind them. The coverage job below gives
+    # `npm run validate` runs the validator chain serially, measured 466s (7m46s) locally on Node 22. The coverage job below gives
     # the runner ratio for the same chain, so this job's wall-clock cost on a runner scales with whatever
     # that ratio measures at, not with the local figure directly.
     #
@@ -110,8 +90,10 @@ jobs:
       # Both repos are checked out into named subdirectories of GITHUB_WORKSPACE, matching the
       # e2e-writer-reader job further down this file. The Go reader is checked out into a named subdirectory, not `path: ../downpipe`,
       # which resolves OUTSIDE GITHUB_WORKSPACE; actions/checkout refuses that path.
+      # fetch-tags: the alert-events parity gate grades the docs against the events at the newest release
+      # tag, so the tags (shallow, as the checkout is) must be present; without them it cannot check, exit 2.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { path: engine, persist-credentials: false }
+        with: { path: engine, persist-credentials: false, fetch-tags: true }
       - name: Checkout the Go reader (for the format schema cross-check)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -126,8 +108,8 @@ jobs:
         working-directory: engine
       - name: cf-config safety guards are load-bearing (curated mutation test)
         # Each guard carrying a safety claim is REMOVED in turn and the gate that should notice is run.
-        # A guard whose removal changes nothing is a gap in the evidence, and three such gaps were found
-        # by hand before this existed. It mutates source files in place and restores them, verifying the
+        # A guard whose removal changes nothing is a gap in the evidence. It mutates source files in place and restores
+        # them, verifying the
         # original bytes afterwards; a failed restore exits non-zero rather than leaving mutated source.
         # Kept out of `npm run validate` because it runs a full gate per guard.
         run: npm run validate:cf-guards
@@ -143,20 +125,19 @@ jobs:
         working-directory: engine
       - name: Cloudflare API drift cross-check (Section 2 -- fetch the live schema and REQUIRE it)
         # npm run validate already runs the drift guard, but Section 2 (the cross-check vs Cloudflare's
-        # published OpenAPI) self-skips when no schema is vendored, so it never actually ran in CI
-        # (cf-drift-section2-never-runs-in-ci): a Cloudflare-side rename/removal of a registry endpoint went
-        # undetected. Fetch the live schema, then run the guard with REQUIRE_CF_OPENAPI=1 so a missing schema
+        # published OpenAPI) self-skips when no schema is vendored, so a Cloudflare-side rename/removal of a
+        # registry endpoint would go undetected. Fetch the live schema, then run the guard with
+        # REQUIRE_CF_OPENAPI=1 so a missing schema
         # FAILS (does not skip). Egress is to GitHub's raw CDN (the api-schemas repo); the harden-runner
         # egress policy above is audit, which permits it.
         run: node scripts/fetch-cf-openapi.mjs && REQUIRE_CF_OPENAPI=1 node test/validate-cf-config-drift.ts
         working-directory: engine
       - name: The other two schema gates, in the form that cannot skip
-        # THE SAME HOLE, in two gates the step above did not cover. validate-hand-damage-vs-schema and
+        # THE SAME HOLE, in two gates the step above does not cover. validate-hand-damage-vs-schema and
         # validate-autoprove-bodies-vs-schema read the same vendored schema and self-skip when it is
-        # absent, exactly as Section 2 did. Both run inside `npm run validate`, which is the step ABOVE
-        # the fetch, so on a runner the schema has never existed by the time they look: each has printed
-        # "SCHEMA CHECK SKIPPED" and exited 0 on every CI run since it was written. hand-damage's own
-        # header already asserted "CI sets that variable", and CI did not.
+        # absent, exactly as Section 2 does. Both run inside `npm run validate`, which is the step ABOVE
+        # the fetch, so on a runner the schema does not exist by the time they look: each would print
+        # "SCHEMA CHECK SKIPPED" and exit 0.
         #
         # They run here instead, after the fetch, with REQUIRE_CF_OPENAPI=1 so a missing schema fails.
         # Between them they are the only check that the values this engine WRITES into Cloudflare are
@@ -169,11 +150,10 @@ jobs:
   push-dedupe:
     # WHY THIS EXISTS. Every change here lands as a pull request and then as a squash merge to main, and the
     # ruleset's strict status-check policy means the branch was up to date with main when it merged, so the
-    # merge commit's TREE is byte-identical to the pull request head's tree. Measured from the org
-    # billing ledger: the merge run re-graded that identical tree for the full cost of `validate` and
-    # `runtime` on every one of 65 merges in ten days. This job answers one question on a push to main: has
+    # merge commit's TREE is byte-identical to the pull request head's tree. The merge run would re-grade that identical tree
+    # for the full cost of `validate` and `runtime`. This job answers one question on a push to main: has
     # a successful pull-request run of THIS workflow already graded this exact tree, with the gated jobs
-    # themselves reported success (not skipped, which is what a Dependabot pull request does to `validate`)?
+    # themselves reported success?
     # If so the gated jobs below skip and ci-success records the skip as documented. Anything short of that
     # answer, including an API error, resolves to `false` and everything runs: this job can only ever save
     # minutes, never lose a gate. A direct push to main has no pull-request run, so it always grades in full.
@@ -233,7 +213,7 @@ jobs:
     # reader from ../downpipe and runs a two-reader differential against the TS reader.
     #
     # REQUIRE_DOWNPIPE=1 (set below, on the coverage step) is what makes an absent sibling here fail with
-    # "no cmd/downpipe under ...": since 2026-09, that env var is what turns validate-slice.ts's B2
+    # "no cmd/downpipe under ...": that env var turns validate-slice.ts's B2
     # differential from a declared skip into a could-not-check refusal, precisely because THIS job checks
     # out the sibling on purpose and its absence means the checkout above broke, not that an ordinary
     # customer ran `npm run deploy` with only the engine cloned. Without REQUIRE_DOWNPIPE=1 the exact same
@@ -250,17 +230,12 @@ jobs:
     runs-on: ubuntu-24.04
     # 90 minutes. A cancellation at the ceiling on the public export takes the required `CI Success` check
     # down with it. The sibling `validate` job above runs the same validator chain and carries the same
-    # 90-minute ceiling. Coverage PASSES on its own merits: .c8rc.json's
-    # `//thresholds` note says plainly that 59/31/85/59 are a RATCHET set just under the measured figures to
-    # block a regression, deliberately not the 90 standard, and the cancellation is the whole failure, not a
-    # genuine threshold miss.
+    # 90-minute ceiling.
     #
-    # The chain is 340 validators run serially under c8; 14m06s locally on Node 22.23.1, 28m41s on this
-    # runner's first measurement at the 35-minute ceiling, so this runner ran about twice as slow as the
-    # local box even then. 90 is a wider margin than the previous raises used (each landed at roughly the
-    # measured cost plus 25-30 per cent, which is exactly the gap that kept reopening), chosen so this stops
-    # being a job whose ceiling needs revisiting every time the chain grows. The structural fix, if this
-    # creeps again regardless, is less serialism rather than more minutes: 340 sequential node processes is
+    # The validator chain runs serially under c8; 14m06s locally on Node 22.23.1, and about twice
+    # that on this runner. 90 minutes is a wide margin over the measured cost, chosen so the ceiling does
+    # not need revisiting every time the chain grows. The structural fix, if the cost creeps, is less
+    # serialism rather than more minutes: the sequential node processes are
     # the cost, not any one slow validator.
     timeout-minutes: 90
     steps:
@@ -286,9 +261,8 @@ jobs:
       - run: npm ci --no-audit --no-fund
         working-directory: engine
       - name: c8 coverage over the validator suite (fails below the .c8rc.json thresholds)
-        # REQUIRE_DOWNPIPE=1: this job checks out the sibling downpipe reader deliberately (below),
-        # so its absence here would be a broken checkout. See the same env on the validate job's
-        # "Cross-implementation validators" step for the full reasoning.
+        # REQUIRE_DOWNPIPE=1: this job checks out the sibling downpipe reader deliberately,
+        # so its absence here would be a broken checkout. The header of this job gives the full reasoning.
         run: npm run coverage
         working-directory: engine
         env:
@@ -312,12 +286,12 @@ jobs:
 
   stamp-idempotency:
     # Mutation test for the reset-before-hash fix in scripts/stamp-build-id.mjs (test/validate-stamp-
-    # idempotency.ts). It was deliberately left OUT of `npm run validate` because it
+    # idempotency.ts). It is deliberately kept OUT of `npm run validate` because it
     # spawns real `wrangler deploy --dry-run` builds rather than pure functions, and the existing
     # Reproducibility check workflow does NOT cover the property it guards: that workflow's two builds
     # both start from a fresh clone, so neither ever reuses in-place build-stamp.ts state the way
     # a deploy script's repeated per-estate invocations against one shared checkout do. A test
-    # that exists but runs nowhere in CI is exactly the gap this campaign exists to close, so it gets its
+    # that runs nowhere in CI is a gap, so it gets its
     # own job rather than folding into an existing one.
     #
     # COST: measured locally at 5.6s wall (five wrangler dry-run builds in one Node process, Node
@@ -330,9 +304,7 @@ jobs:
     # throws when wrangler is not resolvable or produces no bundle, with no catch anywhere in the call
     # chain that would swallow that into a quiet pass; test/lib/verdict-guard.ts additionally fails the
     # whole run if the test exits before its own tally is reached (an early return, an unhandled
-    # rejection), so a broken environment cannot read as green. Confirmed live: with `npx`/wrangler made
-    # unreachable, the test exits 1 and the verdict guard flags the missing tally rather than reporting 0
-    # failures.
+    # rejection), so a broken environment cannot read as green.
     name: Build-stamp idempotency (real wrangler builds, mutation test)
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -383,9 +355,8 @@ jobs:
       # name, because "I could not look" reported as "I looked and it was fine" is the whole failure
       # this job exists to avoid.
       #
-      # THE EXIT CODE HAD TO BE MADE TO DEPEND ON THE THING IT GRADES, which the bare line did not. Two
-      # ways it could reach 0 without having graded the production tree were measured rather than
-      # imagined, both:
+      # THE EXIT CODE DEPENDS ON THE THING IT GRADES. Two
+      # ways it could reach 0 without having graded the production tree are closed here:
       #
       #   A lockfile declaring no production dependencies prints "found 0 vulnerabilities" and exits 0
       #   WITH THE REGISTRY POINTED AT A DEAD PORT. Nothing was asked and nothing was answered, and the
@@ -404,12 +375,11 @@ jobs:
       # The remaining path to 0 is an audit that ran, was answered by an endpoint proved live in the
       # same breath, over a tree proved non-empty, and reported nothing at high or above.
       #
-      # WHAT THIS STEP BRANCHES ON, and the mistake worth not repeating. The first draft of this rewrite
-      # asked "does the output say vulnerabilities" and then "do the words look like a network fault".
-      # Both were the wrong question, and the first was wrong in the direction that matters: npm writes
-      # "1 moderate severity vulnerability" in the SINGULAR, so a tree carrying exactly one advisory
-      # below --audit-level exits 0 with a report on screen and the step called it "no audit report" and
-      # went red. Driven, not spotted by eye: a lockfile pinned to tough-cookie 4.1.2 reproduces it.
+      # WHAT THIS STEP BRANCHES ON. It does not ask "does the output say vulnerabilities" or "do the words
+      # look like a network fault". Both are the wrong question, and the first is wrong in the direction that
+      # matters: npm writes "1 moderate severity vulnerability" in the SINGULAR, so a tree carrying exactly
+      # one advisory below --audit-level exits 0 with a report on screen, and a match on the plural would call
+      # it "no audit report" and go red. A lockfile pinned to tough-cookie 4.1.2 reproduces it.
       #
       # So the branch is on WHETHER NPM PRODUCED A REPORT AT ALL, matched on the stem, and the exit code
       # is trusted only once a report exists to give it meaning. The transport words then classify only
@@ -494,19 +464,16 @@ jobs:
           done
           echo "REFUSED: npm audit could not reach the advisory endpoint on any of 3 attempts, so this step established nothing about the production tree."
           exit 1
-      # EVERY tree, graded against .github/dependency-advisories.json. At first the line above was
-      # this repository's only dependency channel, and `--omit=dev` drops the build tree, so the job was
-      # green while the build tree carried seven advisories, five of them high. All seven were closed the
-      # same day by npm overrides that left wrangler, miniflare and workerd untouched. The gate reads its
-      # own header for the rest of the argument.
+      # EVERY tree, graded against .github/dependency-advisories.json. `--omit=dev` on the line above drops
+      # the build tree, so this gate is what grades it. The gate reads its own header for the rest of the
+      # argument.
       #
-      # `!cancelled()` RATHER THAN THE DEFAULT, because the default cost this repository its only real
-      # dependency grade. A step's default condition is success(), so when the line above exited 1 on a
-      # registry reset this gate was SKIPPED, and the run that reported a security failure had graded
-      # neither tree. A red job that ran no gate reads to its next reader as a checked repository with a
-      # problem, when it is an unchecked repository. This is not a softening: the step's own exit code
-      # still decides the job, and the two steps now fail independently rather than the first one being
-      # able to suppress the second.
+      # `!cancelled()` RATHER THAN THE DEFAULT. A step's default condition is success(), so when the line
+      # above exits 1 on a registry reset this gate would be SKIPPED, and a run that reported a security
+      # failure would have graded neither tree. A red job that ran no gate reads to its next reader as a
+      # checked repository with a problem, when it is an unchecked repository. This is not a softening: the
+      # step's own exit code still decides the job, and the two steps fail independently rather than the
+      # first one being able to suppress the second.
       #
       # The retry here reads the gate's own three-outcome contract rather than a code it does not
       # publish: exit 2 is REFUSED, could not check, which is the transport case and worth another
@@ -588,18 +555,14 @@ jobs:
     # PR-only: the action diffs the base and head manifests, so it has no meaning on a push. A skipped
     # job is not a failure, so it can still sit in the ci-success needs list.
     #
-    # ALSO SKIPPED WHILE THE REPOSITORY IS PRIVATE. The action needs the GitHub dependency graph, which
-    # this private repo does not have, so on a pull request it failed every run with "Dependency review
-    # is not supported on this repository" BEFORE it read a single dependency, and took ci-success with
-    # it. Every Dependabot pull request was therefore red for a reason that had nothing to do with the
-    # bump. A permanently red security job is worse than an absent one: it teaches the reader that red
-    # here means nothing, which is the last lesson a security job should teach.
+    # ALSO SKIPPED WHILE THE REPOSITORY IS PRIVATE. A permanently red security job is worse than an
+    # absent one: it teaches the reader that red here means nothing, which is the last lesson a
+    # security job should teach.
     #
-    # This is a skip, not a silencing. The precondition is the repository's own visibility, so the job
-    # starts running again by itself, unchanged, the day the repo is made public, because the
-    # dependency graph is on by default for public repositories. Nobody has to remember to remove this.
-    # Enabling the dependency graph on the private repo is the other route, and that is an owner
-    # setting rather than a default.
+    # This is a skip, not a silencing. The precondition is the repository's own visibility, and the
+    # dependency graph is on by default for public repositories, so on a public repository the job runs
+    # on every pull request. Enabling the dependency graph on a private repository is the other route,
+    # and that is an owner setting rather than a default.
     #
     # ci-success below reads `contains(needs.*.result, 'failure')`, which a skipped job does not
     # satisfy, so this turns a permanent failure into a genuine no-result rather than into a pass.
@@ -627,7 +590,7 @@ jobs:
     # vitest-pool-workers suite that exercises the Worker fetch entrypoint (src/index.ts) in real
     # workerd. Both are additive to the bespoke validators; neither gates coverage yet.
     # The drives and the vitest suite run in three jobs, each inside a 10-minute timeout. Measured on a
-    # hosted runner, test:runtime took 9 min 22 s in one job, which left vitest no time.
+    # hosted runner, test:runtime takes 9 min 22 s in one job, which leaves vitest no time.
     name: Runtime A (workerd via Miniflare)
     # lint and typecheck are in `needs` for cost, as on `validate`; push-dedupe skips a tree a pull request
     # already graded (see that job).
@@ -654,7 +617,7 @@ jobs:
     # vitest-pool-workers suite that exercises the Worker fetch entrypoint (src/index.ts) in real
     # workerd. Both are additive to the bespoke validators; neither gates coverage yet.
     # The drives and the vitest suite run in three jobs, each inside a 10-minute timeout. Measured on a
-    # hosted runner, test:runtime took 9 min 22 s in one job, which left vitest no time.
+    # hosted runner, test:runtime takes 9 min 22 s in one job, which leaves vitest no time.
     name: Runtime B (workerd via Miniflare)
     # lint and typecheck are in `needs` for cost, as on `validate`; push-dedupe skips a tree a pull request
     # already graded (see that job).
@@ -681,7 +644,7 @@ jobs:
     # vitest-pool-workers suite that exercises the Worker fetch entrypoint (src/index.ts) in real
     # workerd. Both are additive to the bespoke validators; neither gates coverage yet.
     # The drives and the vitest suite run in three jobs, each inside a 10-minute timeout. Measured on a
-    # hosted runner, test:runtime took 9 min 22 s in one job, which left vitest no time.
+    # hosted runner, test:runtime takes 9 min 22 s in one job, which leaves vitest no time.
     name: Runtime vitest (vitest-pool-workers)
     # lint and typecheck are in `needs` for cost, as on `validate`; push-dedupe skips a tree a pull request
     # already graded (see that job).
@@ -727,9 +690,7 @@ jobs:
     # restore. Proves the two halves agree on real bytes in the production direction, and that
     # tamper-evidence holds, in CI, not just by manual discipline.
     name: Writer->Reader interop demo (engine writes, Go reader restores + rejects tamper)
-    # The Go reader is a SIBLING checkout of the public reader and needs no token. The job carries the same Dependabot
-    # condition as `validate`, because the ci-success mirror at the foot of this file reads it
-    # (CROSS_REPO_MAY_SKIP); see the probe job's header.
+    # The Go reader is a SIBLING checkout of the public reader and needs no token.
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -762,11 +723,11 @@ jobs:
 
   quality:
     # Code-quality tooling (guardrails B8-1): circular-dependency detection (madge) and dead-export
-    # detection (knip). GATING: madge is at 0 cycles and the knip baseline is triaged to zero (genuine
-    # dead code removed; the over-broad-export and co-located-type conventions are accepted via the
+    # detection (knip). GATING: madge is at 0 cycles and the knip baseline is at zero (the
+    # over-broad-export and co-located-type conventions are accepted via the
     # knip.json ignoreExportsUsedInFile setting; the two intentional back-compat aliases stay at warn).
     # This job is in the ci-success needs list below, so a NEW circular dependency or a NEW unused
-    # export now fails CI.
+    # export fails CI.
     name: Code quality (madge + knip)
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -780,8 +741,8 @@ jobs:
         with: { node-version: "${{ env.NODE_VERSION }}" }
       - run: npm ci --no-audit --no-fund
       - name: Type-check the test surface (tsconfig.test.json includes test/, src-only typecheck does not)
-        # The main tsconfig.json only includes "src", so the bespoke validate-*.ts test scripts were
-        # never type-checked and type errors there went undetected. This gate type-checks src + test
+        # The main tsconfig.json only includes "src", so the bespoke validate-*.ts test scripts are
+        # not type-checked by it. This gate type-checks src + test
         # under the same strictness (Node-targeted) so a type regression in a validator fails CI.
         run: npm run typecheck:test
       - name: Circular dependencies (madge)
@@ -794,35 +755,31 @@ jobs:
       # Validator reachability, gating. A test file no npm script reaches is not coverage, it is a
       # file: it passes when run by hand, is counted when someone lists the suite, and gates nothing,
       # and the failure is silent by construction because a validator that never runs never fails.
-      # This repo had 18 such files, two of which did not even parse. Reachability is measured from
+      # Reachability is measured from
       # the chains a CI job actually runs, so "some script mentions it" cannot pass for "something
       # gates it". Keep GATING_ENTRYPOINTS in the script in step with the jobs in this file.
       - name: Validator reachability (no orphaned validators)
         run: npm run lint:reachability
 
       # The engine has validators that import a SIBLING repo. They cannot be type-checked here, because this
-      # job checks out the engine alone, so they live in tsconfig.workspace.json and are checked by the
-      # Cross-repo gates job instead. This gate holds that split from both ends: a cross-repo importer left in
+      # job checks out the engine alone, so they live in tsconfig.workspace.json.
+      # This gate holds that split from both ends: a cross-repo importer left in
       # tsconfig.test.json breaks THIS job with TS2307, and an ordinary file added to the exclusion list to
-      # silence a type error is caught as the workaround it is. It runs here because it needs no sibling, and
-      # because this is the job the first such break landed in.
+      # silence a type error is caught as the workaround it is. It runs here because it needs no sibling.
       - name: Cross-repo type-check split (no file checked nowhere, no exclusion used as a workaround)
         run: npm run lint:crossrepo-typecheck
 
   tsdoc:
     # TSDoc presence lint (guardrails B8-6). GATING, over its declared scope.
     #
-    # It was advisory and permanently RED: continue-on-error, absent from the ci-success needs list,
-    # and 125 of 394 in-scope exports undocumented (crypto 2, format 52, dest 71) when it was
-    # measured. An advisory job that is always red teaches a reader that red here means nothing,
-    # which is worse than not running it. The 125 were documented, so the precondition the old
-    # comment named, zero offenders in scope, is now actually met and the job blocks.
+    # The job blocks: it is in the ci-success needs list, and its scope has zero offenders. An advisory job
+    # that is always red teaches a reader that red here means nothing, which is worse than not running it.
     #
     # THE SCOPE IS STILL src/crypto, src/format AND src/dest, and that is a deliberate stopping
     # point rather than an oversight. Measured with the same heuristic: widening
-    # SCOPE_DIRS to "src" would put 3,075 further undocumented exports across 336 files in scope,
-    # concentrated in admin (1,655 of 1,835), sched (561 of 568), seal (252 of 319) and sources
-    # (217 of 224). That is a documentation programme, not a lint fix.
+    # SCOPE_DIRS to "src" would put many undocumented exports in scope,
+    # mostly in admin, sched, seal and sources. That is a documentation
+    # programme, not a lint fix.
     #
     # THE CRITERION FOR WIDENING, so the next person does not have to guess: widen one directory at
     # a time, and only when that directory's offender count is already zero. Add it to SCOPE_DIRS in
@@ -843,56 +800,9 @@ jobs:
       - name: TSDoc on public exports in src/crypto, src/format, src/dest
         run: npm run lint:tsdoc
 
-      # THE FIELD CATALOGUE CITES THIS REPO, 246 times out of 923. Editing a validator here moves those
-      # citations, and at first nothing noticed: the gate that grades them runs in a cross-repository
-      # check, which a change confined to the engine never triggers. It now records the TEXT of each cited line and
-      # fails when the line stops matching, so a citation that slid onto another real line is caught instead
-      # of being read as evidence.
-      #
-      # Red here means the catalogue describes lines this change moved. Repair it in the cross-repository
-      # catalogue first:
-      #   node FIELD-CATALOGUE/repin-citations.mjs --base engine=<the sha before your change> --write
-      # Never re-pin by searching the file for a plausible line. Anchors recur and a search finds the wrong
-      # one, which is the defect the pin exists to catch, reintroduced by the repair.
-      # The step above runs verify-citations.mjs in SIBLING mode, which
-      # deliberately makes a MOVED citation non-fatal here -- correct for drift this repo has no power over
-      # (a sibling repository moving a line underneath a citation), which must never deadlock
-      # this repo's CI on someone else's unlanded re-pin. That same tolerance is also the exact hole R-110
-      # and this repo's OWN incident fell through on the same day: engine commits
-      # 65e9b4c4 and 52c686e8 each moved catalogue-cited lines in files the SAME commit edited, and the step
-      # above printed all three as MOVED and still passed, because self-caused drift and externally-caused
-      # drift are the same MOVED to that step. Six same-shaped repins landed by hand across the workspace in
-      # one day before this closed the loop.
-      #
-      # This step closes only the self-caused half: it fails when a MOVED citation's file is ALSO in this
-      # push's own diff, and stays exactly as silent as the step above when the drift came from outside this
-      # repo (console/control-plane moved something engine merely cites). The `--moved-files-only` flag this
-      # depends on is built and landed in the cross-repository catalogue's citation-verification script, proven both
-      # ways there against a real diff before this step was written.
-      #
-      # THE FOUR QUESTIONS, asked of every gate in this repo:
-      #   1. Runs in CI? Yes -- this step, in the Cross-repo gates job, on every push and PR against main.
-      #   2. Fails when it cannot run? Yes. `set -euo pipefail` plus an explicit base-sha check turn "there is
-      #      no commit to diff against" (a new branch's first push, or workflow_dispatch with no push/PR
-      #      context) into a hard failure rather than a silently empty diff -- an empty CHANGED set would
-      #      make every push look self-drift-free, which is the exact silent gap this gate exists to close.
-      #      The verify-citations.mjs call inherits every one of its own existing FATAL guards unchanged (a
-      #      missing or stale cross-repository sibling, an R-45 tree mismatch): a run that cannot check the
-      #      corpus is a FAILED step here, never a skipped one.
-      #   3. Fails when there is nothing to check? No, by design, and this is NOT case 2: zero files in this
-      #      push, or zero MOVED citations in the corpus, is a healthy push -- the intersection is empty
-      #      by construction, computed only when BOTH sides are non-empty (never fed to `comm` as a blank
-      #      line, which would otherwise read as a false one-line match). Silence here means "checked, and
-      #      clean", never "did not check".
-      #   4. How much of the corpus can it fail on at all? Only the intersection of (a) the files THIS push's
-      #      own diff touched and (b) verify-citations.mjs's MOVED-file list, itself scoped to the same 989
-      #      citations the ordinary report grades. A file this push never edited can never appear in (a);
-      #      drift this push had no power over can never fail THIS step even on a push where the OWNER-mode
-      #      gate in the cross-repository catalogue is red for an unrelated reason.
   ci-success:
     name: CI Success
-    # The "tsdoc" (TSDoc presence) job is listed here. It was excluded while it was
-    # advisory and permanently red; its scope is now at zero offenders, so a regression blocks. See
+    # The "tsdoc" (TSDoc presence) job is listed here. Its scope is at zero offenders, so a regression blocks. See
     # its header for the scope it covers and the criterion for widening it. The "quality"
     # (madge + knip) job is gating and is included below.
     needs: [typecheck, validate, lint, build, stamp-idempotency, security, secret-scan, dependency-review, runtime, runtime-b, runtime-vitest, property, e2e-writer-reader, quality, coverage, tsdoc, push-dedupe]
@@ -903,8 +813,7 @@ jobs:
       - name: Check required jobs
         # Generic by construction: reads the job's own `needs:` context at run time (toJSON(needs)),
         # so it cannot drift out of sync with that list the way a hand-written require_success call
-        # per job name can. One shared aggregation step replaced a bespoke,
-        # per-repository aggregation script.
+        # per job name can.
         env:
           NEEDS_JSON: ${{ toJSON(needs) }}
         run: |

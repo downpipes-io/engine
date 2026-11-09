@@ -26,7 +26,9 @@ import { fetchRecoveryStatus } from "../src/admin/support-sections-recovery.ts";
 import { fetchStatusBaseline } from "../src/admin/support-sections-runs.ts";
 import type { SiteFaultId } from "../src/admin/site-fault-legend.ts";
 import { peekSiteFaults, SITE_FAULTS_KEY, type SiteFaults } from "../src/admin/site-faults.ts";
+import type { CanaryCheckResult } from "../src/canary/types.ts";
 import { drive } from "../src/cron/drive.ts";
+import { alertUnconfirmedUpdateIfStuck } from "../src/cron/notify-passes.ts";
 import { loadPassKeys } from "../src/cron/retention-pass.ts";
 import { reconcileAndDue } from "../src/cron/seal-loop-pass.ts";
 import { b64urlEncode, concat, hexEncode, utf8 } from "../src/crypto/bytes.ts";
@@ -249,6 +251,24 @@ async function cronSkips(): Promise<void> {
   ok("control, a scheduler that takes the engine account: nothing recorded", countOf(aid) === a0);
   await drive(driveEnv(true));
   ok("a scheduler that refuses the engine account: the tick still runs and one row is recorded", countOf(aid) === a0 + 1);
+
+  console.log("cron.update-unconfirmed (notify-passes.ts alertUnconfirmedUpdateIfStuck):");
+  const uid = "cron.update-unconfirmed";
+  const u0 = countOf(uid);
+  const ailing = [{ status: "ailing" }] as unknown as CanaryCheckResult[];
+  const quiet = await alertUnconfirmedUpdateIfStuck({} as Env, failingOn(), ailing, "2026-10-26T00:00:00.000Z", true);
+  ok("control, a scheduler that answers with no kept update: no alert claimed and nothing recorded", quiet.claimed === false && countOf(uid) === u0);
+  let threw = false;
+  let planted: { claimed: boolean } | null = null;
+  try {
+    planted = await alertUnconfirmedUpdateIfStuck({} as Env, failingOn("/update-status"), ailing, "2026-10-26T00:00:00.000Z", true);
+  } catch {
+    threw = true;
+  }
+  ok("a scheduler that cannot answer the update status: no throw and no alert claimed", !threw && planted?.claimed === false);
+  ok("a scheduler that cannot answer the update status: one row recorded", countOf(uid) === u0 + 1);
+  await alertUnconfirmedUpdateIfStuck({} as Env, failingOn("/update-unconfirmed-claim"), ailing, "2026-10-26T00:00:00.000Z", true);
+  ok("a scheduler that cannot take the claim: a second row recorded", countOf(uid) === u0 + 2);
 }
 
 async function planHash(): Promise<void> {

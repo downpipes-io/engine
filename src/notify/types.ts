@@ -534,6 +534,8 @@ export const NOTIFY_EVENT_NAMES = [
   // version is failing its canary and only a human-supplied deploy token can revert it). Redaction-safe
   // detail only (the version + "open the console and roll back"); never a token, url or hash.
   "update-rollback-needed",
+  // A KEPT engine update that the scheduled canary did not sing on for 3 consecutive reads (ailing, pending or dead). Warning; fired once per apply (deduped in the DO); never deploys or rolls back.
+  "update-unconfirmed",
   // The proven, contiguous off-site replica count for a downpipe fell BELOW the configured copy count
   // (the 3-2-1 guarantee weakened). A copy is only counted when its segment bytes are present and verify,
   // so this fires on a genuinely-degraded copy set, not a copy still in flight (warning: the data is still

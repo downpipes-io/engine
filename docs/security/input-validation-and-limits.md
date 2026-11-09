@@ -78,7 +78,7 @@ campaign" binds the whole account, and is checked one request or one campaign at
 | STS session duration | 900 to 43200 s | per destination | `STS_DURATION_MAX` at `src/dest/factory-validators.ts:134` |
 | In-flight run lease | 30 min | per downpipe | `INFLIGHT_LEASE_MS` at `src/sched/scheduler-do-records.ts:169` |
 | RUNLOG lock lease | 30 s | per destination | `RUNLOG_LEASE_MS` at `src/sched/scheduler-do-records.ts:551` |
-| Webhook POST timeout | 5 s | per delivery | `WEBHOOK_TIMEOUT_MS` at `src/notify/types.ts:889` |
+| Webhook POST timeout | 5 s | per delivery | `WEBHOOK_TIMEOUT_MS` at `src/notify/types.ts:891` |
 | Same-state re-alert interval | 1 h | per downpipe | `ALERT_COOLDOWN_MS` at `src/notify.ts:40` |
 
 ---
@@ -262,7 +262,7 @@ insensitive.
   always wins. Every mutating request and every tick hands it to the scheduler
   (`recordEnvEngineAccount` at `src/sched/engine-scope-account.ts:30`), and a value that names a different
   account than the stored one replaces the stored one (`recordVerifiedEngineAccount` at
-  `src/sched/scheduler-do-account-config.ts:316`), so the Worker's check and the scheduler's check name the
+  `src/sched/scheduler-do-account-config.ts:321`), so the Worker's check and the scheduler's check name the
   same account after the variable changes. An attach or an update never replaces a stored account. The
   refusal for an account outside this scope names `CF_ACCOUNT_ID` and the Owner discovery token
   (`ENV_ONLY_SCOPE_REFUSAL` at `src/sched/config-validate.ts:475`).
@@ -690,51 +690,51 @@ are kept in Durable Object storage under `AUDIT_FOLD_STORAGE_PREFIX` at
 
 ## 10. Webhook URL Rules (`isAllowedWebhookUrl`)
 
-`isAllowedWebhookUrl` at `src/notify/types.ts:1024` validates a customer-supplied webhook URL
+`isAllowedWebhookUrl` at `src/notify/types.ts:1026` validates a customer-supplied webhook URL
 before it is stored. Every rejection carries a closed code from `WEBHOOK_REJECT_CODES` at
 `src/notify/types.ts:127` (`non-https`, `userinfo`, `workers-dev`, `internal-no-optin`, `too-long`,
 `unparseable`, `not-allowlisted`) beside the operator-facing sentence.
 
 | Rule | Refusal | Code | Citation |
 |------|---------|------|----------|
-| Required | `url is required` | `unparseable` | `url is required` at `src/notify/types.ts:1028` |
-| Maximum length 2048 | `url is too long` | `too-long` | `trimmed.length > 2048` at `src/notify/types.ts:1030` |
-| Absolute URL | `url must be a valid absolute URL` | `unparseable` | `url must be a valid absolute URL` at `src/notify/types.ts:1035` |
-| Scheme `https:` | `url must be https` | `non-https` | `u.protocol !== "https:"` at `src/notify/types.ts:1037` |
-| No userinfo | `url must not carry userinfo (username or password); use a path token on your endpoint instead` | `userinfo` | `u.username !== ""` at `src/notify/types.ts:1041` |
-| Not workers.dev | `workers.dev endpoints are not allowed; use a custom domain` | `workers-dev` | `endsWith(".workers.dev")` at `src/notify/types.ts:1046` |
-| Not an internal address | `url points at a private/loopback/link-local address (incl. cloud metadata); these are refused by default.` | `internal-no-optin` | `internal-no-optin` at `src/notify/types.ts:1058` |
-| On the account's egress allowlist, when one is set | `url's host is not on the account's configured outbound egress allowlist` | `not-allowlisted` | `screenEgressAllowlist` at `src/notify/types.ts:1064` |
+| Required | `url is required` | `unparseable` | `url is required` at `src/notify/types.ts:1030` |
+| Maximum length 2048 | `url is too long` | `too-long` | `trimmed.length > 2048` at `src/notify/types.ts:1032` |
+| Absolute URL | `url must be a valid absolute URL` | `unparseable` | `url must be a valid absolute URL` at `src/notify/types.ts:1037` |
+| Scheme `https:` | `url must be https` | `non-https` | `u.protocol !== "https:"` at `src/notify/types.ts:1039` |
+| No userinfo | `url must not carry userinfo (username or password); use a path token on your endpoint instead` | `userinfo` | `u.username !== ""` at `src/notify/types.ts:1043` |
+| Not workers.dev | `workers.dev endpoints are not allowed; use a custom domain` | `workers-dev` | `endsWith(".workers.dev")` at `src/notify/types.ts:1048` |
+| Not an internal address | `url points at a private/loopback/link-local address (incl. cloud metadata); these are refused by default.` | `internal-no-optin` | `internal-no-optin` at `src/notify/types.ts:1060` |
+| On the account's egress allowlist, when one is set | `url's host is not on the account's configured outbound egress allowlist` | `not-allowlisted` | `screenEgressAllowlist` at `src/notify/types.ts:1066` |
 
 ### 10.1 Default deny on internal sinks
 
-`isInternalSinkHost` at `src/notify/types.ts:649` classifies `localhost` and `*.localhost`, IPv6
+`isInternalSinkHost` at `src/notify/types.ts:651` classifies `localhost` and `*.localhost`, IPv6
 loopback, unspecified, link-local (`fe80::/10`) and unique-local (`fc00::/7`) addresses, IPv4-mapped
 IPv6 in both spellings, and every IPv4 literal in `127.0.0.0/8`, `10.0.0.0/8`, `172.16.0.0/12`,
 `192.168.0.0/16`, `169.254.0.0/16`, `100.64.0.0/10` and `0.0.0.0/8` as internal
-(`isInternalIpv4` at `src/notify/types.ts:684`).
+(`isInternalIpv4` at `src/notify/types.ts:686`).
 
 A URL whose host is internal is refused unless the channel carries the per-channel override
-`allowInternalSink: true` (`opts?.allowInternalSink !== true` at `src/notify/types.ts:1053`). The
+`allowInternalSink: true` (`opts?.allowInternalSink !== true` at `src/notify/types.ts:1055`). The
 override is the on-premises SIEM case, and it is a stored, auditable channel field.
 
 ### 10.2 Send-time screens
 
-`deliverPayload` at `src/notify/types.ts:919` re-screens the host at send time, so a channel that
+`deliverPayload` at `src/notify/types.ts:921` re-screens the host at send time, so a channel that
 reached storage by any path is still refused when it points inside:
 
 - The literal screen `screenSinkHost` at `src/notify/types.ts:271` classifies the URL without any
   network call: `url-invalid`, `internal-literal`, `public-literal` or `hostname`. An
   `internal-literal` target is a non-delivery with code `internal-sink-blocked` at
-  `src/notify/types.ts:945`.
+  `src/notify/types.ts:947`.
 - A `hostname` verdict is the one case the literal screen cannot see through. For it,
-  `screenResolvedSinkHost` at `src/notify/types.ts:754` resolves the name over DNS-over-HTTPS at
+  `screenResolvedSinkHost` at `src/notify/types.ts:756` resolves the name over DNS-over-HTTPS at
   `DOH_ENDPOINT` at `src/lib/outbound.ts:20` with a `SINK_RESOLVE_TIMEOUT_MS` = `2000` at
-  `src/notify/types.ts:728` budget, asks for A and AAAA, and classifies every address. Any
+  `src/notify/types.ts:730` budget, asks for A and AAAA, and classifies every address. Any
   internal address is a non-delivery with code `internal-sink-resolved` at
-  `src/notify/types.ts:952`.
+  `src/notify/types.ts:954`.
 - No answer (a resolver timeout, a transport failure, or an empty answer set) is the verdict
-  `resolve-unavailable` at `src/notify/types.ts:789`, and the delivery proceeds. The screen fails
+  `resolve-unavailable` at `src/notify/types.ts:791`, and the delivery proceeds. The screen fails
   open on no answer and fails closed on a bad answer, and the abstention is recorded on the
   delivery result rather than read as a pass.
 - Every channel that opted into an internal sink skips both screens, and a fixed provider endpoint
@@ -753,7 +753,7 @@ carries the closed `changeKind` enum and the channel id only (`recordNotifyAppli
 `config-change-propose`, and the approval that applies it writes `config-change-approve`. Both carry
 the same closed `changeKind` enum only, and neither writes a `notify-channel-change` event.
 
-Outbound POST timeout: `WEBHOOK_TIMEOUT_MS` = `5000` at `src/notify/types.ts:889`. The POST runs
+Outbound POST timeout: `WEBHOOK_TIMEOUT_MS` = `5000` at `src/notify/types.ts:891`. The POST runs
 with `redirect: "manual"` and never follows a redirect.
 
 ---

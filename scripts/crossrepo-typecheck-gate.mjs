@@ -8,7 +8,7 @@
 // both ways, and neither error said anything about the engine.
 //
 // The split that fixes it is small: those files are excluded from tsconfig.test.json and included by
-// tsconfig.workspace.json, which adds DOM and is run by the Cross-repo gates job where the sibling is checked
+// tsconfig.workspace.json, which adds DOM and is run where the sibling is checked
 // out. The split is also the risk, so this gate holds it in BOTH directions:
 //
 //   1. Every test file that imports a sibling repo is excluded from tsconfig.test.json.

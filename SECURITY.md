@@ -111,8 +111,8 @@ whereas a bare `wrangler deploy` would silently drop them.
 
 ### Detection
 
-Two automated mechanisms detect advisories. The first runs on every push and pull request
-against `main` (`.github/workflows/ci.yml`). The second runs weekly.
+An automated mechanism detects advisories. It runs on every push and pull request
+against `main` (`.github/workflows/ci.yml`).
 
 1. **`npm audit --omit=dev --audit-level=high`** (the `security` job) -- scans
    production dependencies and fails the build on any High or Critical advisory.
@@ -121,9 +121,6 @@ against `main` (`.github/workflows/ci.yml`). The second runs weekly.
    that `.github/dependency-advisories.json` does not acknowledge. That file can
    acknowledge a dev-only advisory with a reason. It cannot acknowledge a
    production advisory.
-
-2. **Dependabot** (`.github/dependabot.yml`) -- opens weekly pull requests for both
-   `npm` packages and GitHub Actions pins, keeping the supply chain current.
 
 The `step-security/harden-runner` action is pinned to a full commit SHA in every
 job that runs it, and every `actions/checkout` step runs with `persist-credentials: false`, so
@@ -142,8 +139,6 @@ compromised upstream action tags cannot inject credentials.
 - **Medium and below** advisories also fail the `security` job, through the advisory
   gate, until they are fixed or, for a dev-only dependency, acknowledged with a reason
   in `.github/dependency-advisories.json`. They are remediated within the SLA above.
-- Dependabot PRs for security advisories are reviewed and merged within the
-  applicable SLA window. Non-security version bumps are reviewed weekly.
 
 ### Crypto dependencies
 

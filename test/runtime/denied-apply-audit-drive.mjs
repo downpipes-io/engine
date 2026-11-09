@@ -42,6 +42,7 @@ const OUTFILE = join(here, ".bundle", "denied-apply-audit-admin-worker.js");
 const ADMIN_TOKEN = "denied-apply-audit-local-isolate-token-not-a-real-credential";
 const CONSOLE_ORIGIN = "https://console.denied-apply-audit.invalid";
 const OPERATOR_EMAIL = "denied-apply-audit-operator@example.invalid";
+const OPERATOR2_EMAIL = "denied-apply-audit-operator-2@example.invalid";
 const SESSION_COOKIE = "__Host-downpipes_session";
 
 const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
@@ -175,8 +176,8 @@ async function main() {
 
     // ---- 5. KNOWN POSITIVE: a refused role write on the same session, same DO, same recordAudit ----
     // The audit fold (src/sched/audit-fold.ts) writes one denied row per actor per minute and counts the
-    // rest. Both this refusal and the one in step 9 are read as their own rows, so each waits out the
-    // actor's minute first.
+    // rest. This refusal is read as its own row on the SAME session as step 4, so it waits out the actor's
+    // minute first. Step 9 drives a second operator instead, whose first refusal is its own row.
     await waitOutAuditFoldWindow();
     const deniedRoleWrite = await call("POST", "/admin/roles", {
       body: { email: "denied-apply-audit-victim@example.invalid", role: "owner" },
@@ -278,11 +279,25 @@ async function main() {
     // own per-caller window (RATE_LIMIT_MAX_PER_WINDOW = 120 mutating requests / 60s) with DRY RUNS, which
     // it is entitled to and which are rate-limited in their own branch, then attempt the apply again with
     // a fresh synthetic runId. It must still be 403 with an audit row for that attempt, not a 429.
-    await waitOutAuditFoldWindow();
+    // A SECOND operator, granted and minted exactly as steps 1-2 did, carries this half. Its first refusal
+    // is its own audit row, so the drive does not wait out the first operator's fold minute again; its
+    // per-caller rate window is its own, and the dry runs below take it into 429 the same way.
+    const grant2 = await call("POST", "/admin/roles", { body: { email: OPERATOR2_EMAIL, role: "operator" }, bearer: ADMIN_TOKEN });
+    if (grant2.status !== 200) throw new Error(`second role grant answered ${grant2.status}: ${grant2.text.slice(0, 300)}`);
+    const issued2 = await call("POST", "/do/passkey/session/issue", { body: { email: OPERATOR2_EMAIL } });
+    if (issued2.status !== 200 || issued2.json?.ok !== true) throw new Error(`second session issue answered ${issued2.status}: ${issued2.text.slice(0, 200)}`);
+    const sessionToken2 = issued2.json.token;
+    const who2 = await call("GET", "/admin/whoami", { cookie: sessionToken2 });
+    record(
+      "precondition-second-operator-role",
+      who2.status === 200 && who2.json?.role === "operator",
+      `GET /admin/whoami on the second minted session -> ${who2.status} role="${who2.json?.role}" email="${who2.json?.email}"`,
+    );
+    if (!(who2.status === 200 && who2.json?.role === "operator")) throw new Error("precondition failed: the second session is not a plain operator");
     let burnt = 0;
     let sawDryRunLimit = false;
     for (let i = 0; i < 160 && !sawDryRunLimit; i++) {
-      const dry = await call("POST", "/admin/restore", { body: { runId: makeSyntheticRunId(), confirm: false }, cookie: sessionToken, origin: CONSOLE_ORIGIN });
+      const dry = await call("POST", "/admin/restore", { body: { runId: makeSyntheticRunId(), confirm: false }, cookie: sessionToken2, origin: CONSOLE_ORIGIN });
       burnt++;
       if (dry.status === 429) sawDryRunLimit = true;
     }
@@ -290,10 +305,10 @@ async function main() {
       record("rate-limited-denial-not-masked", false, `COULD NOT CHECK: ${burnt} dry runs did not exhaust the caller's window, so the 429 state was never reached and this contract is untested here`);
     } else {
       const runId2 = makeSyntheticRunId();
-      const applyLimited = await call("POST", "/admin/restore", { body: { runId: runId2, confirm: true, target: { binding: "RESTORE_KV" } }, cookie: sessionToken, origin: CONSOLE_ORIGIN });
+      const applyLimited = await call("POST", "/admin/restore", { body: { runId: runId2, confirm: true, target: { binding: "RESTORE_KV" } }, cookie: sessionToken2, origin: CONSOLE_ORIGIN });
       const after = await readAuditAsOperator("?action=restore-apply&limit=200");
       const afterEvents = Array.isArray(after.json?.events) ? after.json.events : [];
-      const hit2 = afterEvents.find((e) => e.action === "restore-apply" && e.outcome === "denied" && e.actorEmail === OPERATOR_EMAIL && runIdOf(e) === runId2);
+      const hit2 = afterEvents.find((e) => e.action === "restore-apply" && e.outcome === "denied" && e.actorEmail === OPERATOR2_EMAIL && runIdOf(e) === runId2);
       record(
         "rate-limited-denial-not-masked",
         applyLimited.status === 403 && applyLimited.json?.required === "restore.apply" && hit2 !== undefined,

@@ -144,6 +144,7 @@ export function isNotifyEventLocal(v: unknown): v is NotifyEvent {
     v === "retention-armed-alone" ||
     v === "scim-owner-demoted" ||
     v === "update-available" ||
+    v === "update-unconfirmed" ||
     v === "update-rollback-needed" ||
     v === "replication-degraded" ||
     v === "run-at-risk-eviction" ||

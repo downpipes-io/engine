@@ -14,7 +14,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { releasePin, requireFreshSiblings } from "../scripts/sibling-freshness.mjs";
-import { verdictReached } from "./lib/verdict-guard.ts";
+import { verdictReached, verdictSkipped } from "./lib/verdict-guard.ts";
 
 const root = mkdtempSync(path.join(tmpdir(), "downpipes-release-pin-"));
 let failed = 0;
@@ -34,13 +34,14 @@ function commit(repo: string, msg: string): void {
   git(repo, "commit", "-q", "-m", msg);
 }
 
-/** An origin with commits and tags as listed, cloned and checked out at `checkout`. */
-function fixture(name: string, steps: Array<{ commit: string; tag?: string }>, checkout: string): string {
+/** An origin with commits and tags as listed, cloned and checked out at `checkout`. Tags are annotated
+ * unless `light` is set, which makes the lightweight kind a box copy of a tag is. */
+function fixture(name: string, steps: Array<{ commit: string; tag?: string; light?: boolean }>, checkout: string): string {
   const work = path.join(root, `${name}-work`);
   git(root, "init", "-q", "-b", "main", work);
   for (const s of steps) {
     commit(work, s.commit);
-    if (s.tag) git(work, "tag", "-a", "-m", s.tag, s.tag);
+    if (s.tag) git(work, ...(s.light ? ["tag", s.tag] : ["tag", "-a", "-m", s.tag, s.tag]));
   }
   const clone = path.join(root, name);
   git(root, "clone", "-q", work, clone);
@@ -66,6 +67,44 @@ function expect(label: string, got: { code: number | null; lines: string[] }, co
   const ok = got.code === code && got.lines.some((l) => line.test(l));
   if (!ok) failed++;
   console.log(`${ok ? "PASS" : "FAIL"} ${label}: exit ${got.code ?? "none"} (want ${code ?? "none"})`);
+  if (!ok) for (const l of got.lines) console.log(`       ${l}`);
+}
+
+/**
+ * checkReaderPin grades the workflows' reader pin against a reader checkout. Exit codes follow the chain's
+ * convention: 0 the pin is a tag there, 1 it is not (a finding), 2 there is no reader checkout, so the pin
+ * could not be checked at all (CANNOT CHECK). A missing reader is never a pass: on 3 Nov four box jobs
+ * passed this gate with "no reader checkout found" and graded nothing.
+ *
+ * The PASS line prints the commit the tag peels to and the tag's object type, because a tag NAME proves
+ * little: v0.3.5 peels to different commits in the private and public reader repos, and a box copy of a
+ * tag is lightweight (object type commit, no tag object and no signature). A lightweight tag is reported,
+ * not failed: it still names the commit, and the CI run against the public repo is what reads the signed
+ * tag object.
+ */
+function checkReaderPin(repo: string | undefined, pin: string): { code: 0 | 1 | 2; lines: string[] } {
+  if (repo === undefined) {
+    return { code: 2, lines: [`CANNOT CHECK no reader checkout found, so ${pin} could not be checked to exist (exit 2)`] };
+  }
+  let sha = "";
+  let type = "";
+  try {
+    sha = git(repo, "rev-parse", "--verify", "--quiet", `refs/tags/${pin}^{commit}`);
+    type = git(repo, "cat-file", "-t", `refs/tags/${pin}`);
+  } catch {
+    return { code: 1, lines: [`FAIL ${pin} is not a tag in the reader checkout at ${repo}`] };
+  }
+  const lines = [`PASS ${pin} is a tag in the reader checkout at ${repo}: peels to ${sha}, tag object type ${type}`];
+  if (type !== "tag") {
+    lines.push(`note ${pin} is a LIGHTWEIGHT tag at ${repo} (object type ${type}): it carries no tag object or signature, so this PASS proves the name and its commit only`);
+  }
+  return { code: 0, lines };
+}
+
+function expectPin(label: string, got: { code: number; lines: string[] }, code: number, line: RegExp): void {
+  const ok = got.code === code && got.lines.some((l) => line.test(l));
+  if (!ok) failed++;
+  console.log(`${ok ? "PASS" : "FAIL"} ${label}: exit ${got.code} (want ${code})`);
   if (!ok) for (const l of got.lines) console.log(`       ${l}`);
 }
 
@@ -111,6 +150,21 @@ try {
   const levelOk = level.code === null && !level.lines.some((l) => /pinned at/.test(l));
   if (!levelOk) failed++;
   console.log(`${levelOk ? "PASS" : "FAIL"} tag pin level with main: exit ${level.code ?? "none"}, ${level.lines.length} line(s)`);
+
+  // 7. The reader-pin check itself. An annotated tag passes and prints the commit it peels to and its type.
+  const g = fixture("annotated", [{ commit: "a", tag: "v0.3.6" }], "v0.3.6");
+  const gSha = git(g, "rev-parse", "HEAD");
+  expectPin("annotated pin prints its peeled commit and type", checkReaderPin(g, "v0.3.6"), 0, new RegExp(`peels to ${gSha}, tag object type tag$`));
+
+  // 8. Sabotage: a lightweight tag still names the commit, and the check reports that it is lightweight.
+  const h = fixture("lightweight", [{ commit: "a", tag: "v0.3.6", light: true }], "v0.3.6");
+  expectPin("lightweight pin is reported", checkReaderPin(h, "v0.3.6"), 0, /LIGHTWEIGHT tag .*object type commit/);
+
+  // 9. Sabotage: no reader checkout is CANNOT CHECK, exit 2, never a pass.
+  expectPin("missing reader cannot check", checkReaderPin(undefined, "v0.3.6"), 2, /^CANNOT CHECK no reader checkout found/);
+
+  // 10. Sabotage: a pin the reader does not carry is a finding, exit 1.
+  expectPin("pin absent from the reader", checkReaderPin(g, "v0.3.7"), 1, /^FAIL v0\.3\.7 is not a tag/);
 } finally {
   rmSync(root, { recursive: true, force: true });
 }
@@ -147,21 +201,21 @@ const downpipeRepo = [
 ]
   .filter((c): c is string => typeof c === "string" && c !== "")
   .find((c) => existsSync(path.resolve(c, "cmd/downpipe/main.go")));
-if (pinOk && downpipeRepo) {
-  let exists = true;
-  try {
-    execFileSync("git", ["-C", downpipeRepo, "rev-parse", "--verify", "--quiet", `refs/tags/${pin0}^{commit}`], { stdio: "ignore" });
-  } catch {
-    exists = false;
-  }
-  if (!exists) failed++;
-  console.log(`${exists ? "PASS" : "FAIL"} ${pin0} is a tag in the reader checkout at ${downpipeRepo}`);
-} else if (pinOk) {
-  const required = process.env.REQUIRE_DOWNPIPE === "1";
-  if (required) failed++;
-  console.log(`${required ? "FAIL" : "note"} no reader checkout found, so ${pin0} was not checked to exist${required ? " (REQUIRE_DOWNPIPE=1)" : ""}`);
+let cannotCheck = false;
+if (pinOk) {
+  const r = checkReaderPin(downpipeRepo, pin0);
+  for (const l of r.lines) console.log(l);
+  if (r.code === 1) failed++;
+  if (r.code === 2) cannotCheck = true;
 }
 
+// A run that could not grade the pin declares a skip, not a pass, so no log line reads "VERDICT: PASS" on
+// an exit 2. A finding still wins over a skip.
+if (cannotCheck && failed === 0) {
+  console.log("\nSIBLING RELEASE PIN CANNOT CHECK: no reader checkout, so the pin was not graded");
+  verdictSkipped("no reader checkout, so the reader pin was not graded");
+  process.exit(2);
+}
 verdictReached(failed);
 if (failed > 0) {
   console.log(`\nSIBLING RELEASE PIN FAIL (${failed})`);

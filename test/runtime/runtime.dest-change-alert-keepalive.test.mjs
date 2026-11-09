@@ -86,6 +86,24 @@ const IP = "203.0.113.7";
 const say = (s) => console.log(s);
 let couldNotCheck = false;
 
+/**
+ * settleFor waits for an arm's deferred records. It is idle for SETTLE_IDLE_MS first, so no request of the
+ * drive's own is in flight while a dropped write would be torn down, then polls `done` and returns as soon
+ * as it holds. An arm that never reaches it (a lost record, a negative control) still waits the full
+ * SETTLE_MS, so a late write has the same window to appear that a plain SETTLE_MS sleep gave it.
+ */
+const SETTLE_MS = 1500;
+const SETTLE_IDLE_MS = 250;
+/** @param {() => Promise<boolean>} done */
+async function settleFor(done) {
+  const end = Date.now() + SETTLE_MS;
+  await new Promise((r) => setTimeout(r, SETTLE_IDLE_MS));
+  while (Date.now() < end) {
+    if (await done()) return;
+    await new Promise((r) => setTimeout(r, 50));
+  }
+}
+
 // A destination config the router's validator accepts and its live probe can verify against the stub sink.
 const DEST_CONFIG = {
   endpoint: "https://s3.destchange-sink.test",
@@ -389,7 +407,11 @@ async function main() {
         statuses.push(r.status);
         if (r.status !== c.status) bodies.push(r.text.slice(0, 240));
       }
-      await new Promise((r) => setTimeout(r, 1500));
+      // A wired site arm also waits for its N sink posts, so the emission-ran evidence is never read early.
+      await settleFor(async () => {
+        const s = await hit("/signal/read");
+        return s.status === 200 && measure(JSON.parse(s.text)) - before >= N && (!wired || c.control === true || sinkHits.webhook - webhookBefore >= N);
+      });
       const afterRaw = await hit("/signal/read");
       if (afterRaw.status !== 200) return { setup, setupOk: true, statuses, bodies, kpOk, readerReached: false, seen: 0, webhookDelta: sinkHits.webhook - webhookBefore };
       const after = JSON.parse(afterRaw.text);

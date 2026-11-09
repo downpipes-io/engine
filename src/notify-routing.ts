@@ -164,6 +164,7 @@ export function severityOf(event: NotifyEvent): Severity {
     case "runlog-floor-reset":
     case "runlog-relinked":
     case "update-available":
+    case "update-unconfirmed":
     case "auth-credential-change":
     case "dest-change":
     case "sign-in-new-context":

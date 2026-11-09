@@ -66,7 +66,7 @@ async function main(): Promise<void> {
     { file: "src/admin/router-discovery.ts", start: 410, end: 410, expect: "discoveryTokenExpiryVerdict", label: "the discovery term limit enforced on the console-set path" },
     { file: "src/admin/preflight-probes.ts", start: 702, end: 702, expect: "discoveryTokenExpiryVerdict", label: "the discovery term limit enforced on the IaC fallback" },
     { file: "src/lib/outbound.ts", start: 20, end: 20, expect: "DOH_ENDPOINT", label: "the DoH endpoint constant" },
-    { file: "src/notify/types.ts", start: 770, end: 770, expect: "DOH_ENDPOINT", label: "the DoH call site" },
+    { file: "src/notify/types.ts", start: 772, end: 772, expect: "DOH_ENDPOINT", label: "the DoH call site" },
     { file: "src/lib/outbound.ts", start: 21, end: 21, expect: "UPDATE_CHANNEL_HOST", label: "the update-channel host constant" },
     { file: "src/env.d.ts", start: 432, end: 432, expect: "UPDATE_SIGNER_PUBLIC", label: "the update-channel verify key binding" },
     { file: "src/dest/sts.ts", start: 28, end: 33, expect: "AssumeRoleParams", label: "the AssumeRole params type" },
@@ -93,9 +93,9 @@ async function main(): Promise<void> {
   const updatesSrc = readFileSync(resolve(ROOT, "src/admin/updates.ts"), "utf8");
   ok("the update-channel consult never sets an Authorization header", !/authorization/i.test(updatesSrc));
   const notifySrc = readFileSync(resolve(ROOT, "src/notify/types.ts"), "utf8");
-  // 762 is the fetchImpl(...) line itself; the call's own arguments run a few lines further (redirect,
+  // 764 is the fetchImpl(...) line itself; the call's own arguments run a few lines further (redirect,
   // headers, signal), so the whole call is inspected rather than just its first line.
-  const dohCallBlock = lines("src/notify/types.ts").slice(761, 767).join("\n"); // lines 762-767, 0-indexed
+  const dohCallBlock = lines("src/notify/types.ts").slice(763, 769).join("\n"); // lines 764-769, 0-indexed
   ok("the DoH call carries no authorization header", !/authorization/i.test(dohCallBlock));
   ok("(sanity) src/notify/types.ts does define a DoH resolver at all", notifySrc.includes("DOH_ENDPOINT"));
 

@@ -14,9 +14,9 @@
  * block, which is what lets this check block rather than merely advise: a
  * permanently red advisory check teaches a reader that red here means nothing.
  *
- * WIDENING, and what it costs. This same heuristic run over all of src finds 3,075
- * further undocumented exports across 336 files, concentrated in admin (1,655 of
- * 1,835), sched (561 of 568), seal (252 of 319) and sources (217 of 224). Widening
+ * WIDENING, and what it costs. This same heuristic run over all of src finds many
+ * further undocumented exports, concentrated in admin, sched, seal and
+ * sources. Widening
  * SCOPE_DIRS to "src" today would make this job red. The criterion, so the next
  * person does not have to guess: widen ONE directory at a time, and only once that
  * directory is already at zero offenders. Raise MIN_FILES and MIN_EXPORTS in the

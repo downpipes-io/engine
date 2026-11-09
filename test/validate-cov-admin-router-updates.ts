@@ -690,6 +690,17 @@ async function main(): Promise<void> {
       const withDest = await call(OWNER, "POST", "/admin/update/apply", { dryRun: false, token: DEPLOY_TOKEN });
       ok("with a destination configured -> unchanged behaviour (200 promoted, not the gate)", withDest.status === 200 && (await jsonOf(withDest)).outcome === "promoted");
     }
+    {
+      // The update-unconfirmed count is storage bookkeeping: it sits in the record the DO holds and is NOT part
+      // of the GET /admin/update/status response.
+      await seedSettled({ outcome: "applied", recommendedVersion: "0.0.1", at: Date.now(), by: null, confirmationPending: true });
+      await sched.stub.fetch("https://scheduler.internal/update-unconfirmed-claim", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ recommendedVersion: "0.0.1", verdict: "ailing" }) });
+      const stored = (await (await sched.stub.fetch("https://scheduler.internal/update-status", { method: "GET" })).json()) as Record<string, unknown>;
+      ok("the DO record holds the unconfirmed count after one scheduled read", (stored.unconfirmed as { reads?: number } | undefined)?.reads === 1);
+      const shown = await jsonOf(await call(OWNER, "GET", "/admin/update/status"));
+      ok("GET /update/status carries no `unconfirmed` bookkeeping", !("unconfirmed" in shown) && shown.last !== undefined);
+      await seedSettled({ outcome: "expired", at: Date.now(), by: null });
+    }
 
     // ===================================================================================================
     // GROUP C: THE DISCRIMINATION TEST. "Update apply always fails with a generic message" -- and the
