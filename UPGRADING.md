@@ -73,13 +73,13 @@ who signs in through such a connection, do one of these:
 
 A person who already holds a bound role keeps it. The change applies only when an invite binds.
 
-Creating a `require-flag` SAML connection now needs `emailVerifiedAttr`. A require-flag connection stored
-without it admits nobody, before and after this change. To repair one, delete it and create it again with
+Creating a `require-flag` SAML connection needs `emailVerifiedAttr`. A require-flag connection stored
+without it admits nobody. To repair one, delete it and create it again with
 the attribute, or create it with `trust-idp`.
 
 ### Engine 0.3.7: a destination whose RUNLOG does not verify stops taking runs
 
-Every RUNLOG writer now verifies the stored RUNLOG before it changes or re-signs it. A RUNLOG that does not
+Every RUNLOG writer verifies the stored RUNLOG before it changes or re-signs it. A RUNLOG that does not
 verify under the engine's signer is never re-signed on the engine's own. Runs to that destination fail at the
 RUNLOG write until an Owner acts.
 
